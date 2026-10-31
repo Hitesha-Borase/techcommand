@@ -1,0 +1,17 @@
+TechCommand OS — scanner increment verification
+Date: 2026-09-11
+Command: node --test --test-concurrency=1 tests/*.test.mjs
+ℹ tests 289
+ℹ suites 0
+ℹ pass 289
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 48563.571235
+
+Focused command: node --test --test-concurrency=1 tests/asset-scanning.test.mjs tests/asset-barcode-reader.test.mjs
+26 tests passed; zero failed/skipped/cancelled.
+Additional gates: npm run typecheck; Sites build-site.mjs; git diff --check — passed.
+Synthetic isolated data and local barcode fixtures only.
+Authenticated browser, physical HID/camera/printing: unrun; see ASSET-SCANNING.md.

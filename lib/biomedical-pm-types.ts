@@ -1,0 +1,9 @@
+export type PmRisk = "high" | "medium" | "low" | "unassessed";
+export const riskOrder: Record<PmRisk,number> = {high:0,unassessed:1,medium:2,low:3};
+export const riskLabel: Record<PmRisk,string> = {high:"🔴 High risk",medium:"🟡 Medium risk",low:"🟢 Low risk",unassessed:"⚪ Unassessed"};
+export type PmAsset = {unit:string;assetId?:string;displayUnit?:string;storageKey?:string;call:string;sourceToken:string;sourceRow:number;model:string;description:string;serial:string;group:string;risk:PmRisk;rationale:string;evidence:string;pmPrompt:string;measurementPrompt:string};
+export type PmFields = {fieldNotes?:string;risk:PmRisk;riskReason:string;riskReview:string;location:string;technician:string;serviceDate:string;compliance:string;history:string;oemSchedule:string;measurements:string;testEquipment:string;actions:string;outcome:string;followUp:string;nextDue:string};
+export type PmEntry = {unit:string;version:number;fields:PmFields;updatedAt:string;updatedBy:string};
+export type PmReport = {key:string;title:string;siteCode:string;revision:string;status:string;summary:string;evidenceRegister:string;assets:PmAsset[];entries:PmEntry[];canEdit:boolean};
+export function initialPmFields(asset:PmAsset):PmFields{return {fieldNotes:"",risk:asset.risk,riskReason:asset.rationale,riskReview:"Provisional — clinical use not confirmed",location:"",technician:"",serviceDate:"",compliance:"Unverified — supporting inspection records not provided",history:"",oemSchedule:"",measurements:"",testEquipment:"",actions:"",outcome:"Not evaluated",followUp:"",nextDue:""};}
+export function prioritizedAssets(assets:PmAsset[],entries:PmEntry[]):PmAsset[]{const risks=new Map(entries.map(e=>[e.unit,e.fields.risk]));return [...assets].sort((a,b)=>riskOrder[risks.get(a.unit)||a.risk]-riskOrder[risks.get(b.unit)||b.risk]||a.sourceRow-b.sourceRow);}

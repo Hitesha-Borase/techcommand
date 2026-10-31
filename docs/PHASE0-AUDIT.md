@@ -1,0 +1,63 @@
+# Phase 0 audit — 2026-09-11
+
+This is an evidence snapshot, not certification of the entire application. Controlling requirements are in [MASTER-PROJECT-INSTRUCTION.md](MASTER-PROJECT-INSTRUCTION.md); the dependency queue and acceptance criteria are in [IMPLEMENTATION-TRACKER.md](IMPLEMENTATION-TRACKER.md). Use the latest release entry in [RELIABILITY-LEDGER.md](RELIABILITY-LEDGER.md) for the outcome of this increment.
+
+## Recovery and release baseline
+
+- Correct project: `appgprj_6a9b93be6e1881918cbfe6c2dc9e54d8`, TechCommand OS at `https://app.techcommandhq.com`. The original native site and separate SpinLife demo are preserved.
+- Restored the existing configured Git repository after the transient checkout was removed. Clean source baseline: `98192456cee9a271a73ced928d69132944eea430`. This is the documentation outcome after release 84, not a different application.
+- Native Sites independently reported version **84**, source `85183dc918f7d64e2c75b8b626311ffb69323045`. Deployment `appgdep_6aa36c3569b48191a3f1a10ae4ede20c` was confirmed **succeeded**, with status updated at `2026-09-11T02:50:08.787312+00:00`.
+- Existing custom audience revision **12** and runtime environment revision **6** were verified. No permissions, domains, secrets, business records or production data were changed during the audit.
+- Recoverable checkpoint: remote main already contained the clean baseline; local branch `checkpoint/master-roadmap-phase0-20260911` points to that exact commit. The version-84 archive remains available through Sites. An exclusive checkout lock is held during editing and publication; fetch/reconcile remote main again before pushing because a local lock does not coordinate other checkouts.
+- Restored dependencies using the existing lockfile and supported installer: 725 packages installed with integrity verification. No dependency was added or upgraded. Existing transitive deprecation warnings and large build chunks remain; a comprehensive dependency advisory review is not claimed.
+- Fresh baseline: production build **passed** and `node --test --test-concurrency=1 tests/*.test.mjs` passed **203/203**, zero failures/skips. This independently replaces the old report of 141 tests. Baseline duration was 30.6 seconds. Full post-change evidence belongs in the release ledger.
+
+## Verified source and configuration
+
+| Area | Inspected evidence | Verified capability | Limit / outstanding work |
+|---|---|---|---|
+| Framework/runtime | package.json, lockfile, Vite config, hosting metadata | React 19.2.6, Next 16.2.6 with vinext 0.0.50, Vite 8.0.13, TypeScript 5.9.3; Cloudflare Workers deployment | Preserve this architecture; do not add a separate Python service just for PDF generation |
+| Database | db/schema.ts, drizzle/*.sql, D1 bindings and native live database overview | Existing SQLite/D1 model and incremental migrations; native DB overview confirms assets, accounts, locations, departments, asset_visits and audit_logs; source has separate visits and organization/tag unique index | Overview returns 50 alphabetically ordered names ending at service_reports; full deployed schema parity is not established. Full alias/configuration/approved-PM-policy model incomplete; do not reset or reseed production |
+| Authentication | lib/portal-auth.ts; Sites authentication guidance | Dispatcher-provided identity, explicit active membership and application role checks | Current deployment uses a TechFlex organization constant; full future multi-company isolation is not certified |
+| Asset API | app/api/assets/route.ts and asset-visits route | Existing create/list and approved-report history foundation | Confirmed unscoped technician list and incomplete account/facility/department validation; P0-02 repairs this before scan expansion |
+| Storage/intake | Document and attachment routes, upload/import tests | Existing D1 metadata/R2 files, original-document retention, multipart upload recovery, spreadsheet mapping and correction-only retry | All storage/search/export paths require wider isolation audit; do not treat this inspection as full end-to-end acceptance |
+| AI | lib/structured-ai.ts, field-guide and report-draft routes | Existing server-side OpenAI Responses call, structured validation, timeout, store:false; runtime secret is configured; saved equipment identity gates model guidance | No live provider call made during this audit. Exact-model references are not a complete approved procedure/revision/competency engine |
+| Technical guidance | Saved-equipment reference selection and knowledge records | Source-bound equipment selection rejects unsaved manufacturer/model/serial substitutions | Missing exact-model/configuration manuals and qualified approval block higher-risk operational workflows; model memory is not an approved source |
+| Documents | Existing pdf-lib generator, completion tests, INVOICE-BRANDING.md | Service/SpinLife packet and separate invoice code exists; original approved TechFlex invoice logo is embedded; filename suffix/status and evidence handling have regressions | Universal partner-template filling, full multi-asset results, service-report reference artwork and configurable compression are incomplete. Original private reference PDFs were not reopened in this increment; do not publish them |
+| Billing/finalization | Completion/approval routes and tests | Existing retry/version defenses and separate invoice output | Per-job invoice creation does not establish prepaid annual-PM entitlement handling; P4-04 blocks automatic prepaid billing until contract rules are verified |
+| Scanning/labels | BarcodeDetector and qr_code_value source search | Photo helper uses native BarcodeDetector; assets store stable UUIDs and QR text | No verified permanent-label wizard, safe scan resolver, camera decoder fallback, QR/Code 128 printing or physical-device pilot |
+| Dictation | MediaRecorder/getUserMedia/transcription source search | Typed notes and reviewed report draft are existing foundations | No recorded-voice transcription implementation found; typed input must remain available |
+| Offline | IndexedDB queue, service worker, recovery tests | Existing local drafts and retry queue with transaction completion safeguards | Assigned-data expiry, logout cleanup, safety-information freshness, crash/quota and physical mobile acceptance not complete |
+| Testing/deployment | tests/*.test.mjs, existing scripts, Sites metadata | Node unit/integration tests including real route handlers against isolated SQLite; supported build/package/save/deploy path | No Playwright dependency or checked-in CI workflow found. Browser fixtures do not prove real sign-in or hardware support |
+| Scheduling | Worker/source trigger search | Foreground synchronization exists | No verified deployed application scheduler found. Assistant task scheduling is not an application production job, monitoring or recovery system |
+| Demos | Existing separate demo and fictional resources | Partial demonstrations remain available | Two complete fictional experiences, including full Copilot and SpinLife end-to-end, remain unfinished; simulated integrations stay labeled |
+
+## PostHog inspection
+
+Runtime `POSTHOG_HOST` is `https://us.i.posthog.com`. The runtime project token was compared privately with the connected PostHog project and **matches project 599278**. No token is recorded here. The project reports that it has ingested events; this alone does not prove every requested operational event works.
+
+Read-only native project settings: session replay is **off**, console capture opt-in is **true**, performance capture opt-in is **true**, IP anonymization is **false**, and network-payload/masking configuration is unset. No remote project setting was changed. Frontend source manually captures page views and sanitized error kinds with text/attribute masking, but exception auto-capture is disabled, all operational events still use hard-coded release `36`, and explicit console/network exclusions plus broader payload filtering need work. No raw events, notes, documents, audio, signatures, credentials or sensitive images were queried or copied into this audit.
+
+P0-03 will use the existing PostHog integration to correct release identity and add tested bounded failure telemetry/privacy controls. Backend capture and supported source maps need explicit verification. Reference documentation inspected: [replay privacy](https://posthog.com/docs/session-replay/privacy), [network recording](https://posthog.com/docs/session-replay/network-recording), [client configuration](https://posthog.com/docs/references/posthog-js/types/PostHogConfig) and [redacting properties](https://posthog.com/tutorials/web-redact-properties). Do not install a replacement monitoring service merely because its plugin is available.
+
+## Testing and source blockers
+
+The native live database overview was read without requesting row contents. It returned 50 names ending at `service_reports` and offered no pagination. Its projection metadata did not flag omissions, but this response does not establish whether later source tables are absent or merely outside the tool's bounded view. Do not guess unreturned table identifiers in follow-up row reads or treat this as evidence of data loss. Full deployed schema/backup verification remains P0-06 through supported metadata or the Sites Settings database viewer.
+
+The previously verified Sites supervised preview loads the application but its dispatcher-owned sign-in route is unavailable. No supported isolated signed-in test identity is exposed. This is separate from application bugs and message-stream failures. The exact investigation and prepared, unsent support handoff are in the 2026-09-11 ledger entry. Do not repeatedly retry the unchanged flow, add local sign-in, inject privileged browser headers, copy production sessions, remove security or call a second production deployment staging.
+
+Authenticated admin/technician end-to-end testing, physical iPhone/iPad/Android GPS handoff, camera/scanner, microphone and print acceptance remain **blocked/unrun**, not passed. Synthetic API fixtures are safe and useful independent work. Exact approved manuals, model/configuration applicability, qualification and facility scope also remain required before operational C-arm/imaging/sterilizer procedures. No tests, settings, service limits, contacts or clinical outcomes may be invented.
+
+## First reversible increment and rollback
+
+P0-02 repairs asset-registry authorization and transaction-time hierarchy validation using the existing endpoint and database. Declared critical scenarios: assignment-scoped reads; no cross-company/hierarchy metadata disclosure; role enforcement; valid create with string identifiers; foreign/inactive hierarchy rejection; duplicate-label recovery; and a hierarchy change between validation and insert cannot create an asset or success audit. No new dependency or migration is planned.
+
+Rollback requires no data migration: revert only the P0-02 source commit, preserving later source work, rebuild/retest and publish through the same Sites project/audience. Prefer a forward correction because reverting reopens the documented permission defects. Do not reset the database or authentication. Retained version 84 provides a recoverable artifact, not permission to restore known defects silently. Never force-push. Store actual commit/version/deployment/test results in the release ledger after verification.
+
+Next bounded source task after P0-02: **P0-03, safe PostHog telemetry and accurate release identification**. P0 remains open until its remaining acceptance criteria are met.
+
+## Integration purchasing sequence
+
+Proceed one purchase decision at a time, alongside independent development. First: inspect a company-owned Google Cloud project/billing setup for a small Routes API pilot. Runtime has no Maps/Routes credential. New billing, purchase or credential provisioning requires secure owner approval; never paste a key into chat. Existing manual route planning remains usable; automatic road times and real phone handoff are not verified.
+
+Benchmark the existing extraction before adding Document AI. Reuse the known 800.com and Google Workspace services where their actual accounts/API support the required flow. The QuickBooks ChatGPT connection is not a TechCommand server integration; sandbox OAuth, contract-aware idempotence and reconciliation must be verified before live billing. Existing pdf-lib and PostHog stay in place. No subscription, external message, invoice, privileged access or contractual commitment was created in this audit.

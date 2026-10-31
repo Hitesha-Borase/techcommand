@@ -1,0 +1,13 @@
+{
+  "name": "TechCommand OS",
+  "short_name": "TechCommand",
+  "description": "Secure field service and HTM operations by TechFlex Mobility Solutions.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#06101f",
+  "theme_color": "#06101f",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

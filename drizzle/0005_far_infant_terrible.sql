@@ -1,0 +1,1 @@
+ALTER TABLE `knowledge_entries` ADD `audience` text DEFAULT 'internal' NOT NULL;

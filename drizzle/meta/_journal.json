@@ -1,0 +1,251 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1788581344061,
+      "tag": "0000_melted_redwing",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1788581400544,
+      "tag": "0001_slow_tenebrous",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1788587649537,
+      "tag": "0002_white_james_howlett",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1788590614399,
+      "tag": "0003_sudden_la_nuit",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1788592929214,
+      "tag": "0004_abandoned_tomorrow_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1788593029191,
+      "tag": "0005_far_infant_terrible",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1788613549898,
+      "tag": "0006_wealthy_gambit",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1788615250872,
+      "tag": "0007_flaky_scourge",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1788618174978,
+      "tag": "0008_steady_falcon",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1788638876248,
+      "tag": "0009_round_hardball",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1788718781063,
+      "tag": "0014_partner_integrations",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1788729162330,
+      "tag": "0015_partner_launch_studio",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1788858408489,
+      "tag": "0012_familiar_lightspeed",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1788887332290,
+      "tag": "0017_joel_contractor_correction",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1788939224642,
+      "tag": "0018_school_field_training",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1788998400000,
+      "tag": "0019_import_mapping_profiles",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1789142758065,
+      "tag": "0024_spinlife_simple_visits",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "6",
+      "when": 1789180000000,
+      "tag": "0027_asset_procedure_ai",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "6",
+      "when": 1789470000000,
+      "tag": "0029_biomedical_pm_drafts",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "6",
+      "when": 1789776000000,
+      "tag": "0030_biomedical_academy",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "6",
+      "when": 1789810000000,
+      "tag": "0031_academy_progression",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1789811000000,
+      "tag": "0032_spinlife_closeout",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "6",
+      "when": 1789812000000,
+      "tag": "0033_dme_experience",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "6",
+      "when": 1789830000000,
+      "tag": "0034_academy_learning",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "6",
+      "when": 1789833600000,
+      "tag": "0035_dme_supervision",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "6",
+      "when": 1789846223210,
+      "tag": "0036_academy_quality",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "6",
+      "when": 1789848551637,
+      "tag": "0037_technical_knowledge",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "6",
+      "when": 1789872400000,
+      "tag": "0038_biomedical_follow_up",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "6",
+      "when": 1789910873294,
+      "tag": "0039_technical_procedure_feedback",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "6",
+      "when": 1789922559562,
+      "tag": "0040_academy_field_modes",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "6",
+      "when": 1789936800000,
+      "tag": "0041_asset_placement_history",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "6",
+      "when": 1789936950000,
+      "tag": "0042_asset_category_policies",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "6",
+      "when": 1789941389917,
+      "tag": "0043_asset_import_decisions",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "6",
+      "when": 1789943886000,
+      "tag": "0044_permanent_asset_label_prints",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "6",
+      "when": 1791157804631,
+      "tag": "0045_login_usernames",
+      "breakpoints": true
+    }
+  ]
+}

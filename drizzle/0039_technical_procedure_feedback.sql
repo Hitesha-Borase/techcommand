@@ -1,0 +1,35 @@
+CREATE TABLE `technical_procedure_feedback` (
+	`id` text PRIMARY KEY NOT NULL,
+	`organization_id` text NOT NULL,
+	`document_id` text NOT NULL,
+	`revision_id` text NOT NULL,
+	`track` text NOT NULL,
+	`manufacturer` text NOT NULL,
+	`model` text NOT NULL,
+	`feedback_type` text NOT NULL,
+	`summary` text NOT NULL,
+	`observed_result` text DEFAULT '' NOT NULL,
+	`expected_result` text DEFAULT '' NOT NULL,
+	`source_locator` text NOT NULL,
+	`supporting_source_url` text,
+	`negating_evidence` text DEFAULT '' NOT NULL,
+	`work_reference` text DEFAULT '' NOT NULL,
+	`status` text DEFAULT 'submitted' NOT NULL,
+	`decision_note` text DEFAULT '' NOT NULL,
+	`record_version` integer DEFAULT 1 NOT NULL,
+	`submitted_by` text NOT NULL,
+	`reviewed_by` text,
+	`reviewed_at` text,
+	`implemented_revision_id` text,
+	`created_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	`updated_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	FOREIGN KEY (`organization_id`) REFERENCES `organizations`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`document_id`) REFERENCES `technical_documents`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`revision_id`) REFERENCES `technical_document_revisions`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`submitted_by`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`reviewed_by`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`implemented_revision_id`) REFERENCES `technical_document_revisions`(`id`) ON UPDATE no action ON DELETE no action
+);
+--> statement-breakpoint
+CREATE INDEX `idx_technical_feedback_queue` ON `technical_procedure_feedback` (`organization_id`,`track`,`status`,`created_at`);--> statement-breakpoint
+CREATE INDEX `idx_technical_feedback_document` ON `technical_procedure_feedback` (`document_id`,`revision_id`);

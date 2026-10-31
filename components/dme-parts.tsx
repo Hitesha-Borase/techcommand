@@ -1,0 +1,11 @@
+"use client";
+import {Button} from "@/components/ui/button";
+import {Input} from "@/components/ui/input";
+import type {SpinLifeVisit} from "@/lib/spinlife-simple";
+export function DmeParts({parts,onChange,disabled}:{parts:SpinLifeVisit["parts"];onChange:(parts:SpinLifeVisit["parts"])=>void;disabled:boolean}){
+ function update(index:number,change:Partial<SpinLifeVisit["parts"][number]>){onChange(parts.map((p,i)=>i===index?{...p,...change}:p));}
+ return <details className="rounded-xl border bg-white p-4"><summary className="min-h-11 cursor-pointer font-semibold">Parts — installed, recommended or ordered ({parts.length})</summary><p className="mb-3 text-sm">Only mark parts installed when actually installed. Part numbers are optional; verify compatibility against the exact unit. Adding a row does not order a part.</p>
+  {parts.map((p,i)=><fieldset key={p.id} disabled={disabled} className="my-3 grid gap-3 rounded border p-3 sm:grid-cols-2"><label className="text-sm">Description<Input value={p.description} onChange={e=>update(i,{description:e.target.value})}/></label><label className="text-sm">Verified part number, if known<Input value={p.partNumber} onChange={e=>update(i,{partNumber:e.target.value})}/></label><label className="text-sm">Quantity<Input type="number" min="1" max="100" value={p.quantity} onChange={e=>update(i,{quantity:Number(e.target.value)||1})}/></label><label className="text-sm">Actual status<select className="min-h-11 w-full rounded border bg-white p-2" value={p.state} onChange={e=>update(i,{state:e.target.value as typeof p.state})}><option value="recommended">Recommended — not installed</option><option value="ordered">Ordered — not installed</option><option value="installed">Installed</option></select></label><label className="text-sm sm:col-span-2">Compatibility source / remaining verification<Input value={p.compatibilitySource} onChange={e=>update(i,{compatibilitySource:e.target.value})}/></label><Button variant="outline" onClick={()=>onChange(parts.filter((_,j)=>j!==i))}>Remove this part entry</Button></fieldset>)}
+  <Button variant="outline" disabled={disabled||parts.length>=100} onClick={()=>onChange([...parts,{id:crypto.randomUUID(),description:"",partNumber:"",quantity:1,state:"recommended",compatibilitySource:""}])}>Add part</Button>
+ </details>;
+}

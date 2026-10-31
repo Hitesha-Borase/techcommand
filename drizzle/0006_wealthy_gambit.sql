@@ -1,0 +1,36 @@
+CREATE TABLE `work_order_intakes` (
+	`id` text PRIMARY KEY NOT NULL,
+	`organization_id` text NOT NULL,
+	`account_id` text,
+	`location_id` text,
+	`customer_id` text,
+	`asset_id` text,
+	`source` text DEFAULT 'manual' NOT NULL,
+	`external_id` text,
+	`notice_type` text DEFAULT 'new_assignment' NOT NULL,
+	`source_detail_url` text,
+	`response_due_at` text,
+	`status` text DEFAULT 'needs_information' NOT NULL,
+	`blocking_count` integer DEFAULT 0 NOT NULL,
+	`missing_fields_json` text DEFAULT '[]' NOT NULL,
+	`data_json` text NOT NULL,
+	`converted_work_order_id` text,
+	`reviewed_at` text,
+	`reviewed_by` text,
+	`created_by` text NOT NULL,
+	`updated_by` text NOT NULL,
+	`record_version` integer DEFAULT 1 NOT NULL,
+	`created_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	`updated_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	FOREIGN KEY (`organization_id`) REFERENCES `organizations`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`account_id`) REFERENCES `accounts`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`location_id`) REFERENCES `locations`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`customer_id`) REFERENCES `customers`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`asset_id`) REFERENCES `assets`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`reviewed_by`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`created_by`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`updated_by`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE no action
+);
+--> statement-breakpoint
+CREATE INDEX `idx_work_order_intakes_queue` ON `work_order_intakes` (`organization_id`,`status`,`response_due_at`);--> statement-breakpoint
+CREATE UNIQUE INDEX `uidx_work_order_intakes_source_external` ON `work_order_intakes` (`organization_id`,`source`,`external_id`);
