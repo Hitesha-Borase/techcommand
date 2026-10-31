@@ -3,9 +3,10 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Bot, Check, CircleAlert, FileText, LoaderCircle, LockKeyhole,
-  MapPin, MessageSquareText, Route, Sparkles, Upload, X,
+  Bot, Check, CircleAlert, Columns, FileText, LoaderCircle, LockKeyhole,
+  MapPin, MessageSquareText, Route, Sparkles, SplitSquareVertical, Upload, X,
 } from "lucide-react";
+import { EvidenceDocumentViewer } from "@/components/evidence-document-viewer";
 import { toast } from "sonner";
 import { JobCopilotGuide } from "@/components/job-copilot-guide";
 import { Button } from "@/components/ui/button";
@@ -137,6 +138,7 @@ export function BidIntelligenceWorkspace({ trigger, actorUserId, onImportAssets,
   const [autosaved, setAutosaved] = useState(false);
   const [draftStorageError, setDraftStorageError] = useState(false);
   const [draftRecoveryMessage, setDraftRecoveryMessage] = useState("");
+  const [splitView, setSplitView] = useState(true);
   const readiness = useQuery({ queryKey: ["bid-intelligence-readiness"], queryFn: () => json<Readiness>("/api/bid-intelligence"), enabled: open });
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: () => json<{ accounts: Account[] }>("/api/accounts"), enabled: open });
   const pricing = useQuery({ queryKey: ["bid-account-pricing", accountId], queryFn: () => json<{ policy: PricingPolicy; source: string }>(`/api/bid-intelligence?accountId=${encodeURIComponent(accountId)}`), enabled: open && Boolean(accountId) });
@@ -362,12 +364,36 @@ export function BidIntelligenceWorkspace({ trigger, actorUserId, onImportAssets,
 
   return <Sheet open={open} onOpenChange={changeOpen}>
     <SheetTrigger asChild>{trigger}</SheetTrigger>
-    <SheetContent className="w-full overflow-y-auto sm:max-w-3xl">
-      <SheetHeader className="border-b px-6 pb-5 pt-6">
-        <SheetTitle className="flex items-center gap-2 text-lg"><Sparkles className="size-5 text-cyan-600"/>Start a work order</SheetTitle>
-        <SheetDescription>Drop the paperwork. Copilot fills the details for you to review, then prepares the job for dispatch.</SheetDescription>
+    <SheetContent className={`w-full overflow-y-auto transition-all duration-300 ${splitView ? "sm:max-w-6xl xl:max-w-7xl" : "sm:max-w-3xl"}`}>
+      <SheetHeader className="border-b px-6 pb-4 pt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <SheetTitle className="flex items-center gap-2 text-lg"><Sparkles className="size-5 text-cyan-600"/>Start a work order</SheetTitle>
+          <SheetDescription>Drop the paperwork. Copilot fills the details for you to review, then prepares the job for dispatch.</SheetDescription>
+        </div>
+        <div className="flex items-center rounded-lg border bg-slate-100 p-0.5 text-xs shrink-0">
+          <button
+            type="button"
+            onClick={() => setSplitView(true)}
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-md font-semibold cursor-pointer transition ${splitView ? "bg-white text-cyan-700 shadow-2xs" : "text-slate-600 hover:text-slate-900"}`}
+          >
+            <Columns className="size-3.5" /> Side-by-Side View
+          </button>
+          <button
+            type="button"
+            onClick={() => setSplitView(false)}
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-md font-semibold cursor-pointer transition ${!splitView ? "bg-white text-cyan-700 shadow-2xs" : "text-slate-600 hover:text-slate-900"}`}
+          >
+            <FileText className="size-3.5" /> Single Form
+          </button>
+        </div>
       </SheetHeader>
-      <div className="space-y-5 px-6 py-5">
+      <div className={`px-6 py-5 ${splitView ? "grid gap-6 lg:grid-cols-[1fr_1.1fr]" : "space-y-5"}`}>
+        {splitView && (
+          <div className="lg:sticky lg:top-4 self-start">
+            <EvidenceDocumentViewer files={files} fields={fields} />
+          </div>
+        )}
+        <div className="space-y-5">
         {(onImportAssets || onPricing) ? <div className="flex flex-wrap gap-2">{onImportAssets ? <Button type="button" variant="outline" onClick={() => {changeOpen(false);onImportAssets();}}>Biomedical asset list</Button> : null}{onPricing ? <Button type="button" variant="outline" onClick={() => {changeOpen(false);onPricing();}}>Upload partner rate sheet</Button> : null}</div> : null}
         <div className="grid gap-3 sm:grid-cols-3">
           <div className={`rounded-xl border p-3 text-xs ${readiness.data?.aiReady ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-amber-200 bg-amber-50 text-amber-900"}`}><Bot className="mb-2 size-4"/><strong>AI extraction</strong><p className="mt-1">{readiness.data?.aiReady ? "Configured · each upload is checked" : "Image OCR available · PDF AI not configured"}</p></div>
@@ -462,6 +488,7 @@ export function BidIntelligenceWorkspace({ trigger, actorUserId, onImportAssets,
         <Button className="w-full" size="lg" disabled={save.isPending || extract.isPending || !accountId || pricing.isFetching || !pricing.data || pricing.isError} onClick={() => save.mutate()}>{save.isPending ? <LoaderCircle className="animate-spin"/> : <Check/>}{save.isPending ? "Saving intake and evidence…" : "Save for dispatch review"}</Button>
         <p className="text-center text-sm text-slate-500">Next: review this intake, confirm authorization, then create and assign the work order.</p>
         </fieldset>
+        </div>
       </div>
     </SheetContent>
   </Sheet>;

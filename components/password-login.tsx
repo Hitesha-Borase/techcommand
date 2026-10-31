@@ -71,11 +71,11 @@ export function PasswordLogin({
 
       {/* Main compact card */}
       <section
-        className="relative z-10 w-full max-w-[420px] rounded-2xl bg-white shadow-2xl border border-white/20 overflow-hidden flex flex-col"
+        className="relative z-10 w-full max-w-[420px] max-h-[94vh] rounded-2xl bg-white shadow-2xl border border-white/20 overflow-hidden flex flex-col my-auto"
         aria-labelledby="login-title"
       >
         {/* Header bar */}
-        <div className="bg-gradient-to-r from-[#07243d] via-[#093554] to-[#0a455a] px-5 py-3 text-white flex items-center justify-between border-b border-cyan-400/20">
+        <div className="shrink-0 bg-gradient-to-r from-[#07243d] via-[#093554] to-[#0a455a] px-5 py-3 text-white flex items-center justify-between border-b border-cyan-400/20">
           <div className="flex items-center gap-2.5">
             <div className="p-1.5 rounded-lg bg-cyan-400/15 text-cyan-300 ring-1 ring-cyan-300/30">
               <ShieldCheck className="size-5" />
@@ -95,7 +95,7 @@ export function PasswordLogin({
         </div>
 
         {/* Form Body */}
-        <div className="p-4 sm:p-5 space-y-3">
+        <div className="p-4 sm:p-5 space-y-3 overflow-y-auto">
           <div className="text-center pb-0.5">
             <h1 id="login-title" className="text-base font-bold text-slate-900 tracking-tight">
               {change ? "Choose Your New Password" : initialStep === "ready" ? "You're Signed In" : "Sign in to your work"}

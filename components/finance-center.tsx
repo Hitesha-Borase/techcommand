@@ -1,10 +1,11 @@
 "use client";
 
-import { Banknote, BarChart3, Calculator, MessageSquareText } from "lucide-react";
+import { ArrowLeftRight, Banknote, BarChart3, Calculator, MessageSquareText } from "lucide-react";
 import { CustomerFeedbackCenter } from "@/components/customer-feedback-center";
 import { FinanceCloseoutCenter } from "@/components/finance-closeout-center";
 import { PricingPolicyCenter } from "@/components/pricing-policy-center";
 import { PricingIntelligenceCenter } from "@/components/pricing-intelligence-center";
+import { QuickBooksSyncCenter } from "@/components/quickbooks-sync-center";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export function FinanceCenter({ initialTab = "closeout", role = "" }: { initialTab?: string; role?: string }) {
@@ -23,6 +24,9 @@ export function FinanceCenter({ initialTab = "closeout", role = "" }: { initialT
         <TabsTrigger value="intelligence">
           <BarChart3 /> Pricing intelligence
         </TabsTrigger>
+        <TabsTrigger value="quickbooks">
+          <ArrowLeftRight /> QuickBooks Sync
+        </TabsTrigger>
       </TabsList>
       <TabsContent value="closeout">
         <FinanceCloseoutCenter />
@@ -35,6 +39,9 @@ export function FinanceCenter({ initialTab = "closeout", role = "" }: { initialT
       </TabsContent>
       <TabsContent value="intelligence">
         <PricingIntelligenceCenter />
+      </TabsContent>
+      <TabsContent value="quickbooks">
+        <QuickBooksSyncCenter />
       </TabsContent>
     </Tabs>
   );

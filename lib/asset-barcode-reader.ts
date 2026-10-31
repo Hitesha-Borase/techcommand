@@ -2,6 +2,7 @@ import type { ReadResult } from "zxing-wasm/reader";
 
 let reader: Promise<typeof import("zxing-wasm/reader")> | null = null;
 async function fallbackReader() {
+  // @ts-expect-error -- Vite wasm url query import
   reader ??= Promise.all([import("zxing-wasm/reader"), import("zxing-wasm/reader/zxing_reader.wasm?url")])
     .then(([module, wasm]) => {
       // Keep the decoder on our origin. No camera frames or tag values go to a CDN.

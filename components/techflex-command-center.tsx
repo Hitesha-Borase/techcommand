@@ -157,6 +157,21 @@ const AccessCenter = lazy(() =>
     default: module.AccessCenter,
   })),
 );
+const PartsInventoryCenter = lazy(() =>
+  import("@/components/parts-inventory-center").then((module) => ({
+    default: module.PartsInventoryCenter,
+  })),
+);
+const OperationsReportsCenter = lazy(() =>
+  import("@/components/operations-reports-center").then((module) => ({
+    default: module.OperationsReportsCenter,
+  })),
+);
+const SystemSettingsCenter = lazy(() =>
+  import("@/components/system-settings-center").then((module) => ({
+    default: module.SystemSettingsCenter,
+  })),
+);
 const PartnerAccessCenter = lazy(() =>
   import("@/components/partner-access-center").then((module) => ({
     default: module.PartnerAccessCenter,
@@ -253,7 +268,7 @@ const navGroups: { label: string; items: NavItem[] }[] = [
     label: "Resources",
     items: [
       { key: "technicians", label: "Technicians", icon: HardHat },
-      { key: "parts", label: "Parts & Inventory", icon: Package, badge: "Planned" },
+      { key: "parts", label: "Parts & Inventory", icon: Package },
       { key: "documents", label: "Document Vault", icon: FolderLock },
       { key: "knowledge", label: "Ask TechFlex", icon: BookOpenCheck },
       { key: "finance", label: "Estimates & Billing", icon: ReceiptText },
@@ -265,12 +280,12 @@ const navGroups: { label: string; items: NavItem[] }[] = [
       { key: "academy", label: "Tech Command Academy", icon: GraduationCap },
       { key: "field-training", label: "Schools & Field Training", icon: GraduationCap },
       { key: "compliance", label: "Compliance & Audits", icon: ShieldCheck },
-      { key: "reports", label: "Reports", icon: BarChart3, badge: "Planned" },
+      { key: "reports", label: "Reports", icon: BarChart3 },
       { key: "automations", label: "Integrations & Automation", icon: Workflow },
       { key: "imports", label: "Imports & Sync", icon: UploadCloud },
       { key: "access", label: "Users & Access", icon: UsersRound },
       { key: "demo", label: "Demo Center", icon: MonitorPlay },
-      { key: "settings", label: "System Settings", icon: Settings2, badge: "Planned" },
+      { key: "settings", label: "System Settings", icon: Settings2 },
     ],
   },
 ];
@@ -553,6 +568,9 @@ export function TechFlexCommandCenter({
         <TechnicianAdmin />
       </div>
     );
+  else if (active === "parts") content = <PartsInventoryCenter />;
+  else if (active === "reports") content = <OperationsReportsCenter />;
+  else if (active === "settings") content = <SystemSettingsCenter />;
   else if (active === "finance") content = <FinanceCenter initialTab={financeStartTab} role={session.data?.role || ""} />;
   else if (active === "field-training") content = <FieldTrainingCenter />;
   else if (active === "academy") content = <AcademyHub tracks={session.data?.role==="biomedical_lead"?["biomedical"]:["biomedical","dme_mobility"]}/>;

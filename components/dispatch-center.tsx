@@ -16,13 +16,17 @@ import {
   CircleAlert,
   Clock3,
   ExternalLink,
+  List,
+  Map as MapIcon,
   MapPin,
   Navigation,
   Plus,
   Route,
   ShieldCheck,
+  SplitSquareVertical,
   UserRoundCheck,
 } from "lucide-react";
+import { RouteMapCanvas } from "@/components/route-map-canvas";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -287,6 +291,7 @@ export function DispatchCenter({ mode }: { mode: "schedule" | "routes" }) {
   const [date, setDate] = useState(localDate);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [selectedTechnician, setSelectedTechnician] = useState("");
+  const [routeViewMode, setRouteViewMode] = useState<"list" | "map" | "split">("split");
   const [form, setForm] = useState<ScheduleForm>({
     workOrderId: "",
     technicianId: "",
@@ -807,116 +812,153 @@ export function DispatchCenter({ mode }: { mode: "schedule" | "routes" }) {
                   Maps supplies live road navigation when opened.
                 </p>
               </div>
-              {activeRoute ? (
-                <Badge
-                  className={
-                    activeRoute.missingTravelCount
-                      ? "bg-amber-600"
-                      : "bg-emerald-600"
-                  }
-                >
-                  {activeRoute.missingTravelCount
-                    ? "Travel verification needed"
-                    : "Travel verified"}
-                </Badge>
-              ) : null}
-            </div>
-            <div className="space-y-3 p-4">
-              {activeRoute?.stops.length ? (
-                activeRoute.stops.map((job, index) => (
-                  <article
-                    key={job.stopId || job.assignmentId}
-                    className="rounded-xl border p-4"
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center rounded-lg border bg-slate-100 p-0.5 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setRouteViewMode("split")}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-md font-semibold cursor-pointer transition ${routeViewMode === "split" ? "bg-white text-blue-700 shadow-2xs" : "text-slate-600 hover:text-slate-900"}`}
                   >
-                    <div className="flex gap-3">
-                      <span className="grid size-10 shrink-0 place-items-center rounded-full bg-blue-600 text-sm font-bold text-white">
-                        {index + 1}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-start justify-between gap-2">
-                          <div>
-                            <p className="font-mono text-xs font-bold text-blue-700">
-                              {job.externalId}
-                            </p>
-                            <h3 className="mt-1 font-bold text-slate-900">
-                              {job.accountName} ·{" "}
-                              {serviceLabels[job.serviceType] ||
-                                job.serviceType}
-                            </h3>
-                          </div>
-                          <span className="inline-flex items-center gap-1.5 text-sm font-bold text-slate-700">
-                            <Clock3 className="size-4" />
-                            {timeLabel(job.scheduledStart)}
-                          </span>
-                        </div>
-                        <p className="mt-2 flex items-start gap-1.5 text-sm text-slate-600">
-                          <MapPin className="mt-0.5 size-4 shrink-0" />
-                          {job.address}
-                        </p>
-                        <div
-                          className={`mt-3 flex items-center gap-2 rounded-lg p-2.5 text-xs font-semibold ${job.legMiles === null || job.driveMinutes === null ? "bg-amber-50 text-amber-900" : "bg-emerald-50 text-emerald-800"}`}
-                        >
-                          {job.legMiles === null ||
-                          job.driveMinutes === null ? (
-                            <CircleAlert className="size-4" />
-                          ) : (
-                            <CheckCircle2 className="size-4" />
-                          )}
-                          {travelLabel(job)}
-                        </div>
-                        <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                          <div className="flex gap-1">
-                            <Button
-                              variant="outline"
-                              size="icon-sm"
-                              onClick={() => moveStop(index, -1)}
-                              disabled={index === 0 || reorder.isPending}
-                              aria-label={`Move ${job.externalId} earlier`}
-                            >
-                              <ArrowUp />
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="icon-sm"
-                              onClick={() => moveStop(index, 1)}
-                              disabled={
-                                index === activeRoute.stops.length - 1 ||
-                                reorder.isPending
-                              }
-                              aria-label={`Move ${job.externalId} later`}
-                            >
-                              <ArrowDown />
-                            </Button>
-                          </div>
-                          <div className="flex gap-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => openScheduler(undefined, job)}
-                            >
-                              Verify travel
-                            </Button>
-                            <Button asChild size="sm">
-                              <a
-                                href={destinationUrl(job.address)}
-                                target="_blank"
-                                rel="noreferrer"
-                              >
-                                <Navigation /> Directions
-                              </a>
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </article>
-                ))
-              ) : (
-                <div className="p-10 text-center text-sm text-slate-500">
-                  No route stops exist for this technician and date.
+                    <SplitSquareVertical className="size-3.5" /> Split Map
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRouteViewMode("map")}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-md font-semibold cursor-pointer transition ${routeViewMode === "map" ? "bg-white text-blue-700 shadow-2xs" : "text-slate-600 hover:text-slate-900"}`}
+                  >
+                    <MapIcon className="size-3.5" /> Full Map
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRouteViewMode("list")}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-md font-semibold cursor-pointer transition ${routeViewMode === "list" ? "bg-white text-blue-700 shadow-2xs" : "text-slate-600 hover:text-slate-900"}`}
+                  >
+                    <List className="size-3.5" /> Stop List
+                  </button>
                 </div>
-              )}
+                {activeRoute ? (
+                  <Badge
+                    className={
+                      activeRoute.missingTravelCount
+                        ? "bg-amber-600"
+                        : "bg-emerald-600"
+                    }
+                  >
+                    {activeRoute.missingTravelCount
+                      ? "Travel verification needed"
+                      : "Travel verified"}
+                  </Badge>
+                ) : null}
+              </div>
             </div>
+
+            {routeViewMode === "map" ? (
+              <div className="p-4">
+                <RouteMapCanvas route={activeRoute} />
+              </div>
+            ) : (
+              <div className="space-y-4 p-4">
+                {routeViewMode === "split" ? (
+                  <RouteMapCanvas route={activeRoute} />
+                ) : null}
+                <div className="space-y-3">
+                  {activeRoute?.stops.length ? (
+                    activeRoute.stops.map((job, index) => (
+                      <article
+                        key={job.stopId || job.assignmentId}
+                        className="rounded-xl border p-4"
+                      >
+                        <div className="flex gap-3">
+                          <span className="grid size-10 shrink-0 place-items-center rounded-full bg-blue-600 text-sm font-bold text-white">
+                            {index + 1}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                              <div>
+                                <p className="font-mono text-xs font-bold text-blue-700">
+                                  {job.externalId}
+                                </p>
+                                <h3 className="mt-1 font-bold text-slate-900">
+                                  {job.accountName} ·{" "}
+                                  {serviceLabels[job.serviceType] ||
+                                    job.serviceType}
+                                </h3>
+                              </div>
+                              <span className="inline-flex items-center gap-1.5 text-sm font-bold text-slate-700">
+                                <Clock3 className="size-4" />
+                                {timeLabel(job.scheduledStart)}
+                              </span>
+                            </div>
+                            <p className="mt-2 flex items-start gap-1.5 text-sm text-slate-600">
+                              <MapPin className="mt-0.5 size-4 shrink-0" />
+                              {job.address}
+                            </p>
+                            <div
+                              className={`mt-3 flex items-center gap-2 rounded-lg p-2.5 text-xs font-semibold ${job.legMiles === null || job.driveMinutes === null ? "bg-amber-50 text-amber-900" : "bg-emerald-50 text-emerald-800"}`}
+                            >
+                              {job.legMiles === null ||
+                              job.driveMinutes === null ? (
+                                <CircleAlert className="size-4" />
+                              ) : (
+                                <CheckCircle2 className="size-4" />
+                              )}
+                              {travelLabel(job)}
+                            </div>
+                            <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                              <div className="flex gap-1">
+                                <Button
+                                  variant="outline"
+                                  size="icon-sm"
+                                  onClick={() => moveStop(index, -1)}
+                                  disabled={index === 0 || reorder.isPending}
+                                  aria-label={`Move ${job.externalId} earlier`}
+                                >
+                                  <ArrowUp />
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="icon-sm"
+                                  onClick={() => moveStop(index, 1)}
+                                  disabled={
+                                    index === activeRoute.stops.length - 1 ||
+                                    reorder.isPending
+                                  }
+                                  aria-label={`Move ${job.externalId} later`}
+                                >
+                                  <ArrowDown />
+                                </Button>
+                              </div>
+                              <div className="flex gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => openScheduler(undefined, job)}
+                                >
+                                  Verify travel
+                                </Button>
+                                <Button asChild size="sm">
+                                  <a
+                                    href={destinationUrl(job.address)}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                  >
+                                    <Navigation /> Directions
+                                  </a>
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </article>
+                    ))
+                  ) : (
+                    <div className="p-10 text-center text-sm text-slate-500">
+                      No route stops exist for this technician and date.
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </article>
         </div>
       )}

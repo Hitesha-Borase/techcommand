@@ -2,7 +2,7 @@ import { z } from "zod";
 import { apiError, getPasswordPortalIdentity } from "@/lib/portal-auth";
 import { PasswordAuthError, assertSameOrigin, authBridge, authJson, clearPasswordResponse, passwordAuthConfigured, passwordResponse, passwordSessionConfirmation, passwordSignIn, readPasswordSession, refreshPasswordSession, requestCookie, PASSWORD_COOKIE, verifyPasswordSession } from "@/lib/password-auth";
 import { resolvePasswordLogin } from "@/lib/login-usernames";
-import { DEMO_ACCOUNTS, ensureDemoUserInDb } from "@/lib/demo-auth";
+import { DEMO_ACCOUNTS, ensureDemoUserInDb, getDemoAccountFromCookie } from "@/lib/demo-auth";
 
 const input = z.discriminatedUnion("action", [
   z.object({ action: z.literal("login"), login: z.string().trim().min(1).max(254).optional(), email: z.string().trim().min(1).max(254).optional(), password: z.string().min(1).max(256) }).strict(),
