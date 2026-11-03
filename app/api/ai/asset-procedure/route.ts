@@ -21,8 +21,9 @@ export async function POST(request:Request) {
   const cacheKey=JSON.stringify([TECHFLEX_ORG_ID,asset.manufacturer.trim().toLowerCase(),asset.model.trim().toLowerCase(),asset.serviceType]);
   const existing=await env.DB.prepare("SELECT generation_id AS id,status,document_json AS documentJson,error_message AS error,expires_at AS expiresAt,updated_at AS updatedAt FROM asset_procedure_research WHERE cache_key=?").bind(cacheKey).first<{id:string;status:string;documentJson:string|null;error:string|null;expiresAt:string;updatedAt:string}>();
   if(existing&&existing.expiresAt>new Date().toISOString())return Response.json({...existing,document:existing.documentJson?JSON.parse(existing.documentJson):null,documentJson:undefined},{headers});
-  const runtime=env as unknown as {OPENAI_API_KEY?:string};
-  if(!runtime.OPENAI_API_KEY)return Response.json({status:"unavailable",error:"The AI connection is not configured. Continue with saved references and save your observations."},{headers});
+  const runtime=env as unknown as {OPENAI_API_KEY?:string; GEMINI_API_KEY?:string};
+  const aiKey = runtime.GEMINI_API_KEY || runtime.OPENAI_API_KEY || (typeof process !== "undefined" && process.env ? (process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY) : "");
+  if(!aiKey)return Response.json({status:"unavailable",error:"The AI connection is not configured. Continue with saved references and save your observations."},{headers});
   const id=crypto.randomUUID();
   const claim=await env.DB.prepare(`INSERT INTO asset_procedure_research(cache_key,organization_id,generation_id,status,expires_at) VALUES (?,?,?,'researching',?) ON CONFLICT(cache_key) DO UPDATE SET generation_id=excluded.generation_id,status='researching',document_json=NULL,error_message=NULL,expires_at=excluded.expires_at,updated_at=CURRENT_TIMESTAMP WHERE asset_procedure_research.expires_at<=?`).bind(cacheKey,TECHFLEX_ORG_ID,id,new Date(Date.now()+150000).toISOString(),new Date().toISOString()).run();
   if(!claim.meta.changes)return Response.json({status:"researching"},{headers});

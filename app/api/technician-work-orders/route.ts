@@ -126,7 +126,7 @@ function replayResponse(
 
 export async function GET(request: Request) {
   try {
-    await requirePortalRole(request, ["technician"]);
+    await requirePortalRole(request, ["technician", "owner_administrator", "operations_administrator"]);
     const result = await env.DB.prepare(
       `SELECT a.id AS accountId, a.name AS accountName,
               l.id AS locationId, l.name AS locationName,

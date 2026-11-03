@@ -1,3 +1,4 @@
+﻿import { SupabaseBucket } from "@/lib/supabase-storage";
 import { env } from "cloudflare:workers";
 import packages from "./server/biomedical-source-package.json";
 import { PortalHttpError, TECHFLEX_ORG_ID, type PortalIdentity } from "./portal-auth";
@@ -46,7 +47,7 @@ async function cleanupStaged(files: StagedFile[]) {
       const pendingId=crypto.randomUUID();
       await env.DB.prepare(`INSERT INTO audit_logs(id,organization_id,action,entity_type,entity_id,before_json,after_json)
         VALUES (?,?,'attachment.storage_cleanup_pending','attachment',?,?,?)`).bind(pendingId,TECHFLEX_ORG_ID,file.id,JSON.stringify({storageKey:file.key}),JSON.stringify({metadataSaved:false,storageRemoved:false})).run();
-      await env.BUCKET.delete(file.key);
+      await SupabaseBucket.delete(file.key);
       await env.DB.prepare(`INSERT INTO audit_logs(id,organization_id,action,entity_type,entity_id,before_json,after_json)
         VALUES (?,?,'attachment.storage_cleanup_completed','attachment',?,?,?)`).bind(`${pendingId}:completed`,TECHFLEX_ORG_ID,file.id,JSON.stringify({storageKey:file.key}),JSON.stringify({storageRemoved:true})).run();
     } catch(error) { safeServerLog("attachment_cleanup",error); }
@@ -82,7 +83,7 @@ export async function importBiomedicalAccount(identity: PortalIdentity, key: str
       const {bytes}=await sourceDocumentBytes(source,item.role);
       const digest=Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",bytes)),value=>value.toString(16).padStart(2,"0")).join("");
       if(digest!==item.sha256 || bytes.byteLength!==item.sizeBytes) throw new Error("Prepared document integrity check failed");
-      await env.BUCKET.put(storageKey,bytes,{httpMetadata:{contentType:"application/pdf"}});
+      await SupabaseBucket.put(storageKey,bytes,{httpMetadata:{contentType:"application/pdf"}});
     }
     const statements=[env.DB.prepare("SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM service_contracts WHERE id=? OR (account_id=? AND contract_number=?)) THEN 1 ELSE json('biomedical_import_conflict') END").bind(contractId,accountId,source.terms.agreementNumber)];
     if(matches[0]) statements.push(env.DB.prepare("SELECT CASE WHEN EXISTS(SELECT 1 FROM accounts WHERE id=? AND organization_id=? AND record_version=?) THEN 1 ELSE json('biomedical_import_conflict') END").bind(accountId,TECHFLEX_ORG_ID,matches[0].version));
@@ -98,7 +99,7 @@ export async function importBiomedicalAccount(identity: PortalIdentity, key: str
       SELECT json_extract(value,'$.id'),?,?,?,json_extract(value,'$.assetTag'),json_extract(value,'$.assetTag'),json_extract(value,'$.manufacturer'),json_extract(value,'$.model'),json_extract(value,'$.serialNumber'),json_extract(value,'$.equipmentType'),'unassessed',CASE WHEN json_extract(value,'$.coverage')='excluded_outlet_reference' THEN 'inventory_reference' ELSE 'pending_verification' END,
       json_object('sourcePackage',?,'sourcePage',json_extract(value,'$.sourcePage'),'coverage',json_extract(value,'$.coverage'),'sourceTier',json_extract(value,'$.tier'),'tagSource',json_extract(value,'$.tagSource'),'verification','Imported inventory; no current inspection or PM result recorded') FROM json_each(?)`).bind(TECHFLEX_ORG_ID,accountId,locationId,source.key,JSON.stringify(newAssets)));
     statements.push(env.DB.prepare(`INSERT INTO service_contracts(id,organization_id,account_id,contract_number,name,contract_type,starts_on,ends_on,auto_renew,service_level_json,covered_services_json,status)
-      VALUES (?,?,?,?,?,'biomedical_pm',?,?,0,?,?,'active')`).bind(contractId,TECHFLEX_ORG_ID,accountId,source.terms.agreementNumber,`${source.name} — Annual Biomedical/PM`,source.terms.effectiveDate,source.terms.termEndExclusive,
+      VALUES (?,?,?,?,?,'biomedical_pm',?,?,0,?,?,'active')`).bind(contractId,TECHFLEX_ORG_ID,accountId,source.terms.agreementNumber,`${source.name} â€” Annual Biomedical/PM`,source.terms.effectiveDate,source.terms.termEndExclusive,
       JSON.stringify({sourceKey:source.key,revision:source.revision,locationId,assetIds:assetRows.map(asset=>asset.id),attachmentIds:staged.map(file=>file.id),addressSource:source.address.sourceUrl,addressVerifiedOn:source.address.verifiedOn}),JSON.stringify(source.terms)));
     for(const file of staged) statements.push(env.DB.prepare("INSERT INTO attachments(id,organization_id,entity_type,entity_id,storage_key,file_name,content_type,size_bytes,checksum,category,uploaded_by) VALUES (?,?,'account',?,?,?,'application/pdf',?,?,?,?)").bind(file.id,TECHFLEX_ORG_ID,accountId,file.key,file.fileName,file.sizeBytes,file.sha256,file.role==="agreement"?"partner_contract":"general",identity.userId));
     statements.push(env.DB.prepare("INSERT INTO audit_logs(id,organization_id,actor_user_id,action,entity_type,entity_id,after_json) VALUES (?,?,?,'biomedical.account_imported','account',?,?)").bind(crypto.randomUUID(),TECHFLEX_ORG_ID,identity.userId,accountId,JSON.stringify({sourceKey:key,revision,contractId,assetCount:assetRows.length,newAssetCount:newAssets.length,documents:staged.map(({key:_key,...file})=>file),invoicesCreated:0})));

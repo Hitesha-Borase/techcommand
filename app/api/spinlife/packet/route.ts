@@ -1,3 +1,4 @@
+﻿import { SupabaseBucket } from "@/lib/supabase-storage";
 import {procedureText,procedureProblems,procedurePhotoEvidence} from "@/lib/asset-ai-procedure";
 import { env } from "cloudflare:workers";
 import { z } from "zod";
@@ -28,7 +29,7 @@ export async function POST(request:Request) {
     const loaded=[];
     for(const file of files) {
       if(file.category==="signature" && file.id!==job.visit.signatureAttachmentId) continue;
-      const object=await env.BUCKET.get(file.storageKey);
+      const object=await SupabaseBucket.get(file.storageKey);
       if(!object) throw new PortalHttpError(409,`A saved ${file.category} file is unavailable. Restore the file and retry; your work order is saved.`);
       loaded.push({...file,bytes:await object.arrayBuffer(),caption:job.visit.photoCaptions[file.id]?.trim() || stepCaptions.get(file.id) || "Caption not recorded"});
     }
@@ -66,7 +67,7 @@ export async function POST(request:Request) {
     const fileName=dmePacketName(job.technicianName,reference,needsReview&&["delivery_completed","returned_to_service"].includes(visit.disposition)?"needs_review":visit.disposition);
     const attachmentId=crypto.randomUUID();
     stagedKey=`techflex/spinlife/${input.id}/packets/${attachmentId}.pdf`;
-    await env.BUCKET.put(stagedKey,bytes,{httpMetadata:{contentType:"application/pdf"}});
+    await SupabaseBucket.put(stagedKey,bytes,{httpMetadata:{contentType:"application/pdf"}});
     const snapshot={data,visit,originalFieldData:originalVisit,reviewedWording:wording,technicianId:job.technicianId,technicianName,serviceDate,documentedAt:now,files:files.map(f=>({id:f.id,storageKey:f.storageKey,sizeBytes:f.sizeBytes})),sourceVersion:job.version};
     const statements=[versionGuard(input.id,input.expectedVersion,identity.technicianId,identity),
       // An upload finishing while the PDF is rendering must not disappear from
@@ -85,14 +86,14 @@ export async function POST(request:Request) {
       try {committed=await env.DB.prepare("SELECT attachment_id AS attachmentId FROM spinlife_packets WHERE intake_id=? AND source_version=?").bind(input.id,input.expectedVersion).first<{attachmentId:string}>();}
       catch {stagedKey=null;throw new PortalHttpError(503,"PDF save confirmation was interrupted. Keep the work order open and retry generation to recover the saved version.");}
       if(committed?.attachmentId===attachmentId) stagedKey=null;
-      if(committed) {if(stagedKey) await env.BUCKET.delete(stagedKey);stagedKey=null;return Response.json(committed,{headers:privateHeaders});}
+      if(committed) {if(stagedKey) await SupabaseBucket.delete(stagedKey);stagedKey=null;return Response.json(committed,{headers:privateHeaders});}
       if(/conflict|malformed JSON|UNIQUE/i.test(String(error))) throw new PortalHttpError(409,"The answers or photos changed while generating the PDF. Your work is saved; review and generate again.");
       throw error;
     }
     stagedKey=null;
     return Response.json({attachmentId,fileName,billingStatus:"separate",reviewRequired:false},{headers:privateHeaders});
   } catch(error) {
-    if(stagedKey) {try{await env.BUCKET.delete(stagedKey);}catch(cleanup){safeServerLog("attachment_cleanup",cleanup);}}
+    if(stagedKey) {try{await SupabaseBucket.delete(stagedKey);}catch(cleanup){safeServerLog("attachment_cleanup",cleanup);}}
     const response=apiError(error);response.headers.set("Cache-Control","private, no-store");return response;
   }
 }

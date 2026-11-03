@@ -1,3 +1,4 @@
+﻿import { SupabaseBucket } from "@/lib/supabase-storage";
 import { equipmentWorkflow } from "@/lib/equipment-workflow";
 import { releasePendingSubmissionReviews } from "@/lib/submission-inbox";
 import {dmeFamilies} from "@/lib/academy-catalog";
@@ -1187,7 +1188,7 @@ async function completeGeneratedAttachmentCleanup(item: GeneratedAttachmentClean
       ).run();
       return;
     }
-    await env.BUCKET.delete(item.storageKey);
+    await SupabaseBucket.delete(item.storageKey);
     await env.DB.prepare(
       "INSERT OR IGNORE INTO audit_logs (id, organization_id, action, entity_type, entity_id, before_json, after_json) VALUES (?, ?, 'attachment.storage_cleanup_completed', 'attachment', ?, ?, ?)",
     ).bind(
@@ -1483,7 +1484,7 @@ async function approveReport(
     )
       .bind(signatureRecord.id)
       .first<{ storageKey: string; contentType: string }>();
-    const object = stored ? await env.BUCKET.get(stored.storageKey) : null;
+    const object = stored ? await SupabaseBucket.get(stored.storageKey) : null;
     if (!object)
       throw new PortalHttpError(409, "The saved signature file is unavailable. Approval has not been completed. Restore or upload the signature, then refresh this review.");
     if (object)
@@ -1537,14 +1538,14 @@ async function approveReport(
   const packetFiles: Array<{ caption?: string; fileName: string; contentType: string; bytes: ArrayBuffer; category: string; createdAt: string }> = [];
   let packetInputBytes = 0;
   for (const row of packetRows.results) {
-    const object = await env.BUCKET.get(row.storageKey);
+    const object = await SupabaseBucket.get(row.storageKey);
     if (!object)
       throw new PortalHttpError(409, `The saved file "${row.fileName}" is unavailable. Approval has not been completed. Restore or upload the file, then refresh this review.`);
     if (spinlifeWorkOrder(workOrder) && row.category === 'client_work_order') continue;
     if (packetInputBytes + row.sizeBytes > 24 * 1024 * 1024) throw new PortalHttpError(409, "Evidence is too large to render safely. Keep originals and upload smaller readable photo copies before approval.");
     const bytes = await object.arrayBuffer();
     packetInputBytes += bytes.byteLength;
-    if (packetInputBytes > 24 * 1024 * 1024) throw new PortalHttpError(409, "Selected evidence exceeds the document renderer’s 24 MB processing budget. Keep the originals and upload smaller readable photo copies before approval.");
+    if (packetInputBytes > 24 * 1024 * 1024) throw new PortalHttpError(409, "Selected evidence exceeds the document rendererâ€™s 24 MB processing budget. Keep the originals and upload smaller readable photo copies before approval.");
     packetFiles.push({ ...row, bytes, caption: parsed.documentDetails.photoCaptions[row.id] || undefined });
   }
   const packetFileName = safeJson<{simpleSpinlifeHandoff?:string}>(workOrder.requiredSkillsJson,{}).simpleSpinlifeHandoff
@@ -1592,10 +1593,10 @@ async function approveReport(
     { attachmentId: invoiceAttachmentId, storageKey: invoiceStorageKey },
   ];
   const storageResults = await Promise.allSettled([
-    env.BUCKET.put(reportStorageKey, completionPacketPdf, {
+    SupabaseBucket.put(reportStorageKey, completionPacketPdf, {
       httpMetadata: { contentType: "application/pdf" },
     }),
-    env.BUCKET.put(invoiceStorageKey, invoicePdf, {
+    SupabaseBucket.put(invoiceStorageKey, invoicePdf, {
       httpMetadata: { contentType: "application/pdf" },
     }),
   ]);

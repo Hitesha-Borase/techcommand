@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   AlertCircle,
   ArrowDownLeft,
@@ -47,21 +47,52 @@ type QuickBooksInvoice = {
   paymentStatus: "Paid" | "Net 30" | "Pending";
 };
 
-const INITIAL_INVOICES: QuickBooksInvoice[] = [
-  { id: "qb-1", invoiceNumber: "INV-2026-0891", workOrderId: "WO-2026-8812", customerName: "Ohio VA Healthcare System", amount: 1480.00, qbDocNumber: "QB-10942", syncStatus: "synced", lastSyncAttempt: "Today at 10:45 AM", paymentStatus: "Net 30" },
-  { id: "qb-2", invoiceNumber: "INV-2026-0892", workOrderId: "WO-2026-8809", customerName: "MetroHealth Biomedical", amount: 2150.00, qbDocNumber: "QB-10943", syncStatus: "synced", lastSyncAttempt: "Today at 10:45 AM", paymentStatus: "Paid" },
-  { id: "qb-3", invoiceNumber: "INV-2026-0893", workOrderId: "WO-2026-8815", customerName: "SpinLife DME Mobility", amount: 645.00, qbDocNumber: null, syncStatus: "pending", lastSyncAttempt: "Scheduled for next batch", paymentStatus: "Net 30" },
-  { id: "qb-4", invoiceNumber: "INV-2026-0894", workOrderId: "WO-2026-8818", customerName: "Sunrise Medical Specialty", amount: 1220.00, qbDocNumber: null, syncStatus: "pending", lastSyncAttempt: "Scheduled for next batch", paymentStatus: "Pending" },
-  { id: "qb-5", invoiceNumber: "INV-2026-0888", workOrderId: "WO-2026-8795", customerName: "CareSource Community DME", amount: 890.00, qbDocNumber: null, syncStatus: "error", lastSyncAttempt: "Today at 09:12 AM", errorMessage: "Account mapping code missing: DME_COLUMBUS_TAX", paymentStatus: "Pending" },
-  { id: "qb-6", invoiceNumber: "INV-2026-0885", workOrderId: "WO-2026-8782", customerName: "Mount Carmel Rehabilitation", amount: 3410.00, qbDocNumber: "QB-10939", syncStatus: "synced", lastSyncAttempt: "Yesterday at 04:30 PM", paymentStatus: "Paid" },
-];
-
 export function QuickBooksSyncCenter() {
-  const [invoices, setInvoices] = useState<QuickBooksInvoice[]>(INITIAL_INVOICES);
+  const [invoices, setInvoices] = useState<QuickBooksInvoice[]>([]);
+  const [connectionInfo, setConnectionInfo] = useState({
+    companyName: "TechFlex Mobility Solutions",
+    realmId: "934145209382",
+    isConnected: true,
+    lastSyncAt: "Today",
+  });
+  const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [isSyncingAll, setIsSyncingAll] = useState(false);
   const [syncingId, setSyncingId] = useState<string | null>(null);
+
+  // Fetch live ledger and connection status from /api/finance/quickbooks
+  const fetchQuickBooksData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await fetch("/api/finance/quickbooks");
+      if (!res.ok) throw new Error("Failed to load QuickBooks sync ledger");
+      const data = (await res.json()) as {
+        success?: boolean;
+        connection?: {
+          companyName: string;
+          realmId: string;
+          isConnected: boolean;
+          lastSyncAt: string;
+        };
+        invoices?: QuickBooksInvoice[];
+      };
+      if (Array.isArray(data.invoices)) {
+        setInvoices(data.invoices);
+      }
+      if (data.connection) {
+        setConnectionInfo(data.connection);
+      }
+    } catch (err) {
+      console.error("Error loading QuickBooks sync data:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchQuickBooksData();
+  }, [fetchQuickBooksData]);
 
   const filteredInvoices = invoices.filter((inv) => {
     const matchesStatus = filterStatus === "all" || inv.syncStatus === filterStatus;
@@ -80,47 +111,60 @@ export function QuickBooksSyncCenter() {
     .filter((i) => i.syncStatus === "synced")
     .reduce((sum, i) => sum + i.amount, 0);
 
-  const handleSyncAll = () => {
-    setIsSyncingAll(true);
-    toast.info("Connecting to Intuit QuickBooks API...", {
-      description: `Pushing ${pendingCount + errorCount} pending invoice records to QuickBooks ledger.`,
-    });
-    setTimeout(() => {
-      setInvoices((prev) =>
-        prev.map((inv) => ({
-          ...inv,
-          syncStatus: "synced",
-          qbDocNumber: inv.qbDocNumber || `QB-${Math.floor(10944 + Math.random() * 50)}`,
-          lastSyncAttempt: "Just now",
-          errorMessage: undefined,
-        })),
-      );
-      setIsSyncingAll(false);
+  const handleSyncAll = async () => {
+    try {
+      setIsSyncingAll(true);
+      toast.info("Connecting to Intuit QuickBooks API...", {
+        description: `Pushing ${pendingCount + errorCount} pending invoice records to QuickBooks ledger.`,
+      });
+
+      const res = await fetch("/api/finance/quickbooks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "sync_all" }),
+      });
+
+      if (!res.ok) {
+        const err = (await res.json()) as { error?: string };
+        throw new Error(err?.error || "Batch sync failed");
+      }
+
+      await fetchQuickBooksData();
       toast.success("QuickBooks Synchronization Complete!", {
         description: "All pending invoices reconciled with Chart of Accounts.",
       });
-    }, 1200);
+    } catch (err: unknown) {
+      toast.error("QuickBooks Sync Error", {
+        description: err instanceof Error ? err.message : "Sync failed",
+      });
+    } finally {
+      setIsSyncingAll(false);
+    }
   };
 
-  const handleSyncSingle = (id: string) => {
-    setSyncingId(id);
-    setTimeout(() => {
-      setInvoices((prev) =>
-        prev.map((inv) =>
-          inv.id === id
-            ? {
-                ...inv,
-                syncStatus: "synced",
-                qbDocNumber: inv.qbDocNumber || `QB-${Math.floor(10950 + Math.random() * 50)}`,
-                lastSyncAttempt: "Just now",
-                errorMessage: undefined,
-              }
-            : inv,
-        ),
-      );
-      setSyncingId(null);
+  const handleSyncSingle = async (id: string) => {
+    try {
+      setSyncingId(id);
+      const res = await fetch("/api/finance/quickbooks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "sync_single", invoiceId: id }),
+      });
+
+      if (!res.ok) {
+        const err = (await res.json()) as { error?: string };
+        throw new Error(err?.error || "Invoice sync failed");
+      }
+
+      await fetchQuickBooksData();
       toast.success("Invoice pushed to QuickBooks successfully!");
-    }, 800);
+    } catch (err: unknown) {
+      toast.error("QuickBooks Push Error", {
+        description: err instanceof Error ? err.message : "Failed to push invoice",
+      });
+    } finally {
+      setSyncingId(null);
+    }
   };
 
   return (
@@ -192,8 +236,8 @@ export function QuickBooksSyncCenter() {
             <div className="p-2 rounded-lg bg-blue-50 text-blue-600"><Building2 className="size-4" /></div>
           </CardHeader>
           <CardContent>
-            <div className="text-sm font-extrabold text-slate-900">TechFlex Mobility Solutions</div>
-            <p className="text-[11px] text-slate-500 mt-1 font-mono">Realm: 934145209382</p>
+            <div className="text-sm font-extrabold text-slate-900">{connectionInfo.companyName}</div>
+            <p className="text-[11px] text-slate-500 mt-1 font-mono">Realm: {connectionInfo.realmId}</p>
           </CardContent>
         </Card>
       </div>
@@ -250,7 +294,18 @@ export function QuickBooksSyncCenter() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredInvoices.map((inv) => (
+                {filteredInvoices.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="py-12 text-center text-slate-500">
+                      <CheckCircle2 className="size-8 mx-auto mb-2 text-slate-400 opacity-60" />
+                      <div className="font-semibold text-slate-700 text-sm">No invoices in QuickBooks ledger</div>
+                      <div className="text-xs text-slate-400 mt-0.5">
+                        When work orders are completed and billed, they will appear here ready for QuickBooks sync.
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  filteredInvoices.map((inv) => (
                   <tr key={inv.id} className="hover:bg-slate-50/80 transition-colors">
                     <td className="py-3 px-4 font-mono font-bold text-slate-900">{inv.invoiceNumber}</td>
                     <td className="py-3 px-3 font-mono text-blue-700 font-semibold">{inv.workOrderId}</td>
@@ -311,7 +366,7 @@ export function QuickBooksSyncCenter() {
                       )}
                     </td>
                   </tr>
-                ))}
+                )))}
               </tbody>
             </table>
           </div>

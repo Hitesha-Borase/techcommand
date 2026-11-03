@@ -1,3 +1,4 @@
+﻿import { SupabaseBucket } from "@/lib/supabase-storage";
 import {env} from "cloudflare:workers";
 import {z} from "zod";
 import {apiError,PortalHttpError,requirePortalRole,TECHFLEX_ORG_ID} from "@/lib/portal-auth";
@@ -32,7 +33,7 @@ export async function POST(request:Request){let requestId="",payload="",actor=""
  const input=inputSchema.parse(await request.json());requestId=input.requestId;payload=JSON.stringify(input);
  const previous=await env.DB.prepare("SELECT actor_user_id AS actor,after_json AS payload,entity_id AS workOrderId FROM audit_logs WHERE id=? AND organization_id=? AND action LIKE 'spinlife.closeout.%'").bind(requestId,TECHFLEX_ORG_ID).first<{actor:string;payload:string;workOrderId:string}>();
  if(previous){if(previous.actor!==actor||previous.payload!==payload)throw new PortalHttpError(409,"This retry belongs to a different change.");const done=await draft(input.id);return Response.json({saved:true,version:done?.version,workOrderId:done?.workOrderId,replayed:true},{headers:privateHeaders});}
- const current=await draft(input.id);if(current?.workOrderId)throw new PortalHttpError(409,"This order is already in Work Orders → Review. Its original field packet is retained there.");
+ const current=await draft(input.id);if(current?.workOrderId)throw new PortalHttpError(409,"This order is already in Work Orders â†’ Review. Its original field packet is retained there.");
  if((current?.version||0)!==input.version)throw new PortalHttpError(409,"The billing draft changed. Reload it before saving your edits.");
  const job=await spinlifeJob(identity,input.id);
  if(job.version!==input.expectedVisitVersion)throw new PortalHttpError(409,"Fieldwork changed. Save or reload the current order before reviewing billing.");
@@ -59,7 +60,7 @@ export async function POST(request:Request){let requestId="",payload="",actor=""
   const total=data.invoiceTotalCents!,cost=data.fixedDirectCostsCents!,pay=job.technicianPayCents!,margin=Math.floor((total-cost-pay)/total*10000);
   if(margin<floor)throw new PortalHttpError(409,`The approved amount, agreed technician pay and entered costs do not meet the ${floor/100}% margin policy. Keep the draft and resolve authorization with finance; pay was not changed.`);
   if(await env.DB.prepare("SELECT id FROM work_orders WHERE organization_id=? AND lower(replace(external_source,' ',''))='spinlife' AND external_id=?").bind(TECHFLEX_ORG_ID,job.data.externalId).first())throw new PortalHttpError(409,"A converted work order already has this complete SpinLife number. Open that existing order; no duplicate was created.");
-  for(const file of files){if(!await env.BUCKET.head(file.storageKey))throw new PortalHttpError(409,`Saved evidence is unavailable: ${file.fileName}. Restore it before preparing closeout.`);}
+  for(const file of files){if(!await SupabaseBucket.head(file.storageKey))throw new PortalHttpError(409,`Saved evidence is unavailable: ${file.fileName}. Restore it before preparing closeout.`);}
   workOrderId=`spinlife:${input.id}`;const reportId=`report-${workOrderId}-${technician.id}`,estimateId=`estimate-${workOrderId}`,report=spinlifeCloseoutReport(job);
   snapshotJson=JSON.stringify({source:job,files,billing:data,report,preparedBy:identity.userId,preparedAt:new Date().toISOString()});
   statements.push(

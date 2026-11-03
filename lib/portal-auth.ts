@@ -5,6 +5,15 @@ import { getDemoAccountFromCookie } from "@/lib/demo-auth";
 
 export const TECHFLEX_ORG_ID = "techflex";
 
+export function resolveOrganizationId(identity?: Partial<PortalIdentity> | null, request?: Request | null): string {
+  if (identity?.organizationId) return identity.organizationId;
+  if (request) {
+    const tenantHeader = request.headers.get("x-organization-id") || request.headers.get("x-tenant-id");
+    if (tenantHeader && tenantHeader.trim()) return tenantHeader.trim();
+  }
+  return (typeof process !== "undefined" && process.env?.TECHFLEX_ORG_ID) || TECHFLEX_ORG_ID;
+}
+
 export type PortalRole =
   | "owner_administrator"
   | "operations_administrator"
@@ -24,6 +33,7 @@ export type PortalIdentity = {
   displayName: string;
   role: PortalRole;
   technicianId: string | null;
+  organizationId?: string;
 };
 
 export type ApprovedAdministrator = {

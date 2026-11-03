@@ -1,3 +1,4 @@
+﻿import { SupabaseBucket } from "@/lib/supabase-storage";
 import { env } from "cloudflare:workers";
 import { z } from "zod";
 import { apiError, requirePortalRole, TECHFLEX_ORG_ID } from "@/lib/portal-auth";
@@ -36,13 +37,13 @@ export async function POST(request: Request) {
       tools: field.max(2000),
     }).parse(Object.fromEntries(form.entries()));
     const resume = form.get("resume");
-    if (!(resume instanceof File) || resume.size === 0) return responseError("Please attach your résumé.");
-    if (resume.size > maxResumeBytes) return responseError("Résumé files must be 8 MB or smaller.", 413);
-    if (!allowedResumeTypes.has(resume.type)) return responseError("Attach a PDF, DOC, or DOCX résumé.");
+    if (!(resume instanceof File) || resume.size === 0) return responseError("Please attach your rÃ©sumÃ©.");
+    if (resume.size > maxResumeBytes) return responseError("RÃ©sumÃ© files must be 8 MB or smaller.", 413);
+    if (!allowedResumeTypes.has(resume.type)) return responseError("Attach a PDF, DOC, or DOCX rÃ©sumÃ©.");
     const id = crypto.randomUUID();
     const extension = resume.name.split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "") || "file";
     const resumeKey = `school-interest/${input.institution}/${id}/resume.${extension}`;
-    await env.BUCKET.put(resumeKey, await resume.arrayBuffer(), {
+    await SupabaseBucket.put(resumeKey, await resume.arrayBuffer(), {
       httpMetadata: { contentType: resume.type, contentDisposition: `attachment; filename="${resume.name.replace(/["\\]/g, "_")}"` },
     });
     try {
@@ -54,7 +55,7 @@ export async function POST(request: Request) {
         input.tools, resumeKey, resume.name.slice(0, 200), resume.type,
       ).run();
     } catch (error) {
-      await env.BUCKET.delete(resumeKey);
+      await SupabaseBucket.delete(resumeKey);
       throw error;
     }
     return Response.json({ submitted: true });
@@ -71,9 +72,9 @@ export async function GET(request: Request) {
     const id = url.searchParams.get("resume");
     if (id) {
       const row = await env.DB.prepare("SELECT resume_key AS resumeKey,resume_name AS resumeName,resume_content_type AS resumeContentType FROM school_interest_submissions WHERE id=? AND organization_id=?").bind(id, TECHFLEX_ORG_ID).first<{resumeKey:string|null;resumeName:string|null;resumeContentType:string|null}>();
-      if (!row?.resumeKey) return responseError("Résumé not found.", 404);
-      const object = await env.BUCKET.get(row.resumeKey);
-      if (!object) return responseError("Résumé file is unavailable.", 404);
+      if (!row?.resumeKey) return responseError("RÃ©sumÃ© not found.", 404);
+      const object = await SupabaseBucket.get(row.resumeKey);
+      if (!object) return responseError("RÃ©sumÃ© file is unavailable.", 404);
       return new Response(object.body, { headers: { "Content-Type": row.resumeContentType || "application/octet-stream", "Content-Disposition": `attachment; filename="${(row.resumeName || "resume").replace(/["\\]/g, "_")}"`, "Cache-Control": "private, no-store" } });
     }
     const results = await env.DB.prepare(`SELECT id,institution_slug AS institutionSlug,institution_name AS institutionName,full_name AS fullName,email,phone,program,graduation_date AS graduationDate,availability,transportation,tools,resume_name AS resumeName,status,created_at AS createdAt FROM school_interest_submissions WHERE organization_id=? ORDER BY institution_name,created_at DESC`).bind(TECHFLEX_ORG_ID).all();
@@ -88,7 +89,7 @@ export async function DELETE(request: Request) {
     if (!id || !z.string().uuid().safeParse(id).success) return responseError("A valid student-interest record is required.");
     const row = await env.DB.prepare("SELECT id,resume_key AS resumeKey FROM school_interest_submissions WHERE id=? AND organization_id=?").bind(id, TECHFLEX_ORG_ID).first<{id:string;resumeKey:string|null}>();
     if (!row) return responseError("Student-interest record not found.", 404);
-    if (row.resumeKey) await env.BUCKET.delete(row.resumeKey);
+    if (row.resumeKey) await SupabaseBucket.delete(row.resumeKey);
     const result = await env.DB.batch([
       env.DB.prepare("DELETE FROM school_interest_submissions WHERE id=? AND organization_id=?").bind(id, TECHFLEX_ORG_ID),
       env.DB.prepare("INSERT INTO audit_logs(id,organization_id,actor_user_id,action,entity_type,entity_id,after_json) VALUES(?,?,?,?,?,?,?)").bind(crypto.randomUUID(), TECHFLEX_ORG_ID, identity.userId, "school_interest.deleted", "school_interest_submission", id, JSON.stringify({ resumeDeleted: Boolean(row.resumeKey) })),

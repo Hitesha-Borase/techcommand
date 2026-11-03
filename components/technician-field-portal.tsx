@@ -8,6 +8,7 @@ const BiomedicalAcademy = lazy(() => import("@/components/biomedical-academy").t
 const AcademyHub = lazy(() => import("@/components/biomedical-academy").then(m => ({default:m.AcademyHub})));
 const AvailableJobs = lazy(() => import("@/components/available-jobs").then(m => ({default:m.AvailableJobs})));
 import { portalIdentityQuery } from "@/lib/portal-identity-client";
+import { OfflineSyncBadge } from "@/components/offline-sync-badge";
 
 
 import { portalFetch } from "@/lib/portal-fetch";
@@ -304,16 +305,19 @@ export function TechnicianFieldPortal({
               by {PLATFORM_BRAND.publisher}
             </p>
           </div>
-          {onExit ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onExit}
-              className="border-white/20 bg-white/10 text-white hover:bg-white/20 hover:text-white"
-            >
-              Return to admin
-            </Button>
-          ) : null}
+          <div className="flex items-center gap-2">
+            <OfflineSyncBadge />
+            {onExit ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onExit}
+                className="border-white/20 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+              >
+                Return to admin
+              </Button>
+            ) : null}
+          </div>
         </div>
       </header>
 

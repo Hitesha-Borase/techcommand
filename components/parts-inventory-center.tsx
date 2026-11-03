@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   AlertTriangle,
   ArrowDownLeft,
@@ -101,56 +101,14 @@ type PurchaseOrder = {
   orderDate: string;
 };
 
-const INITIAL_VANS = [
-  { id: "van-101", code: "Van 101", tech: "Marcus Vance", capacity: "84%", itemsCount: 42, value: 5840 },
-  { id: "van-102", code: "Van 102", tech: "Elena Rostova", capacity: "91%", itemsCount: 56, value: 8920 },
-  { id: "van-103", code: "Van 103", tech: "David Chen", capacity: "72%", itemsCount: 35, value: 4350 },
-  { id: "warehouse", code: "Main Hub", tech: "Central Warehouse (Westerville)", capacity: "65%", itemsCount: 310, value: 42100 },
-];
-
-const INITIAL_VAN_STOCK: VanStockItem[] = [
-  { id: "vs-1", partNumber: "BAT-12V-55AH", name: "12V 55Ah Gel Cell Deep Cycle Battery", category: "Batteries", vanId: "van-101", vanName: "Van 101", technicianName: "Marcus Vance", qtyOnHand: 4, parLevel: 6, unitCost: 110, retailPrice: 185, binLocation: "BIN-A1" },
-  { id: "vs-2", partNumber: "JOY-VR2-4K", name: "PG Drives VR2 4-Key Joystick Controller", category: "Electronics", vanId: "van-101", vanName: "Van 101", technicianName: "Marcus Vance", qtyOnHand: 2, parLevel: 2, unitCost: 245, retailPrice: 420, binLocation: "BIN-B3" },
-  { id: "vs-3", partNumber: "TIR-14X3-FOAM", name: "14x3 Foam-Filled Drive Tire (Grey)", category: "Tires & Casters", vanId: "van-101", vanName: "Van 101", technicianName: "Marcus Vance", qtyOnHand: 6, parLevel: 4, unitCost: 55, retailPrice: 95, binLocation: "BIN-C1" },
-  { id: "vs-4", partNumber: "FUS-MAXI-40A", name: "40A Maxi Fuse & In-Line Holder Assembly", category: "Hardware & Cables", vanId: "van-101", vanName: "Van 101", technicianName: "Marcus Vance", qtyOnHand: 8, parLevel: 10, unitCost: 4.5, retailPrice: 12, binLocation: "BIN-D2" },
-  { id: "vs-5", partNumber: "BIO-CAL-SEN-01", name: "O2 Flow Sensor Transducer Kit", category: "Biomedical", vanId: "van-102", vanName: "Van 102", technicianName: "Elena Rostova", qtyOnHand: 3, parLevel: 4, unitCost: 180, retailPrice: 290, binLocation: "BIN-BIO-1" },
-  { id: "vs-6", partNumber: "BIO-BATT-LION", name: "Stryker Smart Power 14.4V Lithium Pack", category: "Biomedical", vanId: "van-102", vanName: "Van 102", technicianName: "Elena Rostova", qtyOnHand: 2, parLevel: 3, unitCost: 310, retailPrice: 520, binLocation: "BIN-BIO-2" },
-  { id: "vs-7", partNumber: "ACT-LIN-LINAK", name: "Linak LA31 High-Torque Lift Actuator", category: "Motors & Actuators", vanId: "van-103", vanName: "Van 103", technicianName: "David Chen", qtyOnHand: 1, parLevel: 2, unitCost: 320, retailPrice: 560, binLocation: "BIN-A2" },
-  { id: "vs-8", partNumber: "HAR-SEAT-4PT", name: "Bodypoint 4-Point Padded Hip Belt", category: "Hardware & Cables", vanId: "van-103", vanName: "Van 103", technicianName: "David Chen", qtyOnHand: 3, parLevel: 3, unitCost: 42, retailPrice: 78, binLocation: "BIN-B1" },
-];
-
-const INITIAL_CATALOG: CatalogPart[] = [
-  { id: "cat-1", partNumber: "BAT-12V-55AH", name: "12V 55Ah Gel Cell Deep Cycle Battery", manufacturer: "MK Battery", category: "Batteries", warehouseStock: 24, totalVanStock: 8, minThreshold: 15, unitCost: 110, retailPrice: 185, status: "In Stock" },
-  { id: "cat-2", partNumber: "JOY-VR2-4K", name: "PG Drives VR2 4-Key Joystick Controller", manufacturer: "Curtiss-Wright", category: "Electronics", warehouseStock: 6, totalVanStock: 3, minThreshold: 5, unitCost: 245, retailPrice: 420, status: "In Stock" },
-  { id: "cat-3", partNumber: "MOT-INV-TDX", name: "Invacare TDX SP2 4-Pole Motor/Gearbox LH", manufacturer: "Invacare", category: "Motors & Actuators", warehouseStock: 2, totalVanStock: 1, minThreshold: 3, unitCost: 480, retailPrice: 790, status: "Low Stock" },
-  { id: "cat-4", partNumber: "TIR-14X3-FOAM", name: "14x3 Foam-Filled Drive Tire (Grey)", manufacturer: "Primo Primo", category: "Tires & Casters", warehouseStock: 32, totalVanStock: 12, minThreshold: 20, unitCost: 55, retailPrice: 95, status: "In Stock" },
-  { id: "cat-5", partNumber: "BIO-CAL-SEN-01", name: "O2 Flow Sensor Transducer Kit", manufacturer: "Philips Healthcare", category: "Biomedical", warehouseStock: 4, totalVanStock: 5, minThreshold: 6, unitCost: 180, retailPrice: 290, status: "Low Stock" },
-  { id: "cat-6", partNumber: "ACT-LIN-LINAK", name: "Linak LA31 High-Torque Lift Actuator", manufacturer: "Linak Inc", category: "Motors & Actuators", warehouseStock: 1, totalVanStock: 2, minThreshold: 4, unitCost: 320, retailPrice: 560, status: "Critical" },
-  { id: "cat-7", partNumber: "BIO-BATT-LION", name: "Stryker Smart Power 14.4V Lithium Pack", manufacturer: "Stryker Medical", category: "Biomedical", warehouseStock: 8, totalVanStock: 4, minThreshold: 5, unitCost: 310, retailPrice: 520, status: "In Stock" },
-];
-
-const INITIAL_INSTALLED: InstalledPart[] = [
-  { id: "inst-1", workOrderId: "WO-2026-8812", technicianName: "Marcus Vance", equipmentModel: "Permobil M300 Corpus", serialNumber: "M3-948102-OH", partNumber: "BAT-12V-55AH", partName: "12V 55Ah Gel Cell Deep Cycle Battery", qty: 2, installedDate: "Today at 09:30 AM", unitPrice: 185, warrantyStatus: "Billable to Customer" },
-  { id: "inst-2", workOrderId: "WO-2026-8809", technicianName: "Elena Rostova", equipmentModel: "Philips IntelliVue MX450", serialNumber: "MX-22019-US", partNumber: "BIO-CAL-SEN-01", partName: "O2 Flow Sensor Transducer Kit", qty: 1, installedDate: "Yesterday", unitPrice: 290, warrantyStatus: "Manufacturer Warranty" },
-  { id: "inst-3", workOrderId: "WO-2026-8795", technicianName: "David Chen", equipmentModel: "Hoyer Advance Electric Lift", serialNumber: "HY-881203", partNumber: "ACT-LIN-LINAK", partName: "Linak LA31 High-Torque Lift Actuator", qty: 1, installedDate: "2 days ago", unitPrice: 560, warrantyStatus: "RMA Return" },
-  { id: "inst-4", workOrderId: "WO-2026-8782", technicianName: "Marcus Vance", equipmentModel: "Pride Quantum Edge 3", serialNumber: "QE3-559124", partNumber: "JOY-VR2-4K", partName: "PG Drives VR2 4-Key Joystick Controller", qty: 1, installedDate: "3 days ago", unitPrice: 420, warrantyStatus: "Billable to Customer" },
-];
-
-const INITIAL_POS: PurchaseOrder[] = [
-  { id: "po-1", poNumber: "PO-77401", vendor: "MK Battery Inc.", partNumber: "BAT-12V-55AH", partName: "12V 55Ah Gel Cell Deep Cycle Battery", qty: 20, totalCost: 2200, status: "Shipped", trackingNumber: "1Z9999999999999991", orderDate: "Oct 28, 2026" },
-  { id: "po-2", poNumber: "PO-77395", vendor: "Invacare Parts Direct", partNumber: "MOT-INV-TDX", partName: "Invacare TDX SP2 4-Pole Motor LH", qty: 4, totalCost: 1920, status: "Ordered", trackingNumber: "Awaiting Carrier Pickup", orderDate: "Oct 29, 2026" },
-  { id: "po-3", poNumber: "RMA-0412", vendor: "Linak Americas", partNumber: "ACT-LIN-LINAK", partName: "Linak LA31 Actuator (Defective Core)", qty: 1, totalCost: 320, status: "RMA Pending", trackingNumber: "RMA-LNK-884102", orderDate: "Oct 27, 2026" },
-  { id: "po-4", poNumber: "PO-77380", vendor: "Curtiss-Wright Controls", partNumber: "JOY-VR2-4K", partName: "PG Drives VR2 4-Key Joystick", qty: 6, totalCost: 1470, status: "Received", trackingNumber: "DELIVERED-FDX-4910", orderDate: "Oct 24, 2026" },
-];
-
 export function PartsInventoryCenter() {
   const [selectedVan, setSelectedVan] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
-  const [vanStock, setVanStock] = useState<VanStockItem[]>(INITIAL_VAN_STOCK);
-  const [catalog, setCatalog] = useState<CatalogPart[]>(INITIAL_CATALOG);
-  const [installedList, setInstalledList] = useState<InstalledPart[]>(INITIAL_INSTALLED);
-  const [poList, setPoList] = useState<PurchaseOrder[]>(INITIAL_POS);
+  const [vanStock, setVanStock] = useState<VanStockItem[]>([]);
+  const [catalog, setCatalog] = useState<CatalogPart[]>([]);
+  const [installedList, setInstalledList] = useState<InstalledPart[]>([]);
+  const [poList, setPoList] = useState<PurchaseOrder[]>([]);
 
   // Dialog States
   const [isAddPartOpen, setIsAddPartOpen] = useState(false);
@@ -166,11 +124,16 @@ export function PartsInventoryCenter() {
   const [newUnitCost, setNewUnitCost] = useState("120");
   const [newRetailPrice, setNewRetailPrice] = useState("195");
   const [newStockQty, setNewStockQty] = useState("10");
+  const [assignToVan, setAssignToVan] = useState(false);
+  const [customVanName, setCustomVanName] = useState("");
+  const [customTechName, setCustomTechName] = useState("");
+  const [customBinLoc, setCustomBinLoc] = useState("BIN-A1");
+  const [newVanQty, setNewVanQty] = useState("2");
 
   const [adjustmentQty, setAdjustmentQty] = useState("1");
   const [adjustmentReason, setAdjustmentReason] = useState("Restock replenishment from hub");
 
-  const [transferTargetVan, setTransferTargetVan] = useState("van-102");
+  const [transferTargetVan, setTransferTargetVan] = useState("warehouse");
   const [transferQty, setTransferQty] = useState("1");
 
   // Filtering van stock
@@ -197,69 +160,158 @@ export function PartsInventoryCenter() {
   // KPI calculations
   const totalStockValue = vanStock.reduce((acc, curr) => acc + curr.qtyOnHand * curr.unitCost, 0);
   const lowStockCount = vanStock.filter((i) => i.qtyOnHand < i.parLevel).length;
+  const activeVansCount = new Set(vanStock.map((i) => i.vanId)).size;
+  const distinctVans = Array.from(
+    new Map(
+      vanStock.map((item) => [
+        item.vanId,
+        { vanId: item.vanId, vanName: item.vanName, techName: item.technicianName },
+      ]),
+    ).values(),
+  );
+
+  // Live database fetch hook
+  const fetchPartsData = async () => {
+    try {
+      const res = await fetch("/api/parts");
+      if (!res.ok) return;
+      const data = (await res.json()) as { success?: boolean; error?: string; catalog?: CatalogPart[]; vanStock?: VanStockItem[]; installed?: InstalledPart[]; purchaseOrders?: PurchaseOrder[] };
+      if (data.success) {
+        setCatalog(Array.isArray(data.catalog) ? data.catalog : []);
+        setVanStock(Array.isArray(data.vanStock) ? data.vanStock : []);
+        setInstalledList(Array.isArray(data.installed) ? data.installed : []);
+        setPoList(Array.isArray(data.purchaseOrders) ? data.purchaseOrders : []);
+      }
+    } catch (err) {
+      console.warn("Could not fetch parts from live API, retaining local view:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchPartsData();
+  }, []);
+
   const criticalCatalogCount = catalog.filter((c) => c.status === "Critical" || c.status === "Low Stock").length;
 
-  const handleAddPart = (e: React.FormEvent) => {
+  const handleAddPart = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPartNumber || !newPartName) {
       toast.error("Please enter both Part Number and Name");
       return;
     }
-    const newCatalogItem: CatalogPart = {
-      id: `cat-${Date.now()}`,
+    if (assignToVan && !customVanName.trim()) {
+      toast.error("Please enter a Vehicle / Van Name");
+      return;
+    }
+    const payload = {
       partNumber: newPartNumber.trim().toUpperCase(),
       name: newPartName.trim(),
       manufacturer: newManufacturer.trim() || "Generic OEM",
       category: newCategory,
       warehouseStock: parseInt(newStockQty) || 10,
-      totalVanStock: 0,
       minThreshold: 5,
       unitCost: parseFloat(newUnitCost) || 0,
       retailPrice: parseFloat(newRetailPrice) || 0,
-      status: "In Stock",
+      status: "In Stock" as const,
+      assignToVan,
+      vanName: customVanName.trim(),
+      technicianName: customTechName.trim() || "Service Technician",
+      binLocation: customBinLoc.trim() || "BIN-A1",
+      vanQty: assignToVan ? parseInt(newVanQty) || 2 : 0,
     };
-    setCatalog([newCatalogItem, ...catalog]);
-    setIsAddPartOpen(false);
-    toast.success(`Part ${newCatalogItem.partNumber} added to master catalog`);
-    setNewPartNumber("");
-    setNewPartName("");
+
+    try {
+      const res = await fetch("/api/parts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = (await res.json()) as { success?: boolean; error?: string; catalog?: CatalogPart[]; vanStock?: VanStockItem[]; installed?: InstalledPart[]; purchaseOrders?: PurchaseOrder[] };
+      if (!res.ok || !data.success) {
+        toast.error(data.error || "Failed to save part to database");
+        return;
+      }
+      toast.success(`Part ${payload.partNumber} saved to live database`);
+      setIsAddPartOpen(false);
+      setNewPartNumber("");
+      setNewPartName("");
+      setAssignToVan(false);
+      setCustomVanName("");
+      setCustomTechName("");
+      setCustomBinLoc("BIN-A1");
+      setNewVanQty("2");
+      await fetchPartsData();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Network error";
+      toast.error(msg);
+    }
   };
 
-  const handleAdjustStock = () => {
+  const handleAdjustStock = async () => {
     if (!selectedPartForAdjustment) return;
     const qtyChange = parseInt(adjustmentQty) || 0;
-    setVanStock((prev) =>
-      prev.map((item) => {
-        if (item.id === selectedPartForAdjustment.id) {
-          const nextQty = Math.max(0, item.qtyOnHand + qtyChange);
-          return { ...item, qtyOnHand: nextQty };
-        }
-        return item;
-      }),
-    );
-    setIsAdjustStockOpen(false);
-    toast.success(`Stock for ${selectedPartForAdjustment.partNumber} updated (${qtyChange > 0 ? `+${qtyChange}` : qtyChange})`);
+    try {
+      const res = await fetch("/api/parts", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: selectedPartForAdjustment.id,
+          action: "adjust_van_stock",
+          vanStockId: selectedPartForAdjustment.id,
+          qtyChange,
+        }),
+      });
+      const data = (await res.json()) as { success?: boolean; error?: string; catalog?: CatalogPart[]; vanStock?: VanStockItem[]; installed?: InstalledPart[]; purchaseOrders?: PurchaseOrder[] };
+      if (!res.ok || !data.success) {
+        toast.error(data.error || "Failed to adjust stock");
+        return;
+      }
+      toast.success(`Stock for ${selectedPartForAdjustment.partNumber} updated (${qtyChange > 0 ? `+${qtyChange}` : qtyChange}) in database`);
+      setIsAdjustStockOpen(false);
+      await fetchPartsData();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to adjust stock";
+      toast.error(msg);
+    }
   };
 
-  const handleTransferStock = () => {
+  const handleTransferStock = async () => {
     if (!selectedPartForAdjustment) return;
     const qty = parseInt(transferQty) || 1;
     if (selectedPartForAdjustment.qtyOnHand < qty) {
       toast.error("Insufficient stock on source van for transfer");
       return;
     }
-    const targetVanObj = INITIAL_VANS.find((v) => v.id === transferTargetVan);
-    // Deduct from source
-    setVanStock((prev) =>
-      prev.map((item) => {
-        if (item.id === selectedPartForAdjustment.id) {
-          return { ...item, qtyOnHand: item.qtyOnHand - qty };
-        }
-        return item;
-      }),
-    );
-    setIsTransferOpen(false);
-    toast.success(`Transferred ${qty}x ${selectedPartForAdjustment.partNumber} to ${targetVanObj?.code || transferTargetVan}`);
+    const targetVanObj = distinctVans.find((v) => v.vanId === transferTargetVan);
+
+    try {
+      // Persist transfer adjustment to database
+      await fetch("/api/parts", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "adjust_van_stock",
+          id: selectedPartForAdjustment.id,
+          vanStockId: selectedPartForAdjustment.id,
+          qtyChange: -qty,
+        }),
+      });
+
+      // Deduct from local view
+      setVanStock((prev) =>
+        prev.map((item) => {
+          if (item.id === selectedPartForAdjustment.id) {
+            return { ...item, qtyOnHand: item.qtyOnHand - qty };
+          }
+          return item;
+        }),
+      );
+      setIsTransferOpen(false);
+      toast.success(`Transferred ${qty}x ${selectedPartForAdjustment.partNumber} to ${targetVanObj?.vanName || (transferTargetVan === "warehouse" ? "Central Warehouse" : transferTargetVan)}`);
+      await fetchPartsData();
+    } catch {
+      toast.error("Failed to complete van transfer");
+    }
   };
 
   return (
@@ -306,7 +358,9 @@ export function PartsInventoryCenter() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-extrabold text-slate-900">${totalStockValue.toLocaleString()}</div>
-            <p className="text-xs text-slate-500 mt-1">Across 3 service vans + hub</p>
+            <p className="text-xs text-slate-500 mt-1">
+              {vanStock.length > 0 ? `Across ${vanStock.length} stocked items` : "Live database connected"}
+            </p>
           </CardContent>
         </Card>
 
@@ -316,8 +370,12 @@ export function PartsInventoryCenter() {
             <div className="p-2 rounded-lg bg-cyan-50 text-cyan-600"><Truck className="size-4" /></div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-extrabold text-slate-900">3 Vans Active</div>
-            <p className="text-xs text-emerald-600 font-medium mt-1">Avg 82% par readiness</p>
+            <div className="text-2xl font-extrabold text-slate-900">
+              {activeVansCount > 0 ? `${activeVansCount} Vans Active` : "0 Vans Assigned"}
+            </div>
+            <p className="text-xs text-slate-500 font-medium mt-1">
+              {activeVansCount > 0 ? "Avg 82% par readiness" : "3 Service vehicles ready for stock"}
+            </p>
           </CardContent>
         </Card>
 
@@ -380,9 +438,11 @@ export function PartsInventoryCenter() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">All Service Vehicles</SelectItem>
-                        <SelectItem value="van-101">Van 101 · Marcus Vance</SelectItem>
-                        <SelectItem value="van-102">Van 102 · Elena Rostova</SelectItem>
-                        <SelectItem value="van-103">Van 103 · David Chen</SelectItem>
+                        {distinctVans.map((v) => (
+                          <SelectItem key={v.vanId} value={v.vanId}>
+                            {v.vanName} · {v.techName}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -431,7 +491,16 @@ export function PartsInventoryCenter() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {filteredVanStock.map((item) => {
+                    {filteredVanStock.length === 0 ? (
+                      <tr>
+                        <td colSpan={9} className="py-12 text-center text-slate-500">
+                          <Package className="size-8 mx-auto mb-2 text-slate-400 opacity-60" />
+                          <div className="font-semibold text-slate-700 text-sm">No parts in van inventory</div>
+                          <div className="text-xs text-slate-400 mt-0.5">Click &quot;+ Add New Part&quot; above to add parts directly to catalog or assign to a van.</div>
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredVanStock.map((item) => {
                       const isLow = item.qtyOnHand < item.parLevel;
                       return (
                         <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
@@ -496,7 +565,7 @@ export function PartsInventoryCenter() {
                           </td>
                         </tr>
                       );
-                    })}
+                    }))}
                   </tbody>
                 </table>
               </div>
@@ -543,7 +612,16 @@ export function PartsInventoryCenter() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {filteredCatalog.map((part) => (
+                    {filteredCatalog.length === 0 ? (
+                      <tr>
+                        <td colSpan={9} className="py-12 text-center text-slate-500">
+                          <Package className="size-8 mx-auto mb-2 text-slate-400 opacity-60" />
+                          <div className="font-semibold text-slate-700 text-sm">Master catalog is empty</div>
+                          <div className="text-xs text-slate-400 mt-0.5">Click &quot;+ Add New Part&quot; above to create a new SKU in the live database.</div>
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredCatalog.map((part) => (
                       <tr key={part.id} className="hover:bg-slate-50/80 transition-colors">
                         <td className="py-3 px-4">
                           <span className="font-mono font-bold text-blue-700">{part.partNumber}</span>
@@ -589,7 +667,7 @@ export function PartsInventoryCenter() {
                           </Button>
                         </td>
                       </tr>
-                    ))}
+                    )))}
                   </tbody>
                 </table>
               </div>
@@ -629,7 +707,16 @@ export function PartsInventoryCenter() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {installedList.map((inst) => (
+                    {installedList.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="py-12 text-center text-slate-500">
+                          <Package className="size-8 mx-auto mb-2 text-slate-400 opacity-60" />
+                          <div className="font-semibold text-slate-700 text-sm">No parts installed on work orders yet</div>
+                          <div className="text-xs text-slate-400 mt-0.5">When technicians complete repairs and log parts, they will appear here live.</div>
+                        </td>
+                      </tr>
+                    ) : (
+                      installedList.map((inst) => (
                       <tr key={inst.id} className="hover:bg-slate-50/80 transition-colors">
                         <td className="py-3 px-4 font-mono font-bold text-blue-700">{inst.workOrderId}</td>
                         <td className="py-3 px-3">
@@ -658,7 +745,7 @@ export function PartsInventoryCenter() {
                           )}
                         </td>
                       </tr>
-                    ))}
+                    )))}
                   </tbody>
                 </table>
               </div>
@@ -704,7 +791,16 @@ export function PartsInventoryCenter() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {poList.map((po) => (
+                    {poList.length === 0 ? (
+                      <tr>
+                        <td colSpan={9} className="py-12 text-center text-slate-500">
+                          <Package className="size-8 mx-auto mb-2 text-slate-400 opacity-60" />
+                          <div className="font-semibold text-slate-700 text-sm">No purchase orders or RMA claims</div>
+                          <div className="text-xs text-slate-400 mt-0.5">Supplier orders and warranty claims will be listed here.</div>
+                        </td>
+                      </tr>
+                    ) : (
+                      poList.map((po) => (
                       <tr key={po.id} className="hover:bg-slate-50/80 transition-colors">
                         <td className="py-3 px-4 font-mono font-bold text-blue-700">{po.poNumber}</td>
                         <td className="py-3 px-3 font-semibold text-slate-800">{po.vendor}</td>
@@ -741,7 +837,7 @@ export function PartsInventoryCenter() {
                           )}
                         </td>
                       </tr>
-                    ))}
+                    )))}
                   </tbody>
                 </table>
               </div>
@@ -834,6 +930,71 @@ export function PartsInventoryCenter() {
                 />
               </div>
             </div>
+            <div className="space-y-2 pt-2 border-t border-slate-100">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-xs font-semibold text-slate-800">Assign to Service Van / Vehicle</Label>
+                  <p className="text-[10px] text-slate-500">Optionally allocate units directly to a technician vehicle</p>
+                </div>
+                <Select value={assignToVan ? "yes" : "no"} onValueChange={(val) => setAssignToVan(val === "yes")}>
+                  <SelectTrigger className="h-7 text-xs w-36">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="no">Warehouse Only</SelectItem>
+                    <SelectItem value="yes">Assign to Van</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {assignToVan && (
+                <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 space-y-2 animate-in fade-in-50 duration-200">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label className="text-[11px] font-semibold text-slate-700">Vehicle / Van Name</Label>
+                      <Input
+                        placeholder="e.g. Van 1, Truck A, Service Unit"
+                        value={customVanName}
+                        onChange={(e) => setCustomVanName(e.target.value)}
+                        className="h-7 text-xs mt-0.5 bg-white"
+                        required={assignToVan}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-[11px] font-semibold text-slate-700">Technician Name</Label>
+                      <Input
+                        placeholder="e.g. Marcus Vance or Technician"
+                        value={customTechName}
+                        onChange={(e) => setCustomTechName(e.target.value)}
+                        className="h-7 text-xs mt-0.5 bg-white"
+                        required={assignToVan}
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label className="text-[11px] font-semibold text-slate-700">Bin Location</Label>
+                      <Input
+                        placeholder="e.g. BIN-A1"
+                        value={customBinLoc}
+                        onChange={(e) => setCustomBinLoc(e.target.value)}
+                        className="h-7 text-xs mt-0.5 bg-white"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-[11px] font-semibold text-slate-700">Van Qty to Stock</Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        value={newVanQty}
+                        onChange={(e) => setNewVanQty(e.target.value)}
+                        className="h-7 text-xs mt-0.5 bg-white"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
             <DialogFooter className="pt-2">
               <Button type="button" variant="outline" size="sm" onClick={() => setIsAddPartOpen(false)}>
                 Cancel
@@ -906,10 +1067,12 @@ export function PartsInventoryCenter() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="van-101">Van 101 · Marcus Vance</SelectItem>
-                  <SelectItem value="van-102">Van 102 · Elena Rostova</SelectItem>
-                  <SelectItem value="van-103">Van 103 · David Chen</SelectItem>
-                  <SelectItem value="warehouse">Central Warehouse (Westerville)</SelectItem>
+                  <SelectItem value="warehouse">Central Warehouse</SelectItem>
+                  {distinctVans.map((v) => (
+                    <SelectItem key={v.vanId} value={v.vanId}>
+                      {v.vanName} · {v.techName}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

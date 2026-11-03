@@ -697,17 +697,32 @@ export function WorkOrderCenter({ initialAssetId, onAssetLoaded, initialTarget, 
     [form],
   );
   const intakeHasUnsavedChanges = intakeSignature !== savedIntakeSignature;
-  const availableLocations = (locations.data?.locations ?? []).filter(
-    (location) => location.accountId === form.accountId,
-  );
-  const availableCustomers = (customers.data?.customers ?? []).filter(
-    (customer) => customer.accountId === form.accountId,
-  );
-  const availableAssets = (assets.data?.assets ?? []).filter(
-    (asset) =>
-      asset.accountId === form.accountId &&
-      asset.locationId === form.locationId,
-  );
+  useEffect(() => {
+    if (!form.accountId && accounts.data?.accounts && accounts.data.accounts.length === 1) {
+      setForm((current) => ({
+        ...current,
+        accountId: accounts.data.accounts[0].id,
+      }));
+    }
+  }, [accounts.data, form.accountId]);
+  const availableLocations = useMemo(() => {
+    const all = locations.data?.locations ?? [];
+    if (!form.accountId) return all;
+    return all.filter((location) => location.accountId === form.accountId);
+  }, [locations.data, form.accountId]);
+  const availableCustomers = useMemo(() => {
+    const all = customers.data?.customers ?? [];
+    if (!form.accountId) return all;
+    return all.filter((customer) => customer.accountId === form.accountId);
+  }, [customers.data, form.accountId]);
+  const availableAssets = useMemo(() => {
+    const all = assets.data?.assets ?? [];
+    return all.filter((asset) => {
+      if (form.accountId && asset.accountId !== form.accountId) return false;
+      if (form.locationId && asset.locationId !== form.locationId) return false;
+      return true;
+    });
+  }, [assets.data, form.accountId, form.locationId]);
   const create = useMutation({
     mutationFn: () =>
       json<{
@@ -1413,6 +1428,7 @@ export function WorkOrderCenter({ initialAssetId, onAssetLoaded, initialTarget, 
                       setForm({
                         ...form,
                         locationId: value,
+                        accountId: form.accountId || location?.accountId || "",
                         assetId: "none",
                         serviceAddress: location
                           ? address([
@@ -1436,7 +1452,7 @@ export function WorkOrderCenter({ initialAssetId, onAssetLoaded, initialTarget, 
                     <SelectContent>
                       {availableLocations.map((location) => (
                         <SelectItem key={location.id} value={location.id}>
-                          {location.name} · {location.city}
+                          {location.name} · {location.city}{!form.accountId && location.accountName ? ` (${location.accountName})` : ""}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -1452,6 +1468,7 @@ export function WorkOrderCenter({ initialAssetId, onAssetLoaded, initialTarget, 
                       setForm({
                         ...form,
                         customerId: value,
+                        accountId: form.accountId || customer?.accountId || "",
                         customerName: customer?.name || form.customerName,
                         customerPhone: customer
                           ? customer.phone || ""
@@ -1480,6 +1497,7 @@ export function WorkOrderCenter({ initialAssetId, onAssetLoaded, initialTarget, 
                         <SelectItem key={customer.id} value={customer.id}>
                           {customer.name}
                           {customer.phone ? ` · ${customer.phone}` : ""}
+                          {!form.accountId && customer.accountName ? ` (${customer.accountName})` : ""}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -1489,12 +1507,24 @@ export function WorkOrderCenter({ initialAssetId, onAssetLoaded, initialTarget, 
                   <Select
                     value={form.assetId}
                     onValueChange={(value) => {
-                      const asset = availableAssets.find(
+                      const asset = (assets.data?.assets ?? []).find(
                         (item) => item.id === value,
+                      );
+                      const matchingLocation = (locations.data?.locations ?? []).find(
+                        (loc) => loc.id === asset?.locationId,
                       );
                       setForm({
                         ...form,
                         assetId: value,
+                        accountId: form.accountId || asset?.accountId || "",
+                        locationId: form.locationId || asset?.locationId || "",
+                        serviceAddress: form.serviceAddress || (matchingLocation ? address([
+                          matchingLocation.address1,
+                          matchingLocation.address2,
+                          matchingLocation.city,
+                          matchingLocation.state,
+                          matchingLocation.postalCode,
+                        ]) : form.serviceAddress),
                         equipmentType: asset?.description || form.equipmentType,
                         manufacturer: asset?.manufacturer || form.manufacturer,
                         model: asset?.model || form.model,

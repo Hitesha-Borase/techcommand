@@ -1,3 +1,4 @@
+﻿import { SupabaseBucket } from "@/lib/supabase-storage";
 import { env } from "cloudflare:workers";
 import {
   TECHFLEX_ORG_ID,
@@ -272,7 +273,7 @@ async function completeAttachmentCleanup(item: PendingAttachmentCleanup) {
       ).run();
       return;
     }
-    await env.BUCKET.delete(item.storageKey);
+    await SupabaseBucket.delete(item.storageKey);
     await env.DB.prepare(
       "INSERT OR IGNORE INTO audit_logs (id, organization_id, action, entity_type, entity_id, before_json, after_json) VALUES (?, ?, 'attachment.storage_cleanup_completed', 'attachment', ?, ?, ?)",
     ).bind(
@@ -583,7 +584,7 @@ export async function GET(request: Request) {
         ))
       )
         return Response.json({ error: "File not found." }, { status: 404 });
-      const object = await env.BUCKET.get(item.storageKey);
+      const object = await SupabaseBucket.get(item.storageKey);
       if (!object)
         return Response.json(
           { error: "Stored file not found." },
@@ -718,7 +719,7 @@ export async function POST(request: Request) {
             safeName: reusable.safeName,
           });
         }
-        const multipart = await env.BUCKET.createMultipartUpload(
+        const multipart = await SupabaseBucket.createMultipartUpload(
           details.storageKey,
           { httpMetadata: { contentType } },
         );
@@ -736,7 +737,7 @@ export async function POST(request: Request) {
           ).run();
         } catch (error) {
           try {
-            await env.BUCKET.resumeMultipartUpload(details.storageKey, multipart.uploadId).abort();
+            await SupabaseBucket.resumeMultipartUpload(details.storageKey, multipart.uploadId).abort();
           } catch (cleanupError) {
             safeServerLog("attachment_cleanup", cleanupError);
           }
@@ -785,7 +786,7 @@ export async function POST(request: Request) {
         if (session.status !== "active" || session.expired) return multipartRestartError();
         if (action === "multipart_abort") {
           await closeMultipartSession(uploadId, "aborted");
-          const upload = env.BUCKET.resumeMultipartUpload(storageKey, uploadId);
+          const upload = SupabaseBucket.resumeMultipartUpload(storageKey, uploadId);
           try {
             await upload.abort();
           } catch (error) {
@@ -802,7 +803,7 @@ export async function POST(request: Request) {
             await queueAttachmentCleanup(attachmentId, storageKey);
           return Response.json(attachmentPayload(existing, category), { status: 201 });
         }
-        const upload = env.BUCKET.resumeMultipartUpload(storageKey, uploadId);
+        const upload = SupabaseBucket.resumeMultipartUpload(storageKey, uploadId);
         const parts = Array.isArray(input.parts)
           ? input.parts.map((part) => ({
               partNumber: Number((part as Record<string, unknown>).partNumber),
@@ -815,12 +816,12 @@ export async function POST(request: Request) {
             { status: 400 },
           );
         await upload.complete(parts);
-        const object = await env.BUCKET.head(storageKey);
+        const object = await SupabaseBucket.head(storageKey);
         const safeName = session.safeName;
         const contentType = session.contentType;
         const sizeBytes = Number(object?.size || 0);
         if (!object || sizeBytes !== session.sizeBytes || sizeBytes > maximumUploadBytes()) {
-          await env.BUCKET.delete(storageKey);
+          await SupabaseBucket.delete(storageKey);
           await closeMultipartSession(uploadId, "failed");
           return Response.json(
             { error: "The completed upload could not be verified." },
@@ -922,7 +923,7 @@ export async function POST(request: Request) {
     )
       .map((byte) => byte.toString(16).padStart(2, "0"))
       .join("");
-    await env.BUCKET.put(storageKey, bytes, {
+    await SupabaseBucket.put(storageKey, bytes, {
       httpMetadata: { contentType },
     });
     const saved = await insertAttachmentRecord({
@@ -993,7 +994,7 @@ export async function PUT(request: Request) {
         );
     if (!request.body)
       return Response.json({ error: "Upload part is empty." }, { status: 400 });
-    const part = await env.BUCKET.resumeMultipartUpload(
+    const part = await SupabaseBucket.resumeMultipartUpload(
       storageKey,
       uploadId,
     ).uploadPart(partNumber, request.body);

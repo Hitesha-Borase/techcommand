@@ -1,3 +1,4 @@
+﻿import { SupabaseBucket } from "@/lib/supabase-storage";
 import { env } from "cloudflare:workers";
 import { z } from "zod";
 import { assignedGuideAsset } from "@/app/api/work-order-asset-guide/route";
@@ -76,7 +77,7 @@ export async function POST(request: Request) {
     if (!["image/jpeg", "image/png", "image/webp"].includes(photo.contentType))
       throw new PortalHttpError(415, "Photo Copilot supports saved JPEG, PNG or WEBP evidence. Keep this original and write the caption manually.");
     if (photo.sizeBytes > 8 * 1024 * 1024) throw new PortalHttpError(413, "This photo is over the 8 MB Copilot limit. Keep the original and write the caption manually.");
-    const object = await env.BUCKET.get(photo.storageKey);
+    const object = await SupabaseBucket.get(photo.storageKey);
     if (!object) throw new PortalHttpError(409, "The saved photo is unavailable in storage. Restore it before review.");
     const bytes = await object.arrayBuffer();
     if (bytes.byteLength !== photo.sizeBytes) throw new PortalHttpError(409, "The saved photo changed in storage. Restore or upload it again before review.");

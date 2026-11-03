@@ -541,8 +541,10 @@ export function TechnicianAdmin() {
                       </p>
                       <p className="mt-2 flex items-start gap-1 text-xs text-slate-600"><MapPin className="mt-0.5 size-3 shrink-0"/>{[tech.dispatchAddress1,tech.dispatchAddress2,tech.dispatchCity,tech.dispatchState,tech.dispatchPostalCode].filter(Boolean).join(", ") || "Dispatch origin required"}</p>
                       <p className="mt-1 flex items-center gap-1 text-xs text-slate-500"><CalendarDays className="size-3"/>Google calendar: {tech.calendarStatus === "connected" ? "connected" : "connection pending"}</p>
-                      <TechnicianFiles technicianId={tech.id} name={tech.name} role={identity.data?.identity.role || ""} />
-                      <Button className="mt-2 h-7 px-2 text-xs" variant="outline" onClick={() => editDispatch(tech)}><Pencil className="size-3"/>Edit origin</Button>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <TechnicianFiles technicianId={tech.id} name={tech.name} role={identity.data?.identity.role || ""} />
+                        <Button className="h-7 px-2 text-xs" variant="outline" onClick={() => editDispatch(tech)}><Pencil className="mr-1 size-3"/>Edit origin</Button>
+                      </div>
                     </TableCell>
                     <TableCell>
                       <p className="font-mono text-xs font-bold">
@@ -552,7 +554,7 @@ export function TechnicianAdmin() {
                         {tech.employmentType}
                       </p>
                       {canEditEmployment ? <TechnicianDisciplines technician={tech} /> : null}
-                      {canEditEmployment ? <Button className="mt-2" variant="outline" onClick={() => { updateEmployment.reset(); setEmploymentTech(tech); setEmploymentType(tech.employmentType); setPayRate(tech.employmentType === "contractor" ? tech.payoutRate * 100 : tech.currentHourlyRateCents / 100); }}><Pencil className="size-3" />Edit employment &amp; pay</Button> : null}
+                      {canEditEmployment ? <Button className="mt-2 h-7 px-2 text-xs" variant="outline" onClick={() => { updateEmployment.reset(); setEmploymentTech(tech); setEmploymentType(tech.employmentType); setPayRate(tech.employmentType === "contractor" ? tech.payoutRate * 100 : tech.currentHourlyRateCents / 100); }}><Pencil className="mr-1 size-3" />Edit employment &amp; pay</Button> : null}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">

@@ -945,9 +945,32 @@ export function FieldCompletion({
             Open the unit, type notes, then Submit & finish. Administrator review and all guidance, photos and detailed fields are optional.
           </SheetDescription>
 
-          <p className="text-xs font-semibold text-slate-500">
-            {autosaveStatus === "synced" ? "saved to cloud" : autosaveStatus === "offline" ? "saved on device—waiting to sync" : autosaveStatus === "syncing" ? "saving…" : autosaveStatus === "local" ? "device draft recovered" : autosaveStatus === "error" ? "save not confirmed" : "autosave ready"}
-          </p>
+          <div className="flex items-center gap-2 pt-1">
+            <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+              autosaveStatus === "synced"
+                ? "bg-emerald-50 text-emerald-700 border border-emerald-300"
+                : autosaveStatus === "offline" || autosaveStatus === "syncing"
+                ? "bg-amber-50 text-amber-800 border border-amber-300 animate-pulse"
+                : autosaveStatus === "local"
+                ? "bg-cyan-50 text-cyan-800 border border-cyan-300"
+                : autosaveStatus === "error"
+                ? "bg-red-50 text-red-700 border border-red-300"
+                : "bg-slate-50 text-slate-600 border border-slate-200"
+            }`}>
+              <span className={`size-1.5 rounded-full ${
+                autosaveStatus === "synced" ? "bg-emerald-500" : autosaveStatus === "error" ? "bg-red-500" : "bg-amber-500"
+              }`} />
+              {autosaveStatus === "synced"
+                ? "Saved to server"
+                : autosaveStatus === "offline" || autosaveStatus === "syncing"
+                ? "Waiting to sync"
+                : autosaveStatus === "local"
+                ? "Saved on this device"
+                : autosaveStatus === "error"
+                ? "Save not confirmed"
+                : "Autosave ready"}
+            </span>
+          </div>
           {autosaveStatus === "error" && <p role="alert" className="text-sm font-medium text-red-700">{autosaveMessage || "Your latest changes could not be secured. Keep this form open, reconnect or free device storage, then use Save draft. Do not close the form until a save is confirmed."}</p>}
           {pendingSubmission && pendingSubmission.jobId === job?.id ? <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
             <CircleAlert className="size-4 shrink-0" />

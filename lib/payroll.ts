@@ -1,3 +1,4 @@
+﻿import { SupabaseBucket } from "@/lib/supabase-storage";
 import { env } from "cloudflare:workers";
 import { PortalHttpError, TECHFLEX_ORG_ID } from "@/lib/portal-auth";
 import { generatePayStubPdf } from "@/lib/techflex-pdfs";
@@ -58,7 +59,7 @@ async function completePayrollCleanup(item: PendingPayrollCleanup) {
       ).run();
       return;
     }
-    await env.BUCKET.delete(item.storageKey);
+    await SupabaseBucket.delete(item.storageKey);
     await env.DB.prepare(
       "INSERT OR IGNORE INTO audit_logs (id, organization_id, action, entity_type, entity_id, before_json, after_json) VALUES (?, ?, 'attachment.storage_cleanup_completed', 'attachment', ?, ?, ?)",
     ).bind(
@@ -269,7 +270,7 @@ export async function generateDuePayStubs(
         pdfSize: pdf.length,
         items,
       });
-      await env.BUCKET.put(storageKey, pdf, {
+      await SupabaseBucket.put(storageKey, pdf, {
         httpMetadata: { contentType: "application/pdf" },
       });
     }

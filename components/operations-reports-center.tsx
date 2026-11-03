@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Activity,
   AlertCircle,
   ArrowDownRight,
   ArrowUpRight,
   BarChart2,
+  Building,
   Calendar,
   CheckCircle,
   Clock,
@@ -46,45 +47,52 @@ import {
   Area,
 } from "recharts";
 
-const MONTHLY_REVENUE_DATA = [
-  { month: "May", revenue: 112000, directCost: 61500, margin: 45.1 },
-  { month: "Jun", revenue: 124500, directCost: 69200, margin: 44.4 },
-  { month: "Jul", revenue: 138000, directCost: 75800, margin: 45.0 },
-  { month: "Aug", revenue: 142000, directCost: 81500, margin: 42.6 },
-  { month: "Sep", revenue: 149500, directCost: 83200, margin: 44.3 },
-  { month: "Oct", revenue: 154280, directCost: 85470, margin: 44.6 },
-];
-
-const ACCOUNT_MARGIN_DATA = [
-  { account: "Ohio VA Healthcare System", revenue: 46200, laborCost: 15200, partsCost: 8400, grossMargin: 48.9, status: "Healthy" },
-  { account: "MetroHealth Biomedical", revenue: 38400, laborCost: 12800, partsCost: 7600, grossMargin: 46.8, status: "Healthy" },
-  { account: "Sunrise Medical Specialty", revenue: 29100, laborCost: 10400, partsCost: 6100, grossMargin: 43.3, status: "Healthy" },
-  { account: "SpinLife DME Mobility", revenue: 24800, laborCost: 9900, partsCost: 5900, grossMargin: 36.3, status: "Flagged" },
-  { account: "CareSource Community DME", revenue: 15780, laborCost: 6800, partsCost: 3100, grossMargin: 37.2, status: "Flagged" },
-];
-
-const TECHNICIAN_METRICS = [
-  { id: "tech-1", name: "Marcus Vance", role: "Mobility Tech Lead", billableHours: 142, driveHours: 32, adminHours: 14, utilization: 86.2, firstTimeFix: 93.5, jobsCompleted: 48, revenueGen: 52400 },
-  { id: "tech-2", name: "Elena Rostova", role: "Biomedical Specialist", billableHours: 154, driveHours: 26, adminHours: 18, utilization: 88.5, firstTimeFix: 96.0, jobsCompleted: 62, revenueGen: 64800 },
-  { id: "tech-3", name: "David Chen", role: "DME Field Tech", billableHours: 128, driveHours: 38, adminHours: 16, utilization: 79.0, firstTimeFix: 89.2, jobsCompleted: 39, revenueGen: 37080 },
-];
-
-const SLA_COMPLIANCE_DATA = [
-  { metric: "Emergency Callout Response (< 2 Hours)", target: "95.0%", actual: "97.4%", status: "Met", delta: "+2.4%" },
-  { metric: "Annual Biomedical PM On-Time Rate", target: "98.0%", actual: "99.2%", status: "Met", delta: "+1.2%" },
-  { metric: "First-Time Resolution Rate", target: "90.0%", actual: "92.9%", status: "Met", delta: "+2.9%" },
-  { metric: "Customer Satisfaction Index (CSAT)", target: "4.7 / 5.0", actual: "4.9 / 5.0", status: "Met", delta: "+0.2" },
-  { metric: "Invoice Generation Within 24hr of Closeout", target: "95.0%", actual: "98.1%", status: "Met", delta: "+3.1%" },
-];
-
 export function OperationsReportsCenter() {
   const [period, setPeriod] = useState("oct-2026");
   const [marginThreshold, setMarginThreshold] = useState("40");
+  const [monthlyData, setMonthlyData] = useState<Array<{ month: string; revenue: number; directCost: number; margin: number }>>([]);
+  const [accountData, setAccountData] = useState<Array<{ account: string; revenue: number; laborCost: number; partsCost: number; grossMargin: number; status: string }>>([]);
+  const [techMetrics, setTechMetrics] = useState<Array<{ id: string; name: string; role: string; billableHours: number; driveHours: number; adminHours: number; utilization: number; firstTimeFix: number; jobsCompleted: number; revenueGen: number }>>([]);
+  const [slaData, setSlaData] = useState<Array<{ metric: string; target: string; actual: string; status: string; delta: string }>>([]);
+  const [totalRev, setTotalRev] = useState(0);
+  const [totalCost, setTotalCost] = useState(0);
+  const [overallMargin, setOverallMargin] = useState("0.0");
+  const [loading, setLoading] = useState(true);
 
-  const totalRev = 154280;
-  const totalCost = 85470;
-  const overallMargin = (((totalRev - totalCost) / totalRev) * 100).toFixed(1);
-  const flaggedAccountsCount = ACCOUNT_MARGIN_DATA.filter((a) => a.grossMargin < parseFloat(marginThreshold)).length;
+  // Fetch live operations margin guardrail data from /api/operations/margins
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchMarginData() {
+      try {
+        setLoading(true);
+        const res = await fetch(`/api/operations/margins?threshold=${marginThreshold}&month=${period}`);
+        if (!res.ok) return;
+        const data = (await res.json()) as {
+          success?: boolean;
+          summary?: { totalRevenue: number; totalCost: number; overallMargin: number; flaggedCount: number };
+          monthlyTrend?: Array<{ month: string; revenue: number; directCost: number; margin: number }>;
+          accountMargins?: Array<{ account: string; revenue: number; laborCost: number; partsCost: number; grossMargin: number; status: string }>;
+        };
+        if (isMounted) {
+          setMonthlyData(Array.isArray(data?.monthlyTrend) ? data.monthlyTrend : []);
+          setAccountData(Array.isArray(data?.accountMargins) ? data.accountMargins : []);
+          if (data?.summary) {
+            setTotalRev(data.summary.totalRevenue || 0);
+            setTotalCost(data.summary.totalCost || 0);
+            setOverallMargin((data.summary.overallMargin || 0).toFixed(1));
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch operations margin data:", err);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    }
+    fetchMarginData();
+    return () => { isMounted = false; };
+  }, [marginThreshold, period]);
+
+  const flaggedAccountsCount = accountData.filter((a) => a.grossMargin < parseFloat(marginThreshold)).length;
 
   return (
     <div className="space-y-6">
@@ -240,7 +248,16 @@ export function OperationsReportsCenter() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {ACCOUNT_MARGIN_DATA.map((item, idx) => {
+                      {accountData.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="py-12 text-center text-slate-500">
+                            <Building className="size-8 mx-auto mb-2 text-slate-400 opacity-60" />
+                            <div className="font-semibold text-slate-700 text-sm">No account margin records in this period</div>
+                            <div className="text-xs text-slate-400 mt-0.5">Account gross margins and 40% margin guardrail alerts will populate here as jobs are completed.</div>
+                          </td>
+                        </tr>
+                      ) : (
+                        accountData.map((item, idx) => {
                         const isFlagged = item.grossMargin < 40;
                         return (
                           <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
@@ -266,7 +283,7 @@ export function OperationsReportsCenter() {
                             </td>
                           </tr>
                         );
-                      })}
+                      }))}
                     </tbody>
                   </table>
                 </div>
@@ -336,22 +353,32 @@ export function OperationsReportsCenter() {
               </div>
             </CardHeader>
             <CardContent className="p-4">
-              <div className="h-72 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={MONTHLY_REVENUE_DATA} margin={{ top: 10, right: 30, left: 10, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                    <XAxis dataKey="month" stroke="#64748b" fontSize={12} />
-                    <YAxis stroke="#64748b" fontSize={12} tickFormatter={(val) => `$${val / 1000}k`} />
-                    <Tooltip
-                      formatter={(val: any) => [`$${Number(val).toLocaleString()}`, ""]}
-                      contentStyle={{ backgroundColor: "#ffffff", borderColor: "#e2e8f0", borderRadius: "8px", fontSize: "12px" }}
-                    />
-                    <Legend wrapperStyle={{ fontSize: "12px", paddingTop: "8px" }} />
-                    <Bar dataKey="revenue" name="Total Revenue ($)" fill="#2563eb" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="directCost" name="Direct Cost ($)" fill="#94a3b8" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+              {monthlyData.length === 0 ? (
+                <div className="flex h-72 flex-col items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50/50 p-4 text-center">
+                  <BarChart2 className="size-8 text-slate-400 mb-2 opacity-60" />
+                  <p className="text-sm font-semibold text-slate-700">No monthly revenue trends recorded yet</p>
+                  <p className="text-xs text-slate-400 mt-1 max-w-sm">
+                    Monthly billing trends will generate automatically as invoices and payroll are processed.
+                  </p>
+                </div>
+              ) : (
+                <div className="h-72 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={monthlyData} margin={{ top: 10, right: 30, left: 10, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                      <XAxis dataKey="month" stroke="#64748b" fontSize={12} />
+                      <YAxis stroke="#64748b" fontSize={12} tickFormatter={(val) => `$${val / 1000}k`} />
+                      <Tooltip
+                        formatter={(val: any) => [`$${Number(val).toLocaleString()}`, ""]}
+                        contentStyle={{ backgroundColor: "#ffffff", borderColor: "#e2e8f0", borderRadius: "8px", fontSize: "12px" }}
+                      />
+                      <Legend wrapperStyle={{ fontSize: "12px", paddingTop: "8px" }} />
+                      <Bar dataKey="revenue" name="Total Revenue ($)" fill="#2563eb" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="directCost" name="Direct Cost ($)" fill="#94a3b8" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -383,20 +410,30 @@ export function OperationsReportsCenter() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {TECHNICIAN_METRICS.map((tech) => (
-                      <tr key={tech.id} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="py-3 px-4 font-bold text-slate-900">{tech.name}</td>
-                        <td className="py-3 px-3 text-slate-600 font-medium">{tech.role}</td>
-                        <td className="py-3 px-3 text-center font-bold text-blue-700">{tech.billableHours} hrs</td>
-                        <td className="py-3 px-3 text-center text-slate-600">{tech.driveHours} hrs</td>
-                        <td className="py-3 px-3 text-center">
-                          <span className="font-extrabold text-emerald-700 font-mono">{tech.utilization}%</span>
+                    {techMetrics.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="py-12 text-center text-slate-500">
+                          <Users className="size-8 mx-auto mb-2 text-slate-400 opacity-60" />
+                          <div className="font-semibold text-slate-700 text-sm">No technician performance data for this period</div>
+                          <div className="text-xs text-slate-400 mt-0.5">Technician billable hours and utilization populate automatically when field jobs are completed.</div>
                         </td>
-                        <td className="py-3 px-3 text-center font-semibold text-slate-800">{tech.firstTimeFix}%</td>
-                        <td className="py-3 px-3 text-center font-bold text-slate-900">{tech.jobsCompleted}</td>
-                        <td className="py-3 px-4 text-right font-mono font-bold text-slate-900">${tech.revenueGen.toLocaleString()}</td>
                       </tr>
-                    ))}
+                    ) : (
+                      techMetrics.map((tech) => (
+                        <tr key={tech.id} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="py-3 px-4 font-bold text-slate-900">{tech.name}</td>
+                          <td className="py-3 px-3 text-slate-600 font-medium">{tech.role}</td>
+                          <td className="py-3 px-3 text-center font-bold text-blue-700">{tech.billableHours} hrs</td>
+                          <td className="py-3 px-3 text-center text-slate-600">{tech.driveHours} hrs</td>
+                          <td className="py-3 px-3 text-center">
+                            <span className="font-extrabold text-emerald-700 font-mono">{tech.utilization}%</span>
+                          </td>
+                          <td className="py-3 px-3 text-center font-semibold text-slate-800">{tech.firstTimeFix}%</td>
+                          <td className="py-3 px-3 text-center font-bold text-slate-900">{tech.jobsCompleted}</td>
+                          <td className="py-3 px-4 text-right font-mono font-bold text-slate-900">${tech.revenueGen.toLocaleString()}</td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -428,19 +465,29 @@ export function OperationsReportsCenter() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {SLA_COMPLIANCE_DATA.map((sla, idx) => (
-                      <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="py-3 px-4 font-bold text-slate-800">{sla.metric}</td>
-                        <td className="py-3 px-3 text-center text-slate-500 font-medium">{sla.target}</td>
-                        <td className="py-3 px-3 text-center font-extrabold text-slate-900 font-mono text-sm">{sla.actual}</td>
-                        <td className="py-3 px-3 text-center font-bold text-emerald-700">{sla.delta}</td>
-                        <td className="py-3 px-4 text-center">
-                          <Badge className="bg-emerald-600 text-white text-[10px]">
-                            <CheckCircle className="mr-1 size-3" /> SLA Passed
-                          </Badge>
+                    {slaData.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="py-12 text-center text-slate-500">
+                          <ShieldCheck className="size-8 mx-auto mb-2 text-slate-400 opacity-60" />
+                          <div className="font-semibold text-slate-700 text-sm">No SLA scorecard records recorded yet</div>
+                          <div className="text-xs text-slate-400 mt-0.5">Healthcare partner facility response times and Joint Commission compliance will appear here.</div>
                         </td>
                       </tr>
-                    ))}
+                    ) : (
+                      slaData.map((sla, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="py-3 px-4 font-bold text-slate-800">{sla.metric}</td>
+                          <td className="py-3 px-3 text-center text-slate-500 font-medium">{sla.target}</td>
+                          <td className="py-3 px-3 text-center font-extrabold text-slate-900 font-mono text-sm">{sla.actual}</td>
+                          <td className="py-3 px-3 text-center font-bold text-emerald-700">{sla.delta}</td>
+                          <td className="py-3 px-4 text-center">
+                            <Badge className="bg-emerald-600 text-white text-[10px]">
+                              <CheckCircle className="mr-1 size-3" /> SLA Passed
+                            </Badge>
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>

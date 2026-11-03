@@ -2656,3 +2656,276 @@ export const biomedicalPmDraftHistory = sqliteTable("biomedical_pm_draft_history
   updatedBy: text("updated_by").notNull(),
   createdAt: createdAt(),
 },t=>[uniqueIndex("uq_pm_draft_history_revision").on(t.organizationId,t.reportKey,t.unitNumber,t.recordVersion)]);
+
+// ------------------------------------------------------------------------------
+// PARTS & INVENTORY DOMAIN (Catalog, Van Stock, Installed Parts, POs & RMAs)
+// ------------------------------------------------------------------------------
+
+export const partsCatalog = sqliteTable("parts_catalog", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull().references(() => organizations.id),
+  partNumber: text("part_number").notNull(),
+  name: text("name").notNull(),
+  manufacturer: text("manufacturer").notNull().default("Generic OEM"),
+  category: text("category").notNull().default("Hardware & Cables"),
+  warehouseStock: integer("warehouse_stock").notNull().default(0),
+  totalVanStock: integer("total_van_stock").notNull().default(0),
+  minThreshold: integer("min_threshold").notNull().default(5),
+  unitCost: real("unit_cost").notNull().default(0),
+  retailPrice: real("retail_price").notNull().default(0),
+  status: text("status").notNull().default("In Stock"),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, t => [
+  uniqueIndex("uq_parts_catalog_org_num").on(t.organizationId, t.partNumber),
+  index("idx_parts_catalog_cat").on(t.organizationId, t.category),
+]);
+
+export const vanStock = sqliteTable("van_stock", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull().references(() => organizations.id),
+  vanId: text("van_id").notNull(),
+  vanName: text("van_name").notNull(),
+  technicianName: text("technician_name").notNull(),
+  technicianId: text("technician_id"),
+  partId: text("part_id").references(() => partsCatalog.id),
+  partNumber: text("part_number").notNull(),
+  name: text("name").notNull(),
+  category: text("category").notNull().default("Hardware & Cables"),
+  qtyOnHand: integer("qty_on_hand").notNull().default(0),
+  parLevel: integer("par_level").notNull().default(2),
+  unitCost: real("unit_cost").notNull().default(0),
+  retailPrice: real("retail_price").notNull().default(0),
+  binLocation: text("bin_location").default("BIN-A1"),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, t => [
+  uniqueIndex("uq_van_stock_van_part").on(t.organizationId, t.vanId, t.partNumber),
+  index("idx_van_stock_van").on(t.organizationId, t.vanId),
+]);
+
+export const installedParts = sqliteTable("installed_parts", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull().references(() => organizations.id),
+  workOrderId: text("work_order_id").notNull(),
+  technicianName: text("technician_name").notNull(),
+  technicianId: text("technician_id"),
+  equipmentModel: text("equipment_model").notNull(),
+  serialNumber: text("serial_number"),
+  partNumber: text("part_number").notNull(),
+  partName: text("part_name").notNull(),
+  qty: integer("qty").notNull().default(1),
+  unitPrice: real("unit_price").notNull().default(0),
+  warrantyStatus: text("warranty_status").notNull().default("Billable to Customer"),
+  installedDate: text("installed_date").notNull(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, t => [
+  index("idx_installed_parts_wo").on(t.organizationId, t.workOrderId),
+]);
+
+export const partsPurchaseOrders = sqliteTable("parts_purchase_orders", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull().references(() => organizations.id),
+  poNumber: text("po_number").notNull(),
+  vendor: text("vendor").notNull(),
+  partNumber: text("part_number").notNull(),
+  partName: text("part_name").notNull(),
+  qty: integer("qty").notNull().default(1),
+  totalCost: real("total_cost").notNull().default(0),
+  status: text("status").notNull().default("Ordered"),
+  trackingNumber: text("tracking_number"),
+  orderDate: text("order_date"),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, t => [
+  uniqueIndex("uq_parts_po_number").on(t.organizationId, t.poNumber),
+  index("idx_parts_po_vendor").on(t.organizationId, t.vendor),
+]);
+
+// ------------------------------------------------------------------------------
+// 2. SYSTEM SETTINGS & COMPANY RATE CARDS
+// ------------------------------------------------------------------------------
+
+export const systemSettings = sqliteTable("system_settings", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull().unique().references(() => organizations.id),
+  companyName: text("company_name").notNull().default("TechFlex Mobility Solutions"),
+  address: text("address").notNull().default("611 Park Meadow Rd, Suite B"),
+  city: text("city").notNull().default("Westerville"),
+  state: text("state").notNull().default("OH"),
+  zipCode: text("zip_code").notNull().default("43081"),
+  phone: text("phone").notNull().default("877-231-TECH"),
+  email: text("email").notNull().default("service@techflexmobility.com"),
+  hubLatitude: real("hub_latitude").default(40.125),
+  hubLongitude: real("hub_longitude").default(-82.932),
+  standardHourlyRate: real("standard_hourly_rate").notNull().default(85.0),
+  overtimeHourlyRate: real("overtime_hourly_rate").notNull().default(125.0),
+  weekendHourlyRate: real("weekend_hourly_rate").notNull().default(145.0),
+  travelMileageRate: real("travel_mileage_rate").notNull().default(0.65),
+  fixedTripFee: real("fixed_trip_fee").notNull().default(45.0),
+  emergencyDispatchSurcharge: real("emergency_dispatch_surcharge").notNull().default(75.0),
+  minBillableHours: real("min_billable_hours").notNull().default(1.0),
+  maxDailyRouteMiles: integer("max_daily_route_miles").notNull().default(250),
+  maxJobsPerTech: integer("max_jobs_per_tech").notNull().default(6),
+  originPrecedence: text("origin_precedence").notNull().default("hub"),
+  defaultTravelBufferMinutes: integer("default_travel_buffer_minutes").notNull().default(30),
+  requirePhotoAttestation: integer("require_photo_attestation").notNull().default(1),
+  enforce40PercentMarginFloor: integer("enforce_40_percent_margin_floor").notNull().default(1),
+  autoSyncQuickBooks: integer("auto_sync_quickbooks").notNull().default(0),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+// ------------------------------------------------------------------------------
+// 3. OPERATIONS REPORTS & MARGIN GUARDRAIL RECORDS
+// ------------------------------------------------------------------------------
+
+export const operationsMarginRecords = sqliteTable("operations_margin_records", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull().references(() => organizations.id),
+  workOrderId: text("work_order_id").notNull(),
+  monthYear: text("month_year").notNull(),
+  clientAccount: text("client_account").notNull(),
+  billedRevenue: real("billed_revenue").notNull().default(0),
+  directLaborCost: real("direct_labor_cost").notNull().default(0),
+  directPartsCost: real("direct_parts_cost").notNull().default(0),
+  travelCost: real("travel_cost").notNull().default(0),
+  totalDirectCost: real("total_direct_cost").notNull().default(0),
+  grossMarginDollars: real("gross_margin_dollars").notNull().default(0),
+  grossMarginPercent: real("gross_margin_percent").notNull().default(0),
+  meetsGuardrail: integer("meets_guardrail").notNull().default(1),
+  overrideReason: text("override_reason"),
+  auditedBy: text("audited_by"),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, t => [
+  index("idx_ops_margin_org_wo").on(t.organizationId, t.workOrderId),
+  index("idx_ops_margin_month").on(t.organizationId, t.monthYear),
+]);
+
+export const operationsKpiSnapshots = sqliteTable("operations_kpi_snapshots", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull().references(() => organizations.id),
+  snapshotDate: text("snapshot_date").notNull(),
+  totalBilled: real("total_billed").notNull().default(0),
+  totalDirectCost: real("total_direct_cost").notNull().default(0),
+  averageGrossMargin: real("average_gross_margin").notNull().default(0),
+  firstTimeFixRate: real("first_time_fix_rate").notNull().default(0),
+  slaComplianceRate: real("sla_compliance_rate").notNull().default(0),
+  activeTechnicianCount: integer("active_technician_count").notNull().default(0),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, t => [
+  uniqueIndex("uq_ops_kpi_snapshot_date").on(t.organizationId, t.snapshotDate),
+]);
+
+// ------------------------------------------------------------------------------
+// 4. QUICKBOOKS SYNC CONFIGURATION & TRANSACTION LEDGER
+// ------------------------------------------------------------------------------
+
+export const quickbooksConnections = sqliteTable("quickbooks_connections", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull().unique().references(() => organizations.id),
+  realmId: text("realm_id").notNull(),
+  companyName: text("company_name").notNull().default("TechFlex Mobility QuickBooks"),
+  isConnected: integer("is_connected").notNull().default(0),
+  tokenExpiresAt: text("token_expires_at"),
+  lastSyncAt: text("last_sync_at"),
+  autoSyncEnabled: integer("auto_sync_enabled").notNull().default(1),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+export const quickbooksSyncLedger = sqliteTable("quickbooks_sync_ledger", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull().references(() => organizations.id),
+  entityType: text("entity_type").notNull(),
+  entityId: text("entity_id").notNull(),
+  qboId: text("qbo_id"),
+  syncStatus: text("sync_status").notNull().default("Pending"),
+  syncDirection: text("sync_direction").notNull().default("outbound"),
+  attemptCount: integer("attempt_count").notNull().default(1),
+  lastAttemptAt: text("last_attempt_at"),
+  errorMessage: text("error_message"),
+  responsePayloadJson: text("response_payload_json"),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, t => [
+  index("idx_qb_ledger_entity").on(t.organizationId, t.entityType, t.entityId),
+  index("idx_qb_ledger_status").on(t.organizationId, t.syncStatus),
+]);
+
+// ------------------------------------------------------------------------------
+// 5. ROUTE MAP CANVAS & DISPATCH ROUTING
+// ------------------------------------------------------------------------------
+
+export const dispatchRoutePlans = sqliteTable("dispatch_route_plans", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull().references(() => organizations.id),
+  routeDate: text("route_date").notNull(),
+  technicianId: text("technician_id").notNull(),
+  technicianName: text("technician_name").notNull(),
+  vehicleId: text("vehicle_id").notNull().default("Van 101"),
+  originAddress: text("origin_address").notNull().default("611 Park Meadow Rd, Suite B, Westerville, OH 43081"),
+  originLatitude: real("origin_latitude").default(40.125),
+  originLongitude: real("origin_longitude").default(-82.932),
+  destinationAddress: text("destination_address"),
+  totalDistanceMiles: real("total_distance_miles").notNull().default(0),
+  estimatedDurationMinutes: integer("estimated_duration_minutes").notNull().default(0),
+  stopsCount: integer("stops_count").notNull().default(0),
+  status: text("status").notNull().default("Draft"),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, t => [
+  index("idx_route_plans_tech_date").on(t.organizationId, t.technicianId, t.routeDate),
+]);
+
+export const dispatchRouteWaypoints = sqliteTable("dispatch_route_waypoints", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull().references(() => organizations.id),
+  routePlanId: text("route_plan_id").notNull().references(() => dispatchRoutePlans.id),
+  workOrderId: text("work_order_id").notNull(),
+  stopSequence: integer("stop_sequence").notNull(),
+  locationName: text("location_name").notNull(),
+  address: text("address").notNull(),
+  latitude: real("latitude"),
+  longitude: real("longitude"),
+  appointmentTime: text("appointment_time"),
+  stopStatus: text("stop_status").notNull().default("Pending"),
+  distanceFromLastStop: real("distance_from_last_stop").notNull().default(0),
+  notes: text("notes"),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, t => [
+  index("idx_waypoints_route_seq").on(t.organizationId, t.routePlanId, t.stopSequence),
+]);
+
+// ------------------------------------------------------------------------------
+// 6. EVIDENCE DOCUMENT VIEWER & VERIFICATION REVIEWS
+// ------------------------------------------------------------------------------
+
+export const evidenceDocumentReviews = sqliteTable("evidence_document_reviews", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull().references(() => organizations.id),
+  workOrderId: text("work_order_id").notNull(),
+  documentTitle: text("document_title").notNull(),
+  originalFileName: text("original_file_name").notNull(),
+  fileType: text("file_type").notNull().default("application/pdf"),
+  fileHashSha256: text("file_hash_sha256"),
+  fileSizeBytes: integer("file_size_bytes").notNull().default(0),
+  storagePath: text("storage_path").notNull(),
+  extractedFieldsJson: text("extracted_fields_json").notNull().default("{}"),
+  confidenceScore: real("confidence_score").notNull().default(1.0),
+  reviewStatus: text("review_status").notNull().default("Needs Review"),
+  reviewerId: text("reviewer_id"),
+  reviewedAt: text("reviewed_at"),
+  humanOverrideJson: text("human_override_json"),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, t => [
+  index("idx_evidence_reviews_wo").on(t.organizationId, t.workOrderId),
+  index("idx_evidence_reviews_status").on(t.organizationId, t.reviewStatus),
+]);
+
+

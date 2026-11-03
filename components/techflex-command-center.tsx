@@ -652,17 +652,47 @@ export function TechFlexCommandCenter({
   if (experience === "technician")
     return (
       <><Suspense fallback={<ModuleLoading />}>
-        <TechnicianPortal
-          displayName={displayName}
-          userId={identity.userId}
-          onExit={() => {
-            captureOperationalEvent("portal_experience_changed", {
-              role: identity.role,
-              experience: "admin",
-            });
-            setExperience("admin");
-          }}
-        />
+        {showOtherAssignments ? (
+          <TechnicianPortal
+            displayName={displayName}
+            userId={identity.userId}
+            onDmeWork={() => setShowOtherAssignments(false)}
+            onExit={() => {
+              captureOperationalEvent("portal_experience_changed", {
+                role: identity.role,
+                experience: "admin",
+              });
+              setExperience("admin");
+            }}
+          />
+        ) : (
+          <div className="min-h-screen bg-slate-50">
+            <header className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white/95 px-4 py-3 shadow-sm backdrop-blur sm:px-6">
+              <div className="flex items-center gap-2">
+                <span className="rounded-md bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-800">Technician Preview</span>
+                <span className="text-sm font-semibold text-slate-800">DME / Mobility · SpinLife work orders</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" onClick={() => setShowOtherAssignments(true)}>Other assignments &amp; routes</Button>
+                <Button size="sm" onClick={() => {
+                  captureOperationalEvent("portal_experience_changed", {
+                    role: identity.role,
+                    experience: "admin",
+                  });
+                  setExperience("admin");
+                }}>Return to admin</Button>
+              </div>
+            </header>
+            <SpinLifePortal
+              key={`${identity.userId}:${spinlifeRecordId}:preview`}
+              userId={identity.userId}
+              initialJobId={spinlifeRecordId}
+              technician
+              onCareer={() => setShowCareer(true)}
+              onOtherWork={() => setShowOtherAssignments(true)}
+            />
+          </div>
+        )}
       </Suspense><OperationsCopilot module="technician" /><ProblemReporter module="Technician Preview" reporterId={identity.userId} /></>
     );
   return (

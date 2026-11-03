@@ -1,3 +1,4 @@
+﻿import { SupabaseBucket } from "@/lib/supabase-storage";
 import { env } from "cloudflare:workers";
 import { z } from "zod";
 import { generateSignedReportReplacementPdf } from "@/lib/techflex-pdfs";
@@ -547,7 +548,7 @@ export async function POST(request: Request) {
         if (!inserted.meta.changes) throw new PortalHttpError(409, "The replacement changed. Refresh before recording the decision.");
         return Response.json({ replacementId: input.replacementId, status: "declined" });
       }
-      const original = await env.BUCKET.get(prepared.reportPdfSnapshot.storageKey);
+      const original = await SupabaseBucket.get(prepared.reportPdfSnapshot.storageKey);
       if (!original) throw new PortalHttpError(409, "The exact original approved PDF is unavailable. Restore it before releasing a replacement.");
       const bytes = await generateSignedReportReplacementPdf({
         originalPdf: await original.arrayBuffer(), workOrderNumber: prepared.workOrderNumber,
@@ -570,7 +571,7 @@ export async function POST(request: Request) {
         replacementSizeBytes: replacementBytes.byteLength, replacementChecksum: checksum,
         financialEffect: "none", originalArtifactChanged: false,
       };
-      await env.BUCKET.put(storageKey, replacementBytes, { httpMetadata: { contentType: "application/pdf" } });
+      await SupabaseBucket.put(storageKey, replacementBytes, { httpMetadata: { contentType: "application/pdf" } });
       try {
         await env.DB.batch([
           env.DB.prepare(
@@ -611,7 +612,7 @@ export async function POST(request: Request) {
         const saved = safeJson<ReplacementReviewSnapshot>(committed?.afterJson);
         if (committed?.actorUserId === identity.userId && saved?.replacementStorageKey === storageKey)
           return Response.json({ replacementId: input.replacementId, status: "approved", attachmentId, replayed: true });
-        try { await env.BUCKET.delete(storageKey); } catch (cleanupError) { safeServerLog("attachment_cleanup", cleanupError); }
+        try { await SupabaseBucket.delete(storageKey); } catch (cleanupError) { safeServerLog("attachment_cleanup", cleanupError); }
         safeServerLog("attachment_commit", error);
         throw new PortalHttpError(409, "The approved artifact or replacement decision changed. Refresh before releasing the replacement.");
       }

@@ -7,9 +7,12 @@ const headers={"Cache-Control":"private, no-store"};
 const active="('offered','assigned','accepted','dispatched','arrived','submitted','in_progress')";
 const scope=`FROM work_orders w JOIN accounts c ON c.id=w.account_id AND c.organization_id=w.organization_id AND c.status='active' JOIN locations l ON l.id=w.location_id AND l.account_id=c.id AND l.status='active' WHERE w.organization_id=? AND w.status='ready_to_assign' AND w.required_technician_count=1 AND NOT EXISTS(SELECT 1 FROM service_reports sr WHERE sr.work_order_id=w.id) AND NOT EXISTS(SELECT 1 FROM work_order_assignments a WHERE a.work_order_id=w.id AND a.status IN ${active})`;
 async function technician(request:Request){
- const identity=await requirePortalRole(request,["technician"]);
+ const identity=await requirePortalRole(request,["technician", "owner_administrator", "operations_administrator"]);
+ if(!identity.technicianId){
+  return {identity,disciplines:["biomedical","dme_mobility"]};
+ }
  const row=await env.DB.prepare("SELECT service_disciplines_json AS disciplines FROM technicians WHERE id=? AND user_id=? AND organization_id=? AND status='active'").bind(identity.technicianId,identity.userId,TECHFLEX_ORG_ID).first<{disciplines:string|null}>();
- if(!row||!identity.technicianId)throw new PortalHttpError(403,"An active technician profile is needed to claim work.");
+ if(!row)return {identity,disciplines:["biomedical","dme_mobility"]};
  return {identity,disciplines:parseDisciplines(row.disciplines)};
 }
 export async function GET(request:Request){try{
@@ -19,6 +22,7 @@ export async function GET(request:Request){try{
 }catch(error){const response=apiError(error);response.headers.set("Cache-Control",headers["Cache-Control"]);return response;}}
 export async function POST(request:Request){try{
  const {identity,disciplines}=await technician(request);
+ if(!identity.technicianId)throw new PortalHttpError(403,"An active technician profile is needed to claim work.");
  const {workOrderId}=z.object({workOrderId:z.string().min(1).max(160)}).strict().parse(await request.json());
  const own=await env.DB.prepare(`SELECT w.id FROM work_order_assignments a JOIN work_orders w ON w.id=a.work_order_id AND w.organization_id=? WHERE w.id=? AND a.technician_id=? AND a.status IN ${active}`).bind(TECHFLEX_ORG_ID,workOrderId,identity.technicianId).first();
  if(own)return Response.json({workOrderId,assigned:true},{headers});

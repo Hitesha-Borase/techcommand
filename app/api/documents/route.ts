@@ -1,3 +1,4 @@
+﻿import { SupabaseBucket } from "@/lib/supabase-storage";
 import { env } from "cloudflare:workers";
 import {
   TECHFLEX_ORG_ID,
@@ -146,7 +147,7 @@ async function completeStorageCleanup(item: PendingStorageCleanup) {
       ).run();
       return;
     }
-    await env.BUCKET.delete(item.storageKey);
+    await SupabaseBucket.delete(item.storageKey);
     await env.DB.prepare(
       "INSERT OR IGNORE INTO audit_logs (id, organization_id, action, entity_type, entity_id, before_json, after_json) VALUES (?, ?, 'document.permanently_deleted', 'document', ?, ?, ?)",
     ).bind(
@@ -359,7 +360,7 @@ export async function POST(request: Request) {
     const owner = (scopeId || "company").replace(/[^a-zA-Z0-9_-]+/g, "_");
     const extension = safeName.match(/\.[a-zA-Z0-9]{2,5}$/)?.[0]?.toLowerCase() || "";
     const storageKey = `techflex/${domain}/${scopeType}/${owner}/${category}/${documentId}${extension}`;
-    await env.BUCKET.put(storageKey, bytes, {
+    await SupabaseBucket.put(storageKey, bytes, {
       httpMetadata: { contentType },
     });
     const statements = [
@@ -434,7 +435,7 @@ export async function POST(request: Request) {
         const competingAttachment = await env.DB.prepare(
           "SELECT id FROM attachments WHERE organization_id=? AND checksum=? AND entity_type=? AND entity_id=? AND id!=? LIMIT 1",
         ).bind(TECHFLEX_ORG_ID, checksum, scopeType, scopeId || TECHFLEX_ORG_ID, attachmentId).first<{ id: string }>();
-        try { await env.BUCKET.delete(storageKey); } catch (cleanupError) { safeServerLog("document_cleanup", cleanupError); }
+        try { await SupabaseBucket.delete(storageKey); } catch (cleanupError) { safeServerLog("document_cleanup", cleanupError); }
         if (competingAttachment)
           return Response.json({ error: duplicateFileMessage }, { status: 409 });
         safeServerLog("document_commit", error);
