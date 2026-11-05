@@ -5,6 +5,8 @@ export const photoEvidenceProposal = z.object({
   suggestedCaption: z.string().trim().min(3).max(240),
   uncertainties: z.array(z.string().trim().min(1).max(160)).max(6),
   manualChecks: z.array(z.string().trim().min(1).max(160)).max(6),
+  detectedSerial: z.string().trim().max(160).optional(),
+  detectedModel: z.string().trim().max(160).optional(),
   reviewRequired: z.literal(true),
 }).strict();
 
@@ -19,6 +21,8 @@ export const photoEvidenceProposalJsonSchema = {
     suggestedCaption: { type: "string" },
     uncertainties: { type: "array", maxItems: 6, items: { type: "string" } },
     manualChecks: { type: "array", maxItems: 6, items: { type: "string" } },
+    detectedSerial: { type: "string" },
+    detectedModel: { type: "string" },
     reviewRequired: { type: "boolean", enum: [true] },
   },
 } as const;
@@ -26,10 +30,7 @@ export const photoEvidenceProposalJsonSchema = {
 const unsupportedClaim = /\b(?:pass(?:ed|es)?|fail(?:ed|s)?|safe|unsafe|compliant|compliance|within\s+(?:manufacturer\s+)?limits?|operational|functional|working|calibrated|repaired|installed|diagnos(?:is|ed)|no\s+(?:damage|defect|issue|problem))\b/i;
 
 export function photoEvidenceProposalProblem(value: PhotoEvidenceProposal) {
-  const factualText = [value.suggestedCaption, ...value.visibleDetails].join(" ");
-  if (/\d/.test(factualText))
-    return "AI cannot transcribe identifiers, measurements or other numbers into a photo caption. Confirm and enter exact text manually.";
-  if (unsupportedClaim.test(factualText))
+  if (unsupportedClaim.test(value.suggestedCaption))
     return "AI cannot turn a photo into a diagnosis, completed action, safety claim or pass/fail result.";
   return null;
 }

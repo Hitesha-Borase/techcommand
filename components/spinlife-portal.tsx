@@ -2,11 +2,13 @@
 
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Download, Plus, Upload, Play } from "lucide-react";
+import { ArrowLeft, Download, Plus, Upload, Play, CheckCircle2, FileText, ChevronRight, Sparkles, AlertTriangle, Receipt } from "lucide-react";
+import { checkModelMismatch } from "@/lib/model-mismatch";
 import {procedureText} from "@/lib/asset-ai-procedure";
 import {DmeGuidedChecks} from "@/components/dme-guided-checks";
 import {DmeParts} from "@/components/dme-parts";
 import {dmeFamilies} from "@/lib/academy-catalog";
+import {dmeFieldProgress} from "@/lib/dme-guided-service";
 const SpinlifeCloseout = lazy(() => import("@/components/spinlife-closeout").then(m => ({default:m.SpinlifeCloseout})));
 const CompletionReviewCenter = lazy(() => import("@/components/completion-review-center").then(m => ({default:m.CompletionReviewCenter})));
 import {spinlifeWritingFingerprint} from "@/lib/spinlife-writing";
@@ -59,6 +61,51 @@ function Signature({onSave,disabled}:{onSave:(file:File)=>Promise<void>;disabled
 
 export function SpinLifePortal({userId,technician=false,onOtherWork,onCareer,initialJobId}:{userId:string;technician?:boolean;onOtherWork?:()=>void;onCareer?:()=>void;initialJobId?:string}) {
   const [job,setJob]=useState<SpinLifeJob|null>(null),[dirty,setDirty]=useState(false),[busy,setBusy]=useState(false);
+  const [completedJob,setCompletedJob]=useState<SpinLifeJob|null>(null);
+  const [generatingPacket,setGeneratingPacket]=useState(false);
+  const [generatingInvoice,setGeneratingInvoice]=useState(false);
+  const [invoiceAttachmentId,setInvoiceAttachmentId]=useState<string|null>(null);
+
+  const liveServiceConflict = useMemo(() => {
+    if (!job) return null;
+    const issueChecks = Object.entries(job.visit.checks).filter(
+      ([_, c]) => c.state === "not_done" || /broken|damaged|defect|failed|failure|issue|replace|service\s*needed/i.test(c.note)
+    );
+    if (issueChecks.length > 0) {
+      const first = issueChecks[0][1];
+      return first.note?.trim() || "Check finding recorded as issue / not passed; service or repair required.";
+    }
+    if (["parts_required", "needs_resolution", "out_of_service", "incomplete"].includes(job.visit.disposition)) {
+      return `Outcome set to ${job.visit.disposition.replaceAll("_", " ")}; unit requires service or parts.`;
+    }
+    if (/broken|damage|failed|motor\s*failure|controller\s*failure|inoperable/i.test(job.visit.narrative || "") ||
+        /broken|damage|failed|motor\s*failure|controller\s*failure|inoperable/i.test(job.visit.findings || "")) {
+      return "Field observations record equipment defect or failure.";
+    }
+    return null;
+  }, [job]);
+
+  const outstandingExceptions = useMemo(() => {
+    if (!completedJob) return [];
+    const items: string[] = [];
+    const progress = dmeFieldProgress(completedJob, false);
+    const remaining = progress.checks.filter(c => !c.complete && !c.notApplicable);
+    if (remaining.length > 0) {
+      items.push(`${remaining.length} partner check(s) not completed (${remaining.map(r => r.label).slice(0, 3).join(", ")}${remaining.length > 3 ? "..." : ""})`);
+    }
+    const pendingParts = (completedJob.visit.parts || []).filter(p => p.state === "needed" || p.state === "ordered");
+    if (pendingParts.length > 0) {
+      items.push(`${pendingParts.length} part(s) flagged as needed/ordered: ${pendingParts.map(p => p.description || p.partNumber || "Part").join(", ")}`);
+    }
+    if (!completedJob.data.serialNumber || completedJob.data.serialNumber === "N/A") {
+      items.push("Serial number was not recorded or marked N/A.");
+    }
+    if (!completedJob.visit.customerSignedAt && !completedJob.visit.signatureAttachmentId) {
+      items.push("Customer signature was not collected on site.");
+    }
+    return items;
+  }, [completedJob]);
+  const [techStage,setTechStage]=useState<"essentials"|"steps"|"review">("essentials");
   const [visibleCount,setVisibleCount]=useState(30);
   const [savingNotes,setSavingNotes]=useState(false);
   const query=useQuery({queryKey:["spinlife-jobs",userId,"summary"],queryFn:()=>api<Payload>("/api/spinlife?view=summary"),enabled:Boolean(userId),refetchInterval:job?false:60000});
@@ -119,6 +166,7 @@ export function SpinLifePortal({userId,technician=false,onOtherWork,onCareer,ini
   async function loadFiles(id:string){const r=await api<{attachments:Attachment[]}>(`/api/attachments?entityType=work_order_intake&entityId=${encodeURIComponent(id)}`);if(draftRef.current?.id===id)setFiles(r.attachments);}
   async function open(selected:SpinLifeJob|SpinLifeJobSummary){
     deviceWriter.flush();
+    setCompletedJob(null);
     if(!("visit" in selected)) {
       setBusy(true);
       try{const full=(await api<{job:SpinLifeJob}>(`/api/spinlife?id=${encodeURIComponent(selected.id)}`)).job;return await open(full);}
@@ -135,6 +183,10 @@ export function SpinLifePortal({userId,technician=false,onOtherWork,onCareer,ini
       }
     }catch{setDraftStored(false);}
     setJob(next);draftRef.current=next;setPay(nextPay);payRef.current=nextPay;setDirty(restored);mutation.current=null;setFiles([]);
+    const progress=dmeFieldProgress(next,!canAssign);
+    if(next.startedAt&&progress.remaining.length>0)setTechStage("steps");
+    else if(next.startedAt&&progress.remaining.length===0)setTechStage("review");
+    else setTechStage("essentials");
     if(selected.version||selected.intakeVersion)void loadFiles(selected.id).catch(e=>setError(String((e as Error).message)));
     return {job:next,restored};
   }
@@ -197,9 +249,17 @@ export function SpinLifePortal({userId,technician=false,onOtherWork,onCareer,ini
     setBusy(true);setSavingNotes(action==="save");setError("");setNotice("");
     try {
       const saved=action==="review"?await save("submit"):action==="start"?await save("start"):dirty||!job?.version?await save():job!;
-      if(action==="review") {setNotice("Field work complete. A copy is in the administrator inbox for optional review. You can add notes later.");void query.refetch();}
+      if(action==="review") {
+        setCompletedJob(saved);
+        setJob(null);
+        setFiles([]);
+        setNotice("");
+        try{clearSpinLifeDraft(localStorage,userId,saved.id);}catch{}
+        if(typeof window!=="undefined"){window.scrollTo({top:0,behavior:"smooth"});}
+        void query.refetch();
+      }
       else if(action==="packet") {const result=await api<{attachmentId:string}>("/api/spinlife/packet",{id:saved.id,expectedVersion:saved.version});setJob(current=>{if(!current||current.id!==saved.id)return current;const next={...current,packetAttachmentId:result.attachmentId,packetSourceVersion:saved.version};draftRef.current=next;return next;});setNotice("PDF ready from your saved notes. Administrator review is optional.");await loadFiles(saved.id);void query.refetch();}
-      else if(action==="back"){if(draftRef.current!==saved){setNotice("Earlier entries saved. Newer changes remain here; save again before leaving.");}else{setJob(null);setFiles([]);}} else setNotice(action==="start"?"Work started. You can save any time.":draftRef.current!==saved?"Earlier entries saved. Your newer changes are protected on this device; save again when ready.":"Saved. You can add the rest later.");
+      else if(action==="back"){if(draftRef.current!==saved){setNotice("Earlier entries saved. Newer changes remain here; save again before leaving.");}else{setJob(null);setFiles([]);}} else {if(action==="start")setTechStage("steps");setNotice(action==="start"?"Work started. You can save any time.":draftRef.current!==saved?"Earlier entries saved. Your newer changes are protected on this device; save again when ready.":"Saved. You can add the rest later.");}
     }catch(e){showError(e);}finally{setBusy(false);setSavingNotes(false);}
   }
   async function startCard(selected:SpinLifeJobSummary) {
@@ -210,7 +270,12 @@ export function SpinLifePortal({userId,technician=false,onOtherWork,onCareer,ini
       // replace it with the older list copy or silently approve local changes.
       if(!opened)return;
       if(opened.restored)return;
-      await save("start",opened.job);setNotice("Work started. You can save any time.");
+      const targetJob = { ...opened.job };
+      if (!targetJob.technicianId && query.data?.technicians?.length) {
+        targetJob.technicianId = query.data.technicians[0].id;
+        targetJob.technicianName = query.data.technicians[0].name;
+      }
+      await save("start",targetJob);setNotice("Work started. You can save any time.");setTechStage("steps");
     }catch(e){showError(e);}finally{setBusy(false);}
   }
   async function extract(incoming:File[],sourceText:string,targetId:string) {
@@ -224,7 +289,7 @@ export function SpinLifePortal({userId,technician=false,onOtherWork,onCareer,ini
       const updated={...current.data};
       for(const key of Object.keys(spinlifeDataSchema.shape) as Array<keyof SpinLifeData>){const value=result.fields[key];if(!updated[key] && typeof value==="string"){if(key==="serviceType" && !spinlifeDataSchema.shape.serviceType.safeParse(value).success)continue;Object.assign(updated,{[key]:value});}}
       if(!updated.extraChecks && Array.isArray(result.fields.checklistItems)){const checks=result.fields.checklistItems.filter((x):x is string=>typeof x==="string").join("\n");if(checks.length>5000)throw new Error("The original is saved, but its additional checks exceed this form’s capacity. Existing answers are preserved; review the original requirements before completion.");updated.extraChecks=checks;}
-      edit({...current,data:updated});setAiMessage("Available details filled in. Please check them against the original before assigning. Technician pay is entered by the administrator.");
+      edit({...current,data:updated});setAiMessage("Available details filled in. Please check them against the original before assigning. Technician pay is entered by the administrator.");if(technician)setTechStage("essentials");
     }catch(e){if(token===aiRequest.current)setAiMessage((e as Error).message);}finally{if(token===aiRequest.current)setAiBusy(false);}
   }
   async function upload(incoming:File[],category:string,caption?:string) {
@@ -245,14 +310,45 @@ export function SpinLifePortal({userId,technician=false,onOtherWork,onCareer,ini
       }
       await loadFiles(saved.id);setNotice("Upload saved.");
       if(category==="client_work_order")void extract(incoming,saved.data.rawText,saved.id);
+      if(category==="serial" || (caption && /serial|label|rating\s*plate/i.test(caption))) {
+        setNotice("Reading equipment label with AI OCR...");
+        try {
+          const ocrForm = new FormData();
+          ocrForm.set("file", incoming[0]);
+          const ocrRes = await portalFetch("/api/ai/label-extract", { method: "POST", body: ocrForm });
+          if (ocrRes.ok) {
+            const ocr = (await ocrRes.json()) as {
+              serialNumber: string | null;
+              model: string | null;
+              manufacturer: string | null;
+              isBlurryOrUnreadable: boolean;
+              qualityFeedback: string;
+            };
+            if (ocr.isBlurryOrUnreadable) {
+              setError(ocr.qualityFeedback || "Serial label photo is unclear or unreadable. Please upload a clearer photo of the unit serial number tag.");
+            } else if (ocr.serialNumber) {
+              const current = draftRef.current || saved;
+              const nextData = { ...current.data, serialNumber: ocr.serialNumber };
+              if (ocr.model && !nextData.model) nextData.model = ocr.model;
+              if (ocr.manufacturer && !nextData.manufacturer) nextData.manufacturer = ocr.manufacturer;
+              saved = { ...current, data: nextData };
+              edit(saved);
+              await save("save", saved);
+              setNotice(`AI OCR verified label: Serial #${ocr.serialNumber}${ocr.model ? ` (${ocr.model})` : ""} auto-filled into work order.`);
+            }
+          }
+        } catch (ocrErr) {
+          console.warn("[Label OCR error]", ocrErr);
+        }
+      }
     }catch(e){showError(e);}finally{setBusy(false);}
   }
   const orders=query.data?.jobs || [];
   const shown=orders.filter(j=>(!reviewOnly||["spinlife_review","spinlife_completed"].includes(j.status))&&(showClosed || jobStatus(j)!=="PDF ready"));
   return <section className="mx-auto max-w-5xl space-y-5 px-4 py-6 sm:px-6">
     <header className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-widest text-cyan-700">TechCommand OS · TechFlex</p><h1 className="mt-1 text-2xl font-bold text-slate-900">{technician?"My SpinLife work orders":"SpinLife work portal"}</h1></div>
-      {!job&&!closeoutWorkOrderId&&(canAssign||technician)?<Button disabled={busy} onClick={()=>void open(newJob())}><Plus/>{technician?"New work order":"Assign a work order"}</Button>:null}
-      {!job&&onOtherWork?<Button variant="outline" onClick={onOtherWork}>Other assignments, routes & profile</Button>:null}</header>
+      {!job&&!completedJob&&!closeoutWorkOrderId&&(canAssign||technician)?<Button disabled={busy} onClick={()=>{setCompletedJob(null);void open(newJob());}}><Plus/>{technician?"New work order":"Assign a work order"}</Button>:null}
+      {!job&&!completedJob&&onOtherWork?<Button variant="outline" onClick={onOtherWork}>Other assignments, routes & profile</Button>:null}</header>
     {query.isError&&!job?<div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4">{query.error.message}<Button variant="outline" onClick={()=>void query.refetch()}>Retry</Button></div>:null}
     {error?<div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-900"><p>{error}</p>{job?<Button variant="outline" disabled={busy} onClick={()=>void refreshSaved()}>Refresh saved copy and keep my edits</Button>:<Button variant="outline" disabled={busy} onClick={()=>setDraftRetry(n=>n+1)}>Retry opening saved order</Button>}</div>:null}
     {saveWarning?<p role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-900">{saveWarning}</p>:null}
@@ -260,7 +356,123 @@ export function SpinLifePortal({userId,technician=false,onOtherWork,onCareer,ini
     {notice?<p role="status" className="rounded-lg bg-emerald-50 p-3 text-emerald-900">{notice}</p>:null}
     {recoveryMessage?<p role="status" className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-blue-900">{recoveryMessage}</p>:null}
     {!draftStored?<p role="alert" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-amber-900">This browser could not protect unsaved changes. Keep this page open and use Save for later before leaving.</p>:null}
-    {closeoutWorkOrderId?<Suspense fallback={<p role="status">Opening closeout…</p>}><Button variant="outline" onClick={()=>setCloseoutWorkOrderId("")}>Back to SpinLife work orders</Button><CompletionReviewCenter key={closeoutWorkOrderId} initialWorkOrderId={closeoutWorkOrderId}/></Suspense>:!job?<>
+    {completedJob ? (
+      <article className="space-y-6 rounded-2xl border border-emerald-200 bg-white p-6 shadow-sm sm:p-8">
+        <div className="flex flex-col items-center text-center">
+          <div className="flex size-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+            <CheckCircle2 className="size-10" />
+          </div>
+          <h2 className="mt-4 text-2xl font-bold text-slate-900">Work Order Completed!</h2>
+          <p className="mt-1 max-w-lg text-slate-600">
+            Field work for work order <span className="font-semibold text-slate-900">{completedJob.data.externalId || completedJob.id}</span> ({completedJob.data.customerName || "Customer"}) has been submitted successfully to the administrator inbox.
+          </p>
+        </div>
+
+        <div className="mx-auto max-w-lg divide-y divide-slate-100 rounded-xl border border-slate-200 bg-slate-50 text-sm">
+          <div className="flex items-center justify-between p-3.5">
+            <span className="text-slate-600">Field Work Status</span>
+            <span className="inline-flex items-center gap-1.5 font-semibold text-emerald-700">
+              <span className="size-2 rounded-full bg-emerald-500"></span>
+              Submitted for review
+            </span>
+          </div>
+          <div className="flex items-center justify-between p-3.5">
+            <span className="text-slate-600">Authorized Technician Pay</span>
+            <span className="font-semibold text-slate-900">{money(completedJob.technicianPayCents)}</span>
+          </div>
+          <div className="flex items-center justify-between p-3.5">
+            <span className="text-slate-600">Accounting / Invoicing</span>
+            <span className="font-medium text-slate-700">Separate invoice drafted under account rules</span>
+          </div>
+          <div className="flex items-center justify-between p-3.5">
+            <span className="text-slate-600">Service Report</span>
+            <span className="font-medium text-slate-700">{completedJob.packetAttachmentId ? "Official PDF Ready" : "Draft report recorded"}</span>
+          </div>
+          <div className="p-3.5">
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
+              {outstandingExceptions.length > 0 ? `Outstanding Exceptions (${outstandingExceptions.length})` : "Checklist & Quality Status"}
+            </p>
+            {outstandingExceptions.length > 0 ? (
+              <ul className="mt-2 space-y-1.5 text-xs text-amber-900">
+                {outstandingExceptions.map((item, idx) => (
+                  <li key={idx} className="flex items-start gap-1.5">
+                    <AlertTriangle className="size-3.5 shrink-0 text-amber-600 mt-0.5" />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-1 text-xs text-emerald-700 flex items-center gap-1.5 font-medium">
+                <CheckCircle2 className="size-3.5 text-emerald-600" />
+                All standard service checks completed with no outstanding exceptions.
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+          {completedJob.packetAttachmentId ? (
+            <Button asChild>
+              <a href={`/api/attachments?attachmentId=${encodeURIComponent(completedJob.packetAttachmentId)}`} target="_blank" rel="noreferrer">
+                <Download className="mr-1.5 size-4" /> Download Service Report PDF
+              </a>
+            </Button>
+          ) : (
+            <Button
+              disabled={generatingPacket}
+              onClick={async () => {
+                setGeneratingPacket(true);
+                try {
+                  const result = await api<{ attachmentId: string }>("/api/spinlife/packet", { id: completedJob.id, expectedVersion: completedJob.version });
+                  setCompletedJob(prev => prev ? { ...prev, packetAttachmentId: result.attachmentId, packetSourceVersion: prev.version } : prev);
+                  window.open(`/api/attachments?attachmentId=${encodeURIComponent(result.attachmentId)}`, "_blank");
+                } catch (e) {
+                  showError(e);
+                } finally {
+                  setGeneratingPacket(false);
+                }
+              }}
+            >
+              <FileText className="mr-1.5 size-4" /> {generatingPacket ? "Generating PDF..." : "Download Service Report PDF"}
+            </Button>
+          )}
+
+          {invoiceAttachmentId ? (
+            <Button variant="outline" asChild>
+              <a href={`/api/attachments?attachmentId=${encodeURIComponent(invoiceAttachmentId)}`} target="_blank" rel="noreferrer">
+                <Download className="mr-1.5 size-4" /> Download Accounting Invoice PDF
+              </a>
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              disabled={generatingInvoice}
+              onClick={async () => {
+                setGeneratingInvoice(true);
+                try {
+                  const res = await api<{ attachmentId: string; fileName: string; invoiceNumber: string }>("/api/spinlife/invoice", {
+                    id: completedJob.id,
+                    expectedVersion: completedJob.version,
+                  });
+                  setInvoiceAttachmentId(res.attachmentId);
+                  window.open(`/api/attachments?attachmentId=${encodeURIComponent(res.attachmentId)}`, "_blank");
+                } catch (e) {
+                  showError(e);
+                } finally {
+                  setGeneratingInvoice(false);
+                }
+              }}
+            >
+              <Receipt className="mr-1.5 size-4 text-cyan-700" /> {generatingInvoice ? "Drafting Invoice..." : "Download Accounting Invoice PDF"}
+            </Button>
+          )}
+
+          <Button variant="ghost" onClick={() => { setCompletedJob(null); void query.refetch(); }}>
+            <ArrowLeft className="mr-1.5 size-4" /> Return to assignments
+          </Button>
+        </div>
+      </article>
+    ) : closeoutWorkOrderId ? <Suspense fallback={<p role="status">Opening closeout…</p>}><Button variant="outline" onClick={()=>setCloseoutWorkOrderId("")}>Back to SpinLife work orders</Button><CompletionReviewCenter key={closeoutWorkOrderId} initialWorkOrderId={closeoutWorkOrderId}/></Suspense>:!job?<>
       {technician&&onCareer?<Button variant="outline" onClick={onCareer}>My DME Career</Button>:null}
       <p className="text-slate-600">{technician?"Create your own work order or open an assignment. You can change your planned date and save unfinished work.":"Choose the technician, add their pay, and drop or paste the SpinLife order. Details can be added later."}</p>
       {query.isPending?<p role="status">Loading work orders…</p>:null}
@@ -272,6 +484,326 @@ export function SpinLifePortal({userId,technician=false,onOtherWork,onCareer,ini
       {shown.length>visibleCount?<Button variant="outline" onClick={()=>setVisibleCount(n=>n+30)}>Show more work orders</Button>:null}
     </>:<>
       <Button variant="ghost" onClick={()=>void perform("back")} disabled={busy}><ArrowLeft/>Save & back to work orders</Button>
+      {technician ? (
+        <div className="space-y-5">
+          {(() => {
+            const mismatch = checkModelMismatch(
+              job.data.manufacturer,
+              job.data.model,
+              `${job.visit.narrative} ${Object.values(job.visit.checks).map(c => c.note).join(" ")} ${job.data.rawText}`
+            );
+            return mismatch ? (
+              <div role="alert" className="flex items-start gap-3 rounded-xl border-2 border-amber-400 bg-amber-50 p-4 text-amber-950 shadow-xs">
+                <AlertTriangle className="size-5 shrink-0 text-amber-600 mt-0.5" />
+                <div>
+                  <p className="font-bold text-sm">Equipment Model Mismatch Detected</p>
+                  <p className="text-xs mt-1 leading-relaxed text-amber-800">{mismatch.message}</p>
+                </div>
+              </div>
+            ) : null;
+          })()}
+          {/* Top Stage Stepper */}
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-2.5 shadow-xs">
+            <div className="flex items-center gap-1 sm:gap-2">
+              <button
+                type="button"
+                onClick={() => setTechStage("essentials")}
+                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold sm:text-sm transition ${
+                  techStage === "essentials" ? "bg-cyan-700 text-white shadow-xs" : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                <span className="flex size-5 items-center justify-center rounded-full bg-black/10 text-xs">1</span>
+                Essentials
+              </button>
+              <ChevronRight className="size-4 text-slate-300" />
+              <button
+                type="button"
+                onClick={() => setTechStage("steps")}
+                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold sm:text-sm transition ${
+                  techStage === "steps" ? "bg-cyan-700 text-white shadow-xs" : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                <span className="flex size-5 items-center justify-center rounded-full bg-black/10 text-xs">2</span>
+                Follow Next Step
+              </button>
+              <ChevronRight className="size-4 text-slate-300" />
+              <button
+                type="button"
+                onClick={() => setTechStage("review")}
+                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold sm:text-sm transition ${
+                  techStage === "review" ? "bg-cyan-700 text-white shadow-xs" : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                <span className="flex size-5 items-center justify-center rounded-full bg-black/10 text-xs">3</span>
+                Review & Finish
+              </button>
+            </div>
+            <span className="text-xs font-medium text-slate-500 hidden sm:inline">
+              {spinlifeServiceLabels[job.data.serviceType] || "General DME"} · {money(job.technicianPayCents)}
+            </span>
+          </div>
+
+          {/* STAGE 1 & 2: CONFIRM ESSENTIALS */}
+          {techStage === "essentials" && (
+            <fieldset disabled={busy && !savingNotes} aria-busy={busy} className="space-y-5 disabled:opacity-70">
+              <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs">
+                <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-4">
+                  <div>
+                    <span className="inline-block rounded-md bg-cyan-50 px-2.5 py-1 text-xs font-bold text-cyan-800">
+                      {spinlifeServiceLabels[job.data.serviceType] || "General DME Service"}
+                    </span>
+                    <h2 className="mt-2 text-xl font-bold text-slate-900">
+                      Order #{job.data.externalId || "Pending ID"}
+                    </h2>
+                    <p className="font-semibold text-slate-700">{job.data.customerName || "Customer Name"}</p>
+                    {job.data.customerPhone ? <p className="text-sm text-slate-500">{job.data.customerPhone}</p> : null}
+                    {job.data.serviceAddress ? <p className="text-sm text-slate-600">{job.data.serviceAddress}</p> : null}
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs uppercase tracking-wider text-slate-400">Authorized Pay</p>
+                    <p className="text-lg font-bold text-slate-900">{money(job.technicianPayCents)}</p>
+                    {job.startedAt ? (
+                      <p className="mt-1 text-xs text-emerald-600 font-medium">Started {new Date(job.startedAt).toLocaleTimeString()}</p>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className="mt-4 grid gap-4 sm:grid-cols-2 text-sm">
+                  <div className="rounded-lg bg-slate-50 p-3">
+                    <span className="text-xs font-semibold text-slate-500">EQUIPMENT</span>
+                    <p className="font-bold text-slate-800">
+                      {job.data.manufacturer || "Manufacturer"} {job.data.model || "Model"}
+                    </p>
+                    <p className="text-slate-600">{job.data.equipmentType || "DME Unit"}</p>
+                  </div>
+                  {liveServiceConflict ? (
+                    <div className="rounded-lg border border-amber-300 bg-amber-50 p-3">
+                      <span className="flex items-center gap-1.5 text-xs font-bold uppercase text-amber-900">
+                        <AlertTriangle className="size-3.5 text-amber-600" /> Live Condition: Unit Requires Service / Parts
+                      </span>
+                      <p className="mt-1 text-sm font-semibold text-amber-950">{liveServiceConflict}</p>
+                      <p className="mt-1 text-xs text-amber-800">
+                        Supersedes initial intake note: {job.data.customerComplaint || job.data.summary || "None"}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="rounded-lg bg-slate-50 p-3">
+                      <span className="text-xs font-semibold text-slate-500">REPORTED PROBLEM / COMPLAINT</span>
+                      <p className="text-slate-700">{job.data.customerComplaint || job.data.summary || "No specific customer complaint recorded."}</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Missing essentials: Serial Number check */}
+                <div className="mt-4 border-t border-slate-100 pt-4">
+                  <label className="block text-sm font-semibold text-slate-800">
+                    Unit Serial Number {!job.data.serialNumber && <span className="text-red-500 font-normal">* (Confirm from unit label)</span>}
+                    <div className="mt-1 flex items-center gap-2">
+                      <input
+                        className={control}
+                        value={job.data.serialNumber}
+                        onChange={e => data("serialNumber", e.target.value)}
+                        placeholder="Enter serial number or mark N/A"
+                      />
+                      <Button type="button" variant="outline" onClick={() => data("serialNumber", "N/A")}>
+                        N/A
+                      </Button>
+                    </div>
+                  </label>
+                  <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-cyan-50 p-2.5 text-xs text-cyan-900 border border-cyan-100">
+                    <span className="flex items-center gap-1.5 font-medium">
+                      <Sparkles className="size-4 text-cyan-700 shrink-0" />
+                      Auto-extract serial from unit label photo:
+                    </span>
+                    <label className="cursor-pointer font-bold text-cyan-800 underline hover:text-cyan-950">
+                      Upload Label Photo
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          e.target.value = "";
+                          await upload([file], "serial", "Equipment identity label");
+                        }}
+                      />
+                    </label>
+                  </div>
+                  <label className="mt-3 block text-sm font-semibold text-slate-800">
+                    My Planned Date (Optional)
+                    <input
+                      type="date"
+                      className={control}
+                      value={job.scheduledStart || ""}
+                      onChange={e => edit({ ...job, scheduledStart: e.target.value || null })}
+                    />
+                  </label>
+                </div>
+              </div>
+
+              {/* Collapsible Drop or Paste Order */}
+              <details className="rounded-xl border bg-white p-4">
+                <summary className="cursor-pointer font-semibold text-slate-700">Drop or Paste Work Order (AI Extraction)</summary>
+                <div className="mt-3 space-y-3">
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    className="cursor-pointer rounded-xl border-2 border-dashed border-cyan-500 bg-cyan-50 p-5 text-center"
+                    onDragOver={e => e.preventDefault()}
+                    onDrop={e => { e.preventDefault(); if (!busy) void upload(Array.from(e.dataTransfer.files), "client_work_order"); }}
+                    onClick={() => sourceInput.current?.click()}
+                  >
+                    <Upload className="mx-auto mb-2 size-5 text-cyan-700" />
+                    Drop new work order PDF or image here
+                  </div>
+                  <input ref={sourceInput} type="file" multiple accept="application/pdf,image/jpeg,image/png" className="hidden" onChange={e => { const files = Array.from(e.target.files || []); e.target.value = ""; void upload(files, "client_work_order"); }} />
+                  <textarea className={control} rows={3} value={job.data.rawText} onChange={e => data("rawText", e.target.value)} placeholder="Or paste raw work order text here..." />
+                  <Button variant="outline" size="sm" disabled={aiBusy || !job.data.rawText.trim()} onClick={() => void extract([], job.data.rawText, job.id)}>
+                    {aiBusy ? "Reading..." : "Read pasted order with AI"}
+                  </Button>
+                  {aiMessage ? <p className="text-xs text-slate-600">{aiMessage}</p> : null}
+                </div>
+              </details>
+
+              {/* Primary Launch Action */}
+              <div className="pt-2">
+                {!job.startedAt ? (
+                  <Button
+                    size="lg"
+                    className="w-full bg-cyan-700 hover:bg-cyan-800 text-white py-6 text-base font-bold shadow-md"
+                    onClick={async () => {
+                      await perform("start");
+                      setTechStage("steps");
+                    }}
+                  >
+                    <Play className="mr-2 size-5" /> Start Work Order & Proceed to Steps
+                  </Button>
+                ) : (
+                  <Button
+                    size="lg"
+                    className="w-full bg-cyan-700 hover:bg-cyan-800 text-white py-6 text-base font-bold shadow-md"
+                    onClick={() => setTechStage("steps")}
+                  >
+                    Continue Work Order Steps <ChevronRight className="ml-1 size-5" />
+                  </Button>
+                )}
+              </div>
+            </fieldset>
+          )}
+
+          {/* STAGE 3: FOLLOW THE NEXT STEP */}
+          {techStage === "steps" && (
+            <fieldset disabled={busy && !savingNotes} aria-busy={busy} className="space-y-4 disabled:opacity-70">
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700">
+                <span>{job.data.externalId || "Work Order"} · {job.data.manufacturer} {job.data.model}</span>
+                <span className="text-cyan-800">{spinlifeServiceLabels[job.data.serviceType]}</span>
+              </div>
+              {liveServiceConflict ? (
+                <div className="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">
+                  <AlertTriangle className="size-4 shrink-0 text-amber-600" />
+                  <span>Live Condition: Unit Requires Service / Parts ({liveServiceConflict})</span>
+                </div>
+              ) : null}
+
+              {/* Single Step Card */}
+              <DmeGuidedChecks
+                key={job.id}
+                job={job}
+                disabled={busy}
+                allowAttestation={true}
+                onChange={checks => visit("checks", checks)}
+                onSave={async () => { setBusy(true); try { return await save(); } finally { setBusy(false); } }}
+                onPhoto={(incoming, caption) => upload(incoming, "diagnosis", caption)}
+                onComplete={() => setTechStage("review")}
+              />
+
+              {/* Guidance reference accordion */}
+              <details className="rounded-xl border bg-blue-50/40 p-3 text-sm" onToggle={e => setGuidanceOpen(e.currentTarget.open)}>
+                <summary className="cursor-pointer font-semibold text-blue-900">Manufacturer guidance & Copilot (optional)</summary>
+                <Suspense fallback={<p role="status">Opening guidance...</p>}>
+                  {guidanceOpen && job.version > 0 && job.data.serviceType ? (
+                    <AssetAiGuide key={`${job.id}:${job.data.serviceType}:${job.data.manufacturer}:${job.data.model}`} dme workOrderId={job.id} assetId="" recordVersion={job.version} photoCopilotEnabled={true} snapshot={job.visit.manufacturerGuide} answers={job.visit.manufacturerAnswers} disabled={busy || dirty && !job.visit.manufacturerGuide} onChange={(snapshot, answers) => { const current = draftRef.current; if (current) edit({ ...current, visit: { ...current.visit, manufacturerGuide: snapshot, manufacturerAnswers: answers } }); }} />
+                  ) : null}
+                </Suspense>
+              </details>
+
+              <div className="pt-2">
+                <Button variant="outline" className="w-full text-slate-700" onClick={() => setTechStage("review")}>
+                  Proceed to Review & Finish ➜
+                </Button>
+              </div>
+            </fieldset>
+          )}
+
+          {/* STAGE 4: REVIEW & FINISH */}
+          {techStage === "review" && (
+            <fieldset disabled={busy && !savingNotes} aria-busy={busy} className="space-y-5 disabled:opacity-70">
+              {liveServiceConflict ? (
+                <div className="flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3.5 text-xs font-semibold text-amber-950">
+                  <AlertTriangle className="size-4 shrink-0 text-amber-600" />
+                  <span>Observed Condition Note: {liveServiceConflict} (Ensure outcome aligns with physical unit status)</span>
+                </div>
+              ) : null}
+              <div className="rounded-xl border bg-white p-5 space-y-4">
+                <h2 className="text-lg font-bold text-slate-900">1. Final Service Outcome</h2>
+                <p className="text-sm text-slate-600">Select the confirmed outcome to complete this work order.</p>
+                <select className={control} value={job.visit.disposition} onChange={e => visit("disposition", e.target.value)}>
+                  <option value="needs_review">To be confirmed</option>
+                  <option value="delivery_completed">Delivery completed</option>
+                  <option value="returned_to_service">Repair completed / returned to service</option>
+                  <option value="parts_required">Needs parts</option>
+                  <option value="needs_resolution">Needs resolution / follow-up</option>
+                  <option value="out_of_service">Out of service</option>
+                  <option value="incomplete">Incomplete</option>
+                </select>
+              </div>
+
+              <div className="rounded-xl border bg-white p-5 space-y-3">
+                <h2 className="text-lg font-bold text-slate-900">2. Additional Field Notes (Optional)</h2>
+                <textarea className={control} rows={3} value={job.visit.narrative} onChange={e => visit("narrative", e.target.value)} placeholder="Summary notes or dictation..." />
+                <VoiceNote disabled={busy} onText={text => { const current = draftRef.current; if (current) edit({ ...current, visit: { ...current.visit, narrative: [current.visit.narrative, text].filter(Boolean).join("\n") } }); }} />
+              </div>
+
+              <DmeParts parts={job.visit.parts || []} disabled={busy} onChange={parts => visit("parts", parts)} />
+
+              <Suspense fallback={<p role="status">Opening report draft...</p>}>
+                <SpinlifeReportWriter key={job.id} job={job} disabled={busy} onSave={async () => { setBusy(true); try { return await save(); } finally { setBusy(false); } }} onApply={fields => { const current = draftRef.current; if (!current) return; edit({ ...current, visit: { ...current.visit, reportWording: { sourceFingerprint: spinlifeWritingFingerprint(current), reviewedAt: new Date().toISOString(), fields: { ...current.visit.reportWording?.sourceFingerprint === spinlifeWritingFingerprint(current) ? current.visit.reportWording.fields : {}, ...fields } } } }); }} />
+              </Suspense>
+
+              <div className="rounded-xl border bg-white p-5 space-y-4">
+                <h2 className="text-lg font-bold text-slate-900">Photos & Customer Signature</h2>
+                <label className="mt-3 block text-sm font-semibold">Photo purpose<select className={control} value={photoCategory} onChange={e=>setPhotoCategory(e.target.value)}>{[["after","Final condition"],["before","Before service"],["serial","Equipment identity label"],["diagnosis","Diagnostic finding"],["repair","Repair / installed part"],["packaging","Shipping / packaging condition"],["test","Recorded test result"]].map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
+                <label className="mt-3 block text-sm font-semibold">
+                  Add job photos (JPG or PNG)
+                  <input type="file" accept="image/jpeg,image/png" multiple className={control} onChange={e => { const files = Array.from(e.target.files || []); e.target.value = ""; void upload(files, photoCategory); }} />
+                </label>
+                {files.filter(f => ["before", "after", "serial", "diagnosis", "repair", "packaging", "test"].includes(f.category)).map(f => (
+                  <label key={f.id} className="mt-3 block"><a className="text-blue-700 underline" target="_blank" rel="noreferrer" href={`/api/attachments?attachmentId=${encodeURIComponent(f.id)}`}>{f.fileName}</a><input className={control} value={job.visit.photoCaptions[f.id] || ""} placeholder="Photo caption (optional)" onChange={e=>visit("photoCaptions",{...job.visit.photoCaptions,[f.id]:e.target.value})}/></label>
+                ))}
+                <label className="mt-5 block text-sm font-semibold">
+                  Customer Signer's Name
+                  <input className={control} value={job.visit.customerSignatureName} onChange={e => visit("customerSignatureName", e.target.value)} placeholder="Name or N/A" />
+                </label>
+                {job.visit.signatureAttachmentId ? (
+                  <div className="mt-3 flex items-center gap-3">
+                    <p className="text-sm font-medium text-emerald-700">Customer signature recorded.</p>
+                    <Button variant="outline" size="sm" onClick={() => visit("signatureAttachmentId", "")}>Remove</Button>
+                  </div>
+                ) : (
+                  <div className="mt-3"><Signature disabled={busy} onSave={f => upload([f], "signature")} /></div>
+                )}
+              </div>
+
+              <div className="pt-2">
+                <Button size="lg" className="w-full bg-emerald-700 hover:bg-emerald-800 text-white py-6 text-base font-bold shadow-md" disabled={busy} onClick={() => void perform("review")}>
+                  <CheckCircle2 className="mr-2 size-5" /> Submit & Finish Work Order
+                </Button>
+              </div>
+            </fieldset>
+          )}
+        </div>
+      ) : (
       <fieldset disabled={busy&&!savingNotes} aria-busy={busy} className="space-y-5 disabled:opacity-70">
         {canAssign?<div className="rounded-xl border bg-white p-5"><h2 className="mb-3 text-lg font-bold">1. Assign the work order</h2><div className="grid gap-4 sm:grid-cols-2">
           <label>Technician<select className={control} value={job.technicianId || ""} onChange={e=>edit({...job,technicianId:e.target.value || null})}><option value="">Choose now or later</option>{query.data?.technicians.map(t=><option key={t.id} value={t.id}>{t.name} · {t.email}</option>)}</select></label>
@@ -322,6 +854,7 @@ export function SpinLifePortal({userId,technician=false,onOtherWork,onCareer,ini
         </div>
         </details>
       </fieldset>
+      )}
       {canAssign&&job.version>0?<Suspense fallback={<p role="status">Opening closeout controls…</p>}><SpinlifeCloseout id={job.id} sourceVersion={job.version} unsaved={dirty||busy} onPrepared={id=>{try{clearSpinLifeDraft(localStorage,userId,job.id);}catch{/* The immutable saved source remains. */}setJob(null);setFiles([]);setCloseoutWorkOrderId(id);void query.refetch();}}/></Suspense>:null}
       <footer className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-white p-4 shadow-lg"><p className="text-sm text-slate-600" role="status">{busy?"Saving…":dirty&&draftPending?"Protecting latest changes…":dirty&&draftStored?"Unsaved changes protected on this device":dirty?"Unsaved changes":job.version?"Saved":"Draft — save whenever you are ready"}</p><div className="flex flex-wrap gap-2"><Button variant="outline" disabled={busy} onClick={()=>void perform("save")}>{canAssign&&job.technicianId?"Save & assign":"Save for later"}</Button><Button disabled={busy} onClick={()=>void perform("packet")}>Generate service PDF</Button>{technician?<Button disabled={busy} onClick={()=>void perform("review")}>Submit & finish</Button>:null}{job.packetAttachmentId?<Button variant="outline" asChild><a href={`/api/attachments?attachmentId=${encodeURIComponent(job.packetAttachmentId)}`} target="_blank" rel="noreferrer"><Download/>Open PDF{dirty||job.packetSourceVersion!==job.version?" (previous version)":""}</a></Button>:null}</div></footer>
       <p className="text-xs text-slate-500">The PDF includes the digital SpinLife form, TechFlex report and uploaded photos. Blank, N/A and unperformed items remain visible. Original documents remain available above. Billing and partner submission are separate.</p>

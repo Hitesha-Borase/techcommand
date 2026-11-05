@@ -20,6 +20,16 @@ export function ProblemReporter({ module, reporterId, offsetForSidebar = false }
   const [error, setError] = useState("");
   const [receipt, setReceipt] = useState("");
   const [draftStored, setDraftStored] = useState(true);
+  const [isLg, setIsLg] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(min-width: 1024px)");
+    setIsLg(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setIsLg(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
 
   useEffect(() => {
     try {
@@ -57,7 +67,16 @@ export function ProblemReporter({ module, reporterId, offsetForSidebar = false }
   }
 
   return <Dialog open={open} onOpenChange={(value) => { if (value && !problemReportHasContent(draft)) setDraft((current) => ({ ...current, module })); setOpen(value); if (!value) { setError(""); setReceipt(""); } }}>
-    <DialogTrigger asChild><Button variant="outline" size="sm" className={`fixed bottom-4 left-4 z-40 border-blue-200 bg-white/95 shadow-lg ${offsetForSidebar ? "lg:left-[274px]" : ""}`}><Bug /> <span className="hidden sm:inline">Report a problem</span><span className="sm:hidden">Report</span></Button></DialogTrigger>
+    <DialogTrigger asChild>
+      <Button
+        variant="outline"
+        size="sm"
+        style={{ left: (offsetForSidebar && isLg) ? "274px" : "1rem" }}
+        className="fixed bottom-4 z-40 border-blue-200 bg-white/95 shadow-lg"
+      >
+        <Bug /> <span className="hidden sm:inline">Report a problem</span><span className="sm:hidden">Report</span>
+      </Button>
+    </DialogTrigger>
     <DialogContent className="max-h-[calc(100vh-2rem)] overflow-y-auto sm:max-w-2xl">
       <DialogHeader><DialogTitle>Report a portal problem</DialogTitle><DialogDescription>Describe the screen and action. Your draft stays on this device for 24 hours until a save is confirmed.</DialogDescription></DialogHeader>
       {receipt ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900"><strong>Report received.</strong> Receipt {receipt}. An administrator can review it in the Command Center.</div> : <>

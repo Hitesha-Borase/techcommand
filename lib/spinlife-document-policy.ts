@@ -3,6 +3,7 @@
 export type FieldCheck = { key?: string; label: string; complete: boolean; notApplicable?: boolean; reason?: string; result?: string; outcome?: string };
 export const isSpinLife = (account: string) => /spin\s*life/i.test(account);
 export const isDelivery = (service: string) => service.startsWith('wgd') || service === 'bed_delivery';
+export const isPm = (service: string) => service === 'preventive_maintenance' || service === 'pm_service';
 export function packetStatus(disposition: string) {
   if (['passed','returned_to_service','delivery_completed'].includes(disposition)) return 'COMPLETED';
   if (disposition === 'parts_required') return 'NEEDS PART';
@@ -46,8 +47,25 @@ export const spinlifeRepairChecks = [
   ['sl_arm_worn','Arm pads worn (record yes/no)'], ['sl_tires_worn','Tires/casters worn (record yes/no)'],
   ['sl_upholstery_worn','Upholstery worn (record yes/no)'], ['sl_photo','Photos/video documented'],
 ] as const;
+export const spinlifePmChecks = [
+  ['sl_pm_frame', 'Frame, welds & fasteners integrity inspected'],
+  ['sl_pm_battery', 'Battery load test & voltage verified'],
+  ['sl_pm_charger', 'Charger output, plug & charging port inspected'],
+  ['sl_pm_tires', 'Tires, casters & bearings checked for wear and alignment'],
+  ['sl_pm_brakes', 'Electromagnetic brakes & freewheel release verified'],
+  ['sl_pm_motors', 'Drive motors & brushes inspected for noise/heat'],
+  ['sl_pm_joystick', 'Joystick response, centering & keypad checked'],
+  ['sl_pm_seating', 'Seating, positioning belts & latch mechanisms verified'],
+  ['sl_pm_wiring', 'Wiring harness, connectors & cable routing secured'],
+  ['sl_pm_drive_test', 'Operational safety drive test completed'],
+] as const;
 export function partnerChecks(service: string): FieldCheck[] {
-  return [...(isDelivery(service) ? spinlifeDeliveryChecks : spinlifeRepairChecks),
+  const baseChecks = isDelivery(service)
+    ? spinlifeDeliveryChecks
+    : isPm(service)
+    ? spinlifePmChecks
+    : spinlifeRepairChecks;
+  return [...baseChecks,
     ['sl_quote','Vendor parts quote number (or not applicable)'] as const,
     ['sl_return','Returned parts, carrier and tracking (or not applicable)'] as const,
     ['sl_attestation','I attest that this report accurately records the work I performed and the tests and final condition I observed.'] as const,

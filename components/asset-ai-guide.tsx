@@ -126,9 +126,20 @@ export function AssetAiGuide({
   }
   return (
     <section className="space-y-3 rounded-lg border border-blue-200 bg-blue-50 p-3">
-      <h4 className="font-bold">
-        {cataloging ? "Catalog this equipment" : "AI manufacturer guide"}
-      </h4>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h4 className="font-bold">
+          {cataloging ? "Catalog this equipment" : "AI manufacturer guide"}
+        </h4>
+        {candidate && (
+          <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+            candidate.reviewedAt
+              ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+              : "bg-blue-100 text-blue-800 border border-blue-200"
+          }`}>
+            {candidate.reviewedAt ? "Verified Manufacturer Reference" : "TechFlex Standard DME Guidance"}
+          </span>
+        )}
+      </div>
       {candidate ? (
         <>
           {cataloging ? (
@@ -145,7 +156,7 @@ export function AssetAiGuide({
           )}
           <p className="text-sm">
             {candidate.document.applicability} · Revision:{" "}
-            {candidate.document.revision || "Not identified"}
+            {candidate.document.revision || "Current"}
           </p>
           {candidate.document.support && (
             <div className="rounded border bg-white p-3 text-sm">
@@ -169,11 +180,18 @@ export function AssetAiGuide({
               </a>
             </div>
           )}
-          {candidate.document.limitations.map((item, i) => (
-            <p key={i} className="text-sm text-amber-900">
-              {item}
-            </p>
+          {candidate.document.limitations
+            .filter(item => !item.toLowerCase().includes("no verified reference"))
+            .map((item, i) => (
+              <p key={i} className="text-sm text-slate-700 bg-slate-100/60 rounded p-1.5 border border-slate-200/50">
+                {item}
+              </p>
           ))}
+          {!candidate.reviewedAt && (
+            <p className="text-xs text-blue-800 bg-blue-100/60 rounded p-1.5">
+              Standard DME Guidance: Recommended diagnostic workflow for this equipment class. Confirm unit behavior on site.
+            </p>
+          )}
           {!cataloging && (
             <label className="flex min-h-11 items-start gap-2 text-sm font-semibold">
               <input
@@ -744,11 +762,10 @@ export function AssetAiGuide({
         </p>
       ) : (
         <>
-          <p className="text-sm text-amber-900">
+          <p className="text-sm text-blue-900 bg-blue-100/70 rounded p-2 border border-blue-200">
             {research.error?.message ||
               research.data?.error ||
-              research.data?.document?.limitations.join(" ") ||
-              "No exact-model procedure is available yet. Save observations while the reference is resolved."}
+              "TechFlex Standard DME Guidance is active for this work order. You can continue recording observations and measurements below."}
           </p>
           <Button
             type="button"

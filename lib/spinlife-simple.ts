@@ -6,7 +6,7 @@ import {dmeFamilies} from "./academy-catalog";
 const text = (max = 5000) => z.string().max(max).default("");
 export const spinlifeDataSchema = z.object({
   externalId: text(120), rawText: text(30000), summary: text(500),
-  serviceType: z.enum(["", "wgd_basic", "wgd_complex", "bed_delivery", "repair_single", "repair_multi", "frame_repair", "evaluation", "hourly_service", "consumer_install"]).default(""),
+  serviceType: z.enum(["", "wgd_basic", "wgd_complex", "bed_delivery", "repair_single", "repair_multi", "frame_repair", "evaluation", "hourly_service", "consumer_install", "preventive_maintenance"]).default(""),
   customerName: text(240), customerPhone: text(80), serviceAddress: text(1000),
   equipmentType: text(240), manufacturer: text(160), model: text(160), serialNumber: text(160),
   dmeFamilyId:text(80).refine(v=>!v||dmeFamilies.some(f=>f.id===v),"Choose a listed DME equipment family, or leave it unclassified."),
@@ -50,7 +50,32 @@ export function simpleChecks(data: SpinLifeData, visit: SpinLifeVisit): FieldChe
   // Unknown job type must not silently select repair instructions.
   const standard = data.serviceType ? partnerChecks(data.serviceType) : [];
   const extras = [...new Set(data.extraChecks.split("\n").map(s => s.trim()).filter(Boolean))].slice(0,50);
-  return [...standard, ...extras.map(label => ({ key: `extra:${label}`, label, complete: false }))].map(item => {
+  const allChecks = [...standard, ...extras.map(label => ({ key: `extra:${label}`, label, complete: false }))];
+
+  // Dynamic complaint-based step prioritization for repair/diagnostic orders
+  const complaint = `${data.customerComplaint || ""} ${data.summary || ""}`.toLowerCase();
+  if (complaint.trim() && !data.serviceType.startsWith("wgd") && data.serviceType !== "bed_delivery" && data.serviceType !== "preventive_maintenance") {
+    const isBatteryIssue = /battery|power|charg|dead|voltage|won'?t turn on/.test(complaint);
+    const isMotorIssue = /motor|drive|stuck|slow|speed|brake|jerky|controller/.test(complaint);
+    const isJoystickIssue = /joystick|pendant|error code|code|flash/.test(complaint);
+    const isTireIssue = /tire|caster|wheel|flat|bearing|wobble/.test(complaint);
+    const isSeatingIssue = /seat|recline|tilt|arm\s*pad|cushion|upholstery/.test(complaint);
+
+    allChecks.sort((a, b) => {
+      const score = (check: FieldCheck) => {
+        const k = check.key || "";
+        if (isBatteryIssue && (k.includes("battery") || k.includes("charging"))) return -3;
+        if (isJoystickIssue && (k.includes("joystick") || k.includes("codes") || k.includes("pendant"))) return -3;
+        if (isMotorIssue && (k.includes("motor") || k.includes("ohms") || k.includes("joystick"))) return -2;
+        if (isTireIssue && (k.includes("tires") || k.includes("frame") || k.includes("hardware"))) return -2;
+        if (isSeatingIssue && (k.includes("arm") || k.includes("upholstery") || k.includes("comfort"))) return -2;
+        return 0;
+      };
+      return score(a) - score(b);
+    });
+  }
+
+  return allChecks.map(item => {
     const saved = visit.checks[item.key!];
     return { ...item, complete: saved?.state === "done", notApplicable: saved?.state === "na",
       reason: saved?.note || "", result: saved?.note || "", outcome: saved?.state || "pending" };
@@ -60,4 +85,5 @@ export const spinlifeServiceLabels: Record<SpinLifeData["serviceType"], string> 
   "": "Choose later", wgd_basic: "White-glove delivery", wgd_complex: "White-glove delivery — complex",
   bed_delivery: "Bed delivery", repair_single: "Repair", repair_multi: "Repair — multiple parts",
   frame_repair: "Frame repair", evaluation: "Evaluation", hourly_service: "Hourly service", consumer_install: "Installation",
+  preventive_maintenance: "Preventive maintenance (PM)",
 };

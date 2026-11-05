@@ -46,7 +46,19 @@ export async function POST(request:Request) {
     if((current?.version || 0)!==input.expectedVersion) throw new PortalHttpError(409,"This work order changed. Your entries are still on screen; reload the saved copy before trying again.");
     if(current && input.expectedIntakeVersion!==undefined && current.intakeVersion!==input.expectedIntakeVersion) throw new PortalHttpError(409,"The saved intake changed. Refresh the saved copy and keep your edits before trying again.");
     if(identity.role==="technician" && (input.technicianId!==undefined || input.technicianPayCents!==undefined)) throw new PortalHttpError(403,"Only an administrator can change assignment or technician pay.");
-    const technicianId=identity.role==="technician" ? current?.technicianId || identity.technicianId : input.technicianId===undefined ? current?.technicianId || null : input.technicianId;
+    let technicianId=identity.role==="technician" ? current?.technicianId || identity.technicianId : input.technicianId===undefined ? current?.technicianId || null : input.technicianId;
+    if(input.action==="start" && !technicianId) {
+      if(identity.technicianId) {
+        technicianId = identity.technicianId;
+      } else {
+        const activeTech=await env.DB.prepare(`SELECT t.id FROM technicians t JOIN users u ON u.id=t.user_id AND u.status='active'
+          WHERE t.organization_id=? AND t.status='active' AND EXISTS (
+            SELECT 1 FROM memberships m JOIN roles r ON r.id=m.role_id AND r.organization_id=m.organization_id
+            WHERE m.user_id=t.user_id AND m.organization_id=t.organization_id AND m.status='active' AND r.name='technician')
+          LIMIT 1`).bind(TECHFLEX_ORG_ID).first<{id:string}>();
+        if(activeTech) technicianId = activeTech.id;
+      }
+    }
     const technicianPayCents=input.technicianPayCents===undefined ? current?.technicianPayCents ?? null : input.technicianPayCents;
     if(technicianId) {
       const valid=await env.DB.prepare(`SELECT t.id,t.service_disciplines_json AS disciplines FROM technicians t JOIN users u ON u.id=t.user_id AND u.status='active'

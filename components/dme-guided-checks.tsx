@@ -7,15 +7,15 @@ import {VoiceNote} from "@/components/voice-note";
 import {dmeFieldProgress,dmeRecordedActivity} from "@/lib/dme-guided-service";
 import type {SpinLifeJob,SpinLifeVisit} from "@/lib/spinlife-simple";
 
-export function DmeGuidedChecks({job,disabled,allowAttestation,onChange,onSave,onPhoto}:{job:SpinLifeJob;disabled:boolean;allowAttestation:boolean;onChange:(checks:SpinLifeVisit["checks"])=>void;onSave:()=>Promise<unknown>;onPhoto:(files:File[],caption:string)=>Promise<void>}){
+export function DmeGuidedChecks({job,disabled,allowAttestation,onChange,onSave,onPhoto,onComplete}:{job:SpinLifeJob;disabled:boolean;allowAttestation:boolean;onChange:(checks:SpinLifeVisit["checks"])=>void;onSave:()=>Promise<unknown>;onPhoto:(files:File[],caption:string)=>Promise<void>;onComplete?:()=>void}){
  const progress=dmeFieldProgress(job,allowAttestation);
  const [index,setIndex]=useState(()=>Math.max(0,progress.checks.findIndex(c=>!c.complete&&!c.notApplicable)));
- const [overview,setOverview]=useState(false),[started,setStarted]=useState(false),[saving,setSaving]=useState(false),[error,setError]=useState("");
+ const [overview,setOverview]=useState(false),[started,setStarted]=useState(()=>Boolean(job.startedAt)),[saving,setSaving]=useState(false),[error,setError]=useState("");
  const step=progress.checks[Math.min(index,Math.max(0,progress.total-1))];
  if(!step)return <p className="rounded-lg bg-amber-50 p-3">Choose a job type when known. Your incomplete work can still be saved.</p>;
  const key=step.key!,value=job.visit.checks[key]||{state:"pending" as const,note:""};
  function update(change:Partial<typeof value>){onChange({...job.visit.checks,[key]:{...value,...change}});}
- async function next(){setSaving(true);setError("");try{await onSave();if(index<progress.total-1)setIndex(index+1);else document.getElementById("dme-report-review")?.scrollIntoView({behavior:"smooth",block:"start"});}catch(e){setError((e as Error).message);}finally{setSaving(false);}}
+ async function next(){setSaving(true);setError("");try{await onSave();if(index<progress.total-1)setIndex(index+1);else{onComplete?.();document.getElementById("dme-report-review")?.scrollIntoView({behavior:"smooth",block:"start"});}}catch(e){setError((e as Error).message);}finally{setSaving(false);}}
  return <section className="mt-5 space-y-4 rounded-xl border border-cyan-200 bg-cyan-50/40 p-4" aria-busy={saving}>
   <div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-bold">Guided service · partner checks</h3><p className="text-sm">{progress.documented} of {progress.total} checks recorded · {progress.remaining.length} still need attention</p></div><Button type="button" variant="outline" onClick={()=>setOverview(!overview)}>{overview?"One step at a time":"View all checks"}</Button></div>
   <Progress value={progress.percent} aria-label="Recorded partner checks"/>

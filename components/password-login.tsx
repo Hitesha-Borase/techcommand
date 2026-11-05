@@ -308,16 +308,16 @@ export function PortalLoginControls({ passwordLogin }: { passwordLogin: boolean 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   return (
-    <div className="flex min-h-11 flex-wrap items-center justify-end gap-3 border-b bg-white px-4 py-1 text-sm">
+    <div className="flex min-h-9 items-center justify-end gap-3 border-b border-slate-200/60 bg-white/90 px-4 py-0.5 text-xs text-slate-600 lg:pl-[274px]">
       {passwordLogin ? (
-        <a className="inline-flex min-h-10 items-center font-medium text-blue-700" href="/login?change=1">
+        <a className="inline-flex h-7 items-center font-medium text-blue-700 hover:underline" href="/login?change=1">
           Change password
         </a>
       ) : null}
       <Button
         variant="ghost"
         size="sm"
-        className="min-h-10"
+        className="h-7 px-2 text-xs text-slate-600 hover:text-slate-900"
         disabled={busy}
         onClick={async () => {
           setBusy(true);

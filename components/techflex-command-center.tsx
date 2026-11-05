@@ -722,8 +722,8 @@ export function TechFlexCommandCenter({
                 <Sidebar active={active} onSelect={selectModule} allowedModules={allowedModules} />
               </SheetContent>
             </Sheet>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
+            <div className="shrink-0 min-w-[150px] sm:min-w-[180px]">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
                 <span className="font-bold text-cyan-700">
                   {PLATFORM_BRAND.name}
                 </span>
@@ -732,12 +732,12 @@ export function TechFlexCommandCenter({
                   {moduleNames[active]}
                 </span>
               </div>
-              <h1 className="mt-0.5 truncate text-lg font-bold tracking-tight text-slate-900 sm:text-xl">
+              <h1 className="mt-0.5 whitespace-nowrap text-lg font-bold tracking-tight text-slate-900 sm:text-xl">
                 {moduleNames[active]}
               </h1>
             </div>
-            <div className="hidden w-full max-w-[310px] items-center rounded-xl border border-slate-200/90 bg-slate-50/80 px-3 shadow-inner md:flex">
-              <Search className="size-4 text-slate-400" />
+            <div className="hidden min-w-[120px] max-w-[240px] xl:max-w-[310px] flex-1 items-center rounded-xl border border-slate-200/90 bg-slate-50/80 px-3 shadow-inner md:flex">
+              <Search className="size-4 shrink-0 text-slate-400" />
               <input
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
@@ -745,66 +745,73 @@ export function TechFlexCommandCenter({
                 placeholder="Search command center…"
                 aria-label="Search portal"
               />
-              <span className="rounded border bg-white px-1.5 py-0.5 text-[10px] font-semibold text-slate-400">
+              <span className="shrink-0 rounded border bg-white px-1.5 py-0.5 text-[10px] font-semibold text-slate-400">
                 Filter
               </span>
             </div>
-            <Button
-              variant="outline"
-              size="icon"
-              aria-label="Notifications"
-              onClick={() => selectModule("automations")}
-            >
-              <Bell />
-            </Button>
-            <BidIntelligenceWorkspace
-              actorUserId={identity.userId}
-              onImportAssets={() => {setIntakeImportType("assets"); selectModule("imports");}}
-              onPricing={actualRole === "owner_administrator" || actualRole === "finance" ? () => {setFinanceStartTab("pricing"); selectModule("finance");} : undefined}
-              trigger={
-                <Button className="hidden bg-gradient-to-r from-[#1467e8] to-[#1598bb] shadow-md shadow-blue-900/10 hover:from-[#0f5fdc] hover:to-[#1187a8] sm:inline-flex">
-                  <Calculator /> Other job types
-                </Button>
-              }
-            />
-            {allowedModules.has("spinlife")?<Button onClick={()=>selectModule("spinlife")} className="hidden sm:inline-flex">SpinLife work orders</Button>:null}
-            {actualRole === "owner_administrator" ? (
-              <Select
-                value={experience}
-                onValueChange={(value) => {
-                  captureOperationalEvent("portal_experience_changed", {
-                    role: actualRole,
-                    experience: value,
-                  });
-                  setExperience(value as "admin" | "technician");
-                }}
+            <div className="flex shrink-0 items-center gap-2">
+              <Button
+                variant="outline"
+                size="icon"
+                className="size-9 shrink-0"
+                aria-label="Notifications"
+                onClick={() => selectModule("automations")}
               >
-                <SelectTrigger
-                  className="hidden w-[155px] bg-white lg:flex"
-                  aria-label="Change portal experience"
+                <Bell className="size-4" />
+              </Button>
+              <BidIntelligenceWorkspace
+                actorUserId={identity.userId}
+                onImportAssets={() => {setIntakeImportType("assets"); selectModule("imports");}}
+                onPricing={actualRole === "owner_administrator" || actualRole === "finance" ? () => {setFinanceStartTab("pricing"); selectModule("finance");} : undefined}
+                trigger={
+                  <Button className="hidden h-9 px-3 text-xs sm:text-sm bg-gradient-to-r from-[#1467e8] to-[#1598bb] shadow-sm hover:from-[#0f5fdc] hover:to-[#1187a8] sm:inline-flex shrink-0">
+                    <Calculator className="mr-1.5 size-3.5" /> Other job types
+                  </Button>
+                }
+              />
+              {allowedModules.has("spinlife") ? (
+                <Button onClick={() => selectModule("spinlife")} className="hidden h-9 px-3 text-xs sm:text-sm sm:inline-flex shrink-0">
+                  SpinLife work orders
+                </Button>
+              ) : null}
+              {actualRole === "owner_administrator" ? (
+                <Select
+                  value={experience}
+                  onValueChange={(value) => {
+                    captureOperationalEvent("portal_experience_changed", {
+                      role: actualRole,
+                      experience: value,
+                    });
+                    setExperience(value as "admin" | "technician");
+                  }}
                 >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="admin">Admin experience</SelectItem>
-                  <SelectItem value="technician">Technician preview</SelectItem>
-                </SelectContent>
-              </Select>
-            ) : null}
-            <div className="hidden items-center gap-2 border-l pl-3 xl:flex">
-              <span className="grid size-9 place-items-center rounded-full bg-gradient-to-br from-[#0a243d] to-[#1467e8] text-xs font-bold text-white shadow-md shadow-blue-900/15 ring-2 ring-cyan-100">
-                {initials}
-              </span>
-              <div className="max-w-[160px]">
-                <p className="truncate text-sm font-bold text-slate-800">
-                  {displayName}
-                </p>
-                <p
-                  className="truncate text-[11px] text-slate-500"
-                  title={email}
-                >
-                  {roleLabel}
-                </p>
+                  <SelectTrigger
+                    className="hidden h-9 w-[160px] bg-white text-xs sm:text-sm lg:flex shrink-0"
+                    aria-label="Change portal experience"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="admin">Admin experience</SelectItem>
+                    <SelectItem value="technician">Technician preview</SelectItem>
+                  </SelectContent>
+                </Select>
+              ) : null}
+              <div className="hidden items-center gap-2 border-l pl-3 xl:flex shrink-0">
+                <span className="grid size-8 place-items-center rounded-full bg-gradient-to-br from-[#0a243d] to-[#1467e8] text-xs font-bold text-white shadow-xs ring-1 ring-cyan-200">
+                  {initials}
+                </span>
+                <div className="max-w-[140px]">
+                  <p className="truncate text-xs font-bold text-slate-800">
+                    {displayName}
+                  </p>
+                  <p
+                    className="truncate text-[10px] text-slate-500"
+                    title={email}
+                  >
+                    {roleLabel}
+                  </p>
+                </div>
               </div>
             </div>
           </div>
@@ -829,7 +836,7 @@ export function TechFlexCommandCenter({
             {allowedModules.has("spinlife")?<Button size="sm" onClick={()=>selectModule("spinlife")}>SpinLife</Button>:null}
           </div>
         </header>
-        <main className="px-4 py-5 sm:px-6 xl:px-8 xl:py-7">
+        <main className="px-4 py-5 pb-24 sm:px-6 sm:pb-28 xl:px-8 xl:py-7 xl:pb-28">
           <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.13em] text-cyan-700">
