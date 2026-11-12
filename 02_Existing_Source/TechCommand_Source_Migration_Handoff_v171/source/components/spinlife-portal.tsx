@@ -93,7 +93,7 @@ export function SpinLifePortal({userId,technician=false,onOtherWork,onCareer,ini
     if (remaining.length > 0) {
       items.push(`${remaining.length} partner check(s) not completed (${remaining.map(r => r.label).slice(0, 3).join(", ")}${remaining.length > 3 ? "..." : ""})`);
     }
-    const pendingParts = (completedJob.visit.parts || []).filter(p => p.state === "needed" || p.state === "ordered");
+    const pendingParts = (completedJob.visit.parts || []).filter(p => (p.state as string) === "needed" || p.state === "recommended" || p.state === "ordered");
     if (pendingParts.length > 0) {
       items.push(`${pendingParts.length} part(s) flagged as needed/ordered: ${pendingParts.map(p => p.description || p.partNumber || "Part").join(", ")}`);
     }

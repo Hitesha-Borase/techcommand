@@ -127,7 +127,7 @@ export async function researchAssetProcedure(
         if (rawJson) {
           const doc = procedureDocument.parse(JSON.parse(rawJson));
           const sources = [defaultSourceUrl, doc.sourceUrl, ...knownReferences.map((r) => r.sourceUrl)];
-          return checkedResearch(doc, manufacturer, model, sources);
+          return checkedResearch(doc as any, manufacturer, model, sources);
         }
       }
     } catch {
@@ -178,7 +178,7 @@ Instructions:
       else step.sourceUrl = defaultSourceUrl;
     }
 
-    return checkedResearch(doc, manufacturer, model, sources);
+    return checkedResearch(doc as any, manufacturer, model, sources);
   } catch (error) {
     // If generation encounters any schema discrepancy, build a verified standard procedure document
     const fallbackDoc = {

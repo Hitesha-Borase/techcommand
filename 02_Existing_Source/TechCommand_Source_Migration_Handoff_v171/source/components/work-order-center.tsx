@@ -1497,7 +1497,7 @@ export function WorkOrderCenter({ initialAssetId, onAssetLoaded, initialTarget, 
                         <SelectItem key={customer.id} value={customer.id}>
                           {customer.name}
                           {customer.phone ? ` · ${customer.phone}` : ""}
-                          {!form.accountId && customer.accountName ? ` (${customer.accountName})` : ""}
+                          {!form.accountId && (customer as unknown as { accountName?: string }).accountName ? ` (${(customer as unknown as { accountName?: string }).accountName})` : ""}
                         </SelectItem>
                       ))}
                     </SelectContent>

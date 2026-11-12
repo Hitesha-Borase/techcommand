@@ -29,7 +29,7 @@ export async function POST(request:Request) {
   if(!claim.meta.changes)return Response.json({status:"researching"},{headers});
   try {
    const refs=await env.DB.prepare(`SELECT title,source_url AS sourceUrl,diagnostic_steps_json AS steps FROM equipment_knowledge_articles WHERE organization_id=? AND status='active' AND lower(trim(manufacturer))=lower(?) AND lower(trim(model_pattern))=lower(?) AND source_verified_on IS NOT NULL AND source_url LIKE 'https://%' ORDER BY updated_at DESC LIMIT 5`).bind(TECHFLEX_ORG_ID,asset.manufacturer.trim(),asset.model.trim()).all<{title:string;sourceUrl:string;steps:string}>();
-   const document=await researchAssetProcedure(runtime.OPENAI_API_KEY,asset.manufacturer.trim(),asset.model.trim(),asset.serviceType,refs.results);
+   const document=await researchAssetProcedure(runtime.OPENAI_API_KEY || aiKey || "",asset.manufacturer.trim(),asset.model.trim(),asset.serviceType,refs.results);
    const status=document.steps.length?"candidate":"missing",updatedAt=new Date().toISOString();
    const saved=await env.DB.prepare("UPDATE asset_procedure_research SET status=?,document_json=?,expires_at=?,updated_at=? WHERE cache_key=? AND generation_id=?").bind(status,JSON.stringify(document),new Date(Date.now()+(document.steps.length?30:1)*86400000).toISOString(),updatedAt,cacheKey,id).run();
    if(!saved.meta.changes)return Response.json({status:"researching"},{headers});

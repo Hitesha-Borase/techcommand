@@ -42,7 +42,7 @@ export async function POST(request: Request) {
     // Calculate billing amounts based on account rules (never duplicate charges)
     const subtotalCents = job.technicianPayCents && job.technicianPayCents > 0
       ? job.technicianPayCents
-      : (data.serviceType === "biomed_pm_a" ? 17500 : 12500);
+      : ((data.serviceType as string) === "biomed_pm_a" ? 17500 : 12500);
     const taxCents = 0;
     const totalCents = subtotalCents;
 
@@ -109,7 +109,7 @@ export async function POST(request: Request) {
       try {
         await SupabaseBucket.delete(stagedKey);
       } catch (cleanup) {
-        safeServerLog("invoice_cleanup", cleanup);
+        safeServerLog("completion_cleanup", cleanup);
       }
     }
     const response = apiError(error);
