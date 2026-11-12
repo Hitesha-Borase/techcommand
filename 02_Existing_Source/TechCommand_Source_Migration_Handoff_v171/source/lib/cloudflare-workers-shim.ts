@@ -14,7 +14,13 @@ function getSqliteDb(): DatabaseSync {
 }
 
 class D1PreparedStatementSync {
-  constructor(private sql: string, private params: any[] = []) {}
+  private sql: string;
+  private params: any[];
+
+  constructor(sql: string, params: any[] = []) {
+    this.sql = sql;
+    this.params = params;
+  }
 
   bind(...params: any[]) {
     return new D1PreparedStatementSync(this.sql, params);
