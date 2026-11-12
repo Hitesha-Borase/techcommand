@@ -220,15 +220,15 @@ export function ManualIntakeInbox({
         ) : null}
         {intakes.length ? (
           <div className="overflow-x-auto">
-            <Table>
+            <Table className="min-w-[840px]">
               <TableHeader>
                 <TableRow className="bg-slate-50">
-                  <TableHead className="pl-5">WORK ORDER</TableHead>
-                  <TableHead>NOTICE / SOURCE</TableHead>
-                  <TableHead>COMPLETENESS</TableHead>
-                  <TableHead>NEXT REQUIRED DATA</TableHead>
-                  <TableHead>DEADLINE</TableHead>
-                  <TableHead className="pr-5 text-right">ACTION</TableHead>
+                  <TableHead className="pl-5 min-w-[130px]">WORK ORDER</TableHead>
+                  <TableHead className="min-w-[140px]">NOTICE / SOURCE</TableHead>
+                  <TableHead className="min-w-[140px]">COMPLETENESS</TableHead>
+                  <TableHead className="min-w-[240px] max-w-[320px]">NEXT REQUIRED DATA</TableHead>
+                  <TableHead className="min-w-[150px]">DEADLINE</TableHead>
+                  <TableHead className="pr-5 text-right min-w-[130px]">ACTION</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -239,7 +239,7 @@ export function ManualIntakeInbox({
                   );
                   return (
                     <TableRow key={record.id}>
-                      <TableCell className="pl-5 align-top">
+                      <TableCell className="pl-5 align-top whitespace-normal">
                         <p className="font-mono text-xs font-bold text-slate-900">
                           {record.externalId || "Number missing"}
                         </p>
@@ -256,7 +256,7 @@ export function ManualIntakeInbox({
                           {record.status.replaceAll("_", " ")}
                         </Badge>
                       </TableCell>
-                      <TableCell className="align-top">
+                      <TableCell className="align-top whitespace-normal">
                         <p className="text-sm font-semibold text-slate-800">
                           {noticeLabels[record.noticeType] || record.noticeType}
                         </p>
@@ -274,7 +274,7 @@ export function ManualIntakeInbox({
                           ) : null}
                         </div>
                       </TableCell>
-                      <TableCell className="min-w-40 align-top">
+                      <TableCell className="min-w-40 align-top whitespace-normal">
                         {record.editor==="spinlife"?<p className="text-sm font-semibold text-blue-700">SpinLife saved record</p>:<>
                         <div className="flex items-center justify-between gap-2 text-xs">
                           <span className="font-semibold text-slate-600">
@@ -290,8 +290,8 @@ export function ManualIntakeInbox({
                         />
                         </>}
                       </TableCell>
-                      <TableCell className="max-w-80 align-top">
-                        {record.editor==="spinlife"?<p className="text-sm text-slate-600">Add known details in the SpinLife editor. Missing details do not block saving; completion and billing stay separate.</p>:blockers.length ? (
+                      <TableCell className="min-w-[240px] max-w-[320px] align-top whitespace-normal">
+                        {record.editor==="spinlife"?<p className="text-xs leading-relaxed text-slate-600">Add known details in the SpinLife editor. Missing details do not block saving; completion and billing stay separate.</p>:blockers.length ? (
                           <div className="flex flex-wrap gap-1.5">
                             {blockers.slice(0, 4).map((item) => (
                               <span
@@ -315,13 +315,13 @@ export function ManualIntakeInbox({
                           </span>
                         )}
                       </TableCell>
-                      <TableCell className="align-top">
+                      <TableCell className="align-top whitespace-normal">
                         <span className="inline-flex items-start gap-1.5 text-xs text-slate-600">
                           <CalendarClock className="mt-0.5 size-3.5 shrink-0" />
                           {dateTime(record.responseDueAt)}
                         </span>
                       </TableCell>
-                      <TableCell className="pr-5 align-top">
+                      <TableCell className="pr-5 align-top whitespace-nowrap">
                         <div className="flex justify-end gap-2">
                           <Button size="sm" onClick={() => onResume(record)}>
                             {record.editor==="spinlife" ? "Open / update" : record.status === "ready_for_pricing"

@@ -345,7 +345,7 @@ export function SpinLifePortal({userId,technician=false,onOtherWork,onCareer,ini
   }
   const orders=query.data?.jobs || [];
   const shown=orders.filter(j=>(!reviewOnly||["spinlife_review","spinlife_completed"].includes(j.status))&&(showClosed || jobStatus(j)!=="PDF ready"));
-  return <section className="mx-auto max-w-5xl space-y-5 px-4 py-6 sm:px-6">
+  return <section className="mx-auto w-full min-w-0 max-w-5xl space-y-5 px-3 sm:px-6 py-6">
     <header className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-widest text-cyan-700">TechCommand OS · TechFlex</p><h1 className="mt-1 text-2xl font-bold text-slate-900">{technician?"My SpinLife work orders":"SpinLife work portal"}</h1></div>
       {!job&&!completedJob&&!closeoutWorkOrderId&&(canAssign||technician)?<Button disabled={busy} onClick={()=>{setCompletedJob(null);void open(newJob());}}><Plus/>{technician?"New work order":"Assign a work order"}</Button>:null}
       {!job&&!completedJob&&onOtherWork?<Button variant="outline" onClick={onOtherWork}>Other assignments, routes & profile</Button>:null}</header>

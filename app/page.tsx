@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import { TechFlexCommandCenter } from "@/components/techflex-command-center";
 import { PasswordLogin, PortalLoginControls } from "@/components/password-login";
-import { passwordAuthConfigured, requestCookie, PASSWORD_COOKIE, METHOD_COOKIE } from "@/lib/password-auth";
+import { requestCookie, PASSWORD_COOKIE, METHOD_COOKIE } from "@/lib/password-auth";
 import { AppResilience } from "@/components/app-resilience";
 import { SessionRecovery } from "@/components/session-recovery";
 import { PortalStartup } from "@/components/portal-error-boundary";
@@ -31,7 +31,7 @@ export default async function Home() {
   const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
   let fullName: string | null = demoAccount ? demoAccount.displayName : null;
   if (!fullName && encodedFullName && requestHeaders.get("oai-authenticated-user-full-name-encoding") === "percent-encoded-utf-8") {
-    try { fullName = decodeURIComponent(encodedFullName); } catch { /* Use the email-derived display name if a header is malformed. */ }
+    try { fullName = decodeURIComponent(encodedFullName); } catch { /* Use email-derived name */ }
   }
   const todayLabel = new Intl.DateTimeFormat("en-US", {
     weekday: "long",

@@ -417,25 +417,25 @@ export function ControlTower({
     : 0;
 
   return (
-    <div className="space-y-5">
-      <section className="flex flex-wrap items-center justify-between gap-4 overflow-hidden rounded-2xl border border-cyan-300/20 bg-[radial-gradient(circle_at_85%_0%,rgba(52,211,235,.2),transparent_22rem),linear-gradient(110deg,#071827,#0a2b47_55%,#0b5165)] p-5 text-white shadow-xl shadow-slate-900/10">
-        <div>
+    <div className="space-y-5 w-full max-w-full min-w-0">
+      <section className="flex flex-col md:flex-row md:items-center justify-between gap-3 overflow-hidden rounded-2xl border border-cyan-300/20 bg-[radial-gradient(circle_at_85%_0%,rgba(52,211,235,.2),transparent_22rem),linear-gradient(110deg,#071827,#0a2b47_55%,#0b5165)] p-4 sm:p-5 text-white shadow-xl shadow-slate-900/10">
+        <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-cyan-200">
-            <DatabaseZap className="size-4" /> Live operational control
+            <DatabaseZap className="size-4 shrink-0" /> Live operational control
           </div>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-100/85">
+          <p className="mt-1.5 max-w-2xl text-xs sm:text-sm leading-5 sm:leading-6 text-slate-100/85">
             Every number below comes from saved TechFlex records. Empty means
             nothing has been entered—not that the system made up a prettier answer.
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="text-right text-xs text-cyan-100/70">
+        <div className="flex items-center gap-2.5 sm:gap-3 shrink-0 self-end md:self-auto">
+          <div className="text-right text-[11px] sm:text-xs text-cyan-100/70 leading-tight">
             <p>Business date {data.businessDate}</p>
-            <p>Refreshes every 60 seconds</p>
+            <p className="mt-0.5">Refreshes every 60 seconds</p>
           </div>
           <Button
             size="sm"
-            className="bg-white text-slate-950 hover:bg-blue-50"
+            className="bg-white text-slate-950 hover:bg-blue-50 shrink-0 h-8"
             disabled={query.isFetching}
             onClick={() => query.refetch()}
           >

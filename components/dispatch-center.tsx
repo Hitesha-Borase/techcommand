@@ -216,23 +216,12 @@ function routeUrl(stops: ScheduledJob[]) {
   const addresses = stops.map((stop) => stop.address).filter(Boolean);
   if (!addresses.length) return null;
   const destination = addresses.at(-1)!;
-  const waypoints = addresses.slice(0, -1).slice(0, 8);
-  const query = new URLSearchParams({
-    api: "1",
-    destination,
-    travelmode: "driving",
-  });
-  if (waypoints.length) query.set("waypoints", waypoints.join("|"));
-  return `https://www.google.com/maps/dir/?${query.toString()}`;
+  const origin = addresses[0];
+  return `https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=${encodeURIComponent(origin)}%3B${encodeURIComponent(destination)}`;
 }
 
 function destinationUrl(address: string) {
-  const query = new URLSearchParams({
-    api: "1",
-    destination: address,
-    travelmode: "driving",
-  });
-  return `https://www.google.com/maps/dir/?${query.toString()}`;
+  return `https://www.openstreetmap.org/search?query=${encodeURIComponent(address)}`;
 }
 
 function travelLabel(job: ScheduledJob) {
@@ -808,8 +797,7 @@ export function DispatchCenter({ mode }: { mode: "schedule" | "routes" }) {
                   {activeRoute?.technicianName || "Daily route"}
                 </h2>
                 <p className="mt-1 text-xs text-slate-500">
-                  Use the arrows to preserve the exact field sequence. Google
-                  Maps supplies live road navigation when opened.
+                  Use the arrows to preserve the exact field sequence. OpenStreetMap supplies live interactive routing and waypoint tracking.
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">

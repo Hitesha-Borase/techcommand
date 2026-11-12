@@ -308,7 +308,7 @@ export function PortalLoginControls({ passwordLogin }: { passwordLogin: boolean 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   return (
-    <div className="flex min-h-9 items-center justify-end gap-3 border-b border-slate-200/60 bg-white/90 px-4 py-0.5 text-xs text-slate-600 lg:pl-[274px]">
+    <div className="flex min-h-8 items-center justify-end gap-3 border-b border-slate-200/60 bg-white/90 px-3 sm:px-4 xl:px-6 py-0.5 text-xs text-slate-600 lg:pl-[210px] xl:pl-[235px] 2xl:pl-[258px]">
       {passwordLogin ? (
         <a className="inline-flex h-7 items-center font-medium text-blue-700 hover:underline" href="/login?change=1">
           Change password

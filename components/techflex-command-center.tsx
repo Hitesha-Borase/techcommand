@@ -58,6 +58,7 @@ const ControlTower = lazy(() => import("@/components/control-tower").then(m => (
 import { OperationsCopilot } from "@/components/operations-copilot";
 import { PLATFORM_TOUR_STEPS, PlatformTourGuide } from "@/components/platform-tour-guide";
 import { PLATFORM_BRAND } from "@/lib/platform-brand";
+import { getDashboardFromRole, getRoutePath, resolveRoute, type DashboardKey, type ModuleKey } from "@/lib/portal-routes";
 import { captureOperationalEvent, identifyPortalUser } from "@/lib/analytics-client";
 import { portalFetch, portalJson } from "@/lib/portal-fetch";
 import { ProblemReporter } from "@/components/problem-reporter";
@@ -192,36 +193,6 @@ const DemoCenter = lazy(() =>
     default: module.DemoCenter,
   })),
 );
-
-type ModuleKey =
-  | "command"
-  | "spinlife"
-  | "work-orders"
-  | "schedule"
-  | "dispatch"
-  | "accounts"
-  | "customers"
-  | "contacts"
-  | "partners"
-  | "locations"
-  | "assets"
-  | "biomedical-accounts"
-  | "support"
-  | "pm"
-  | "technicians"
-  | "parts"
-  | "finance"
-  | "field-training"
-  | "academy"
-  | "compliance"
-  | "reports"
-  | "automations"
-  | "imports"
-  | "documents"
-  | "knowledge"
-  | "access"
-  | "demo"
-  | "settings";
 
 type NavItem = {
   key: ModuleKey;
@@ -449,29 +420,43 @@ function FoundationView({ module }: { module: ModuleKey }) {
 }
 
 export function TechFlexCommandCenter({
-  displayName,
-  email,
-  todayLabel,
+  displayName = "",
+  email = "",
+  todayLabel = "",
+  initialPath,
+  initialRole,
 }: {
   displayName: string;
   email: string;
   todayLabel: string;
+  initialPath?: string;
+  initialRole?: string;
 }) {
   const queryClient = useQueryClient();
   const session = useQuery(portalIdentityQuery);
-  const [active, setActive] = useState<ModuleKey>("command");
-  const [showOtherAssignments, setShowOtherAssignments] = useState<boolean|null>(null);
-  const [showCareer,setShowCareer]=useState(false);
+  const activeRole = session.data?.role || initialRole;
+  const initialResolution = typeof window !== "undefined"
+    ? resolveRoute(window.location.pathname, activeRole)
+    : (initialPath ? resolveRoute(initialPath, activeRole) : resolveRoute(`/${getDashboardFromRole(activeRole)}/command-center`, activeRole));
+
+  const [active, setActive] = useState<ModuleKey>(initialResolution.module);
+  const [showOtherAssignments, setShowOtherAssignments] = useState<boolean|null>(
+    initialResolution.technicianView === "field" ? true : null
+  );
+  const [showCareer, setShowCareer] = useState(initialResolution.technicianView === "career");
+  const [experience, setExperience] = useState<"admin" | "technician">(
+    initialResolution.dashboard === "technician" ? "technician" : "admin"
+  );
   const [intakeImportType, setIntakeImportType] = useState<"accounts" | "assets">("accounts");
   const [financeStartTab, setFinanceStartTab] = useState("closeout");
   const [serviceAssetId, setServiceAssetId] = useState("");
   const [recordTarget, setRecordTarget] = useState<OrderTarget | null>(null);
   const [spinlifeRecordId, setSpinlifeRecordId] = useState("");
-  const [experience, setExperience] = useState<"admin" | "technician">("admin");
   const [search, setSearch] = useState("");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [platformTourStep, setPlatformTourStep] = useState<number | null>(null);
   const allowedModules = allowedModulesForRole(session.data?.role);
+
   function selectModule(key: ModuleKey) {
     if (!allowedModules.has(key)) {
       toast.error("That section is not available for your role.");
@@ -485,11 +470,65 @@ export function TechFlexCommandCenter({
     setActive(key);
     setRecordTarget(null);
     setSpinlifeRecordId("");
+
+    // Synchronize browser URL to clean route matching user dashboard & menu name
+    const targetDashboard = experience === "technician" ? "technician" : getDashboardFromRole(session.data?.role);
+    const targetPath = getRoutePath(targetDashboard, key);
+    if (typeof window !== "undefined" && window.location.pathname !== targetPath) {
+      window.history.pushState(null, "", targetPath);
+    }
+
     if (window.location.hash) window.history.replaceState(null, "", window.location.pathname + window.location.search);
     setMobileOpen(false);
     setSearch("");
     if (platformTourStep !== null) setPlatformTourStep(null);
   }
+
+  // Handle browser Back / Forward (popstate)
+  useEffect(() => {
+    function handlePopState() {
+      const res = resolveRoute(window.location.pathname, session.data?.role);
+      if (res.dashboard === "technician") {
+        setExperience("technician");
+        if (res.technicianView === "field") {
+          setShowOtherAssignments(true);
+          setShowCareer(false);
+        } else if (res.technicianView === "career") {
+          setShowCareer(true);
+        } else {
+          setShowOtherAssignments(false);
+          setShowCareer(false);
+        }
+      } else {
+        setExperience("admin");
+        setShowCareer(false);
+        if (allowedModules.has(res.module)) {
+          setActive(res.module);
+        }
+      }
+    }
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [allowedModules, session.data?.role]);
+
+  // Synchronize URL on first mount or when session role arrives
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const currentPath = window.location.pathname;
+      const roleDashboard = experience === "technician" ? "technician" : getDashboardFromRole(session.data?.role);
+      if (currentPath === "/" || currentPath === "") {
+        const canonical = getRoutePath(roleDashboard, active);
+        window.history.replaceState(null, "", canonical);
+      } else if (session.data?.role) {
+        // If current pathname doesn't match user's role dashboard (e.g. /admin/customers when logged in as finance)
+        const res = resolveRoute(currentPath, session.data.role);
+        if (res.dashboard !== roleDashboard && (res.dashboard === "admin" || !currentPath.startsWith(`/${roleDashboard}`))) {
+          const corrected = getRoutePath(roleDashboard, res.module);
+          window.history.replaceState(null, "", corrected);
+        }
+      }
+    }
+  }, [session.data?.role, active, experience]);
 
   useEffect(() => {
     if (!session.data) return;
@@ -589,12 +628,13 @@ export function TechFlexCommandCenter({
   else if (active === "demo") content = <DemoCenter onStartPlatformTour={() => movePlatformTour(0)} />;
   else content = <FoundationView module={active} />;
 
-  const initials = displayName
+  const initials = (displayName || identity?.displayName || "TC")
     .split(" ")
+    .filter(Boolean)
     .map((part) => part[0])
     .join("")
     .slice(0, 2)
-    .toUpperCase();
+    .toUpperCase() || "TC";
   if (session.isLoading)
     return (
       <div className="techcommand-canvas grid min-h-screen place-items-center p-6 text-center text-sm font-semibold text-slate-600">
@@ -631,7 +671,7 @@ export function TechFlexCommandCenter({
   if (actualRole === "technician")
     return (
       <><Suspense fallback={<ModuleLoading />}>
-        {showCareer?<main className="mx-auto max-w-5xl space-y-5 p-4 sm:p-8"><Button variant="outline" onClick={()=>setShowCareer(false)}>Back to my jobs</Button><AcademyHub tracks={identity.serviceDisciplines.filter((t):t is AcademyTrack=>t==="biomedical"||t==="dme_mobility")}/></main>:(showOtherAssignments ?? !spinlifeRecordId)?<><TechnicianPortal displayName={identity.displayName} userId={identity.userId} onDmeWork={()=>setShowOtherAssignments(false)} /></>:<SpinLifePortal key={`${identity.userId}:${spinlifeRecordId}`} userId={identity.userId} initialJobId={spinlifeRecordId} technician onCareer={()=>setShowCareer(true)} onOtherWork={()=>setShowOtherAssignments(true)} />}
+        {showCareer?<main className="mx-auto max-w-5xl space-y-5 p-4 sm:p-8"><Button variant="outline" onClick={()=>{setShowCareer(false); if (typeof window!=="undefined") window.history.pushState(null,"","/technician/spinlife-work-portal");}}>Back to my jobs</Button><AcademyHub tracks={identity.serviceDisciplines.filter((t):t is AcademyTrack=>t==="biomedical"||t==="dme_mobility")}/></main>:(showOtherAssignments ?? !spinlifeRecordId)?<><TechnicianPortal displayName={identity.displayName} userId={identity.userId} onDmeWork={()=>{setShowOtherAssignments(false); if (typeof window!=="undefined") window.history.pushState(null,"","/technician/spinlife-work-portal");}} /></>:<SpinLifePortal key={`${identity.userId}:${spinlifeRecordId}`} userId={identity.userId} initialJobId={spinlifeRecordId} technician onCareer={()=>{setShowCareer(true); if (typeof window!=="undefined") window.history.pushState(null,"","/technician/career-academy");}} onOtherWork={()=>{setShowOtherAssignments(true); if (typeof window!=="undefined") window.history.pushState(null,"","/technician/field-portal");}} />}
       </Suspense><OperationsCopilot module="technician" /><ProblemReporter module="Technician Portal" reporterId={identity.userId} /></>
     );
   if (
@@ -656,13 +696,17 @@ export function TechFlexCommandCenter({
           <TechnicianPortal
             displayName={displayName}
             userId={identity.userId}
-            onDmeWork={() => setShowOtherAssignments(false)}
+            onDmeWork={() => {
+              setShowOtherAssignments(false);
+              if (typeof window !== "undefined") window.history.pushState(null, "", "/technician/spinlife-work-portal");
+            }}
             onExit={() => {
               captureOperationalEvent("portal_experience_changed", {
                 role: identity.role,
                 experience: "admin",
               });
               setExperience("admin");
+              if (typeof window !== "undefined") window.history.pushState(null, "", getRoutePath("admin", active));
             }}
           />
         ) : (
@@ -673,13 +717,17 @@ export function TechFlexCommandCenter({
                 <span className="text-sm font-semibold text-slate-800">DME / Mobility · SpinLife work orders</span>
               </div>
               <div className="flex items-center gap-2">
-                <Button size="sm" variant="outline" onClick={() => setShowOtherAssignments(true)}>Other assignments &amp; routes</Button>
+                <Button size="sm" variant="outline" onClick={() => {
+                  setShowOtherAssignments(true);
+                  if (typeof window !== "undefined") window.history.pushState(null, "", "/technician/field-portal");
+                }}>Other assignments &amp; routes</Button>
                 <Button size="sm" onClick={() => {
                   captureOperationalEvent("portal_experience_changed", {
                     role: identity.role,
                     experience: "admin",
                   });
                   setExperience("admin");
+                  if (typeof window !== "undefined") window.history.pushState(null, "", getRoutePath(getDashboardFromRole(identity.role), active));
                 }}>Return to admin</Button>
               </div>
             </header>
@@ -688,30 +736,36 @@ export function TechFlexCommandCenter({
               userId={identity.userId}
               initialJobId={spinlifeRecordId}
               technician
-              onCareer={() => setShowCareer(true)}
-              onOtherWork={() => setShowOtherAssignments(true)}
+              onCareer={() => {
+                setShowCareer(true);
+                if (typeof window !== "undefined") window.history.pushState(null, "", "/technician/career-academy");
+              }}
+              onOtherWork={() => {
+                setShowOtherAssignments(true);
+                if (typeof window !== "undefined") window.history.pushState(null, "", "/technician/field-portal");
+              }}
             />
           </div>
         )}
       </Suspense><OperationsCopilot module="technician" /><ProblemReporter module="Technician Preview" reporterId={identity.userId} /></>
     );
   return (
-    <div className="techcommand-canvas min-h-screen text-[#0a1b2f]">
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[258px] lg:block">
+    <div className="techcommand-canvas min-h-screen text-[#0a1b2f] max-w-full overflow-x-hidden">
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[210px] xl:w-[235px] 2xl:w-[258px] lg:block">
         <Sidebar active={active} onSelect={selectModule} allowedModules={allowedModules} />
       </aside>
-      <div className="lg:pl-[258px]">
-        <header className="techcommand-header sticky top-0 z-20 border-b border-slate-200/80 bg-white/90 backdrop-blur-xl">
-          <div className="flex h-[76px] items-center gap-3 px-4 sm:px-6 xl:px-8">
+      <div className="lg:pl-[210px] xl:pl-[235px] 2xl:pl-[258px] min-w-0 max-w-full">
+        <header className="techcommand-header sticky top-0 z-20 border-b border-slate-200/80 bg-white/90 backdrop-blur-xl max-w-full">
+          <div className="flex h-15 sm:h-16 xl:h-[70px] items-center gap-1.5 sm:gap-2 xl:gap-2.5 px-2.5 sm:px-3.5 xl:px-6 max-w-full min-w-0">
             <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
               <SheetTrigger asChild>
                 <Button
                   variant="outline"
                   size="icon"
-                  className="lg:hidden"
+                  className="lg:hidden shrink-0 size-8 sm:size-8.5"
                   aria-label="Open navigation"
                 >
-                  <Menu />
+                  <Menu className="size-4" />
                 </Button>
               </SheetTrigger>
               <SheetContent
@@ -722,56 +776,59 @@ export function TechFlexCommandCenter({
                 <Sidebar active={active} onSelect={selectModule} allowedModules={allowedModules} />
               </SheetContent>
             </Sheet>
-            <div className="shrink-0 min-w-[150px] sm:min-w-[180px]">
-              <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
+            <div className="shrink-0 min-w-0 max-w-[125px] sm:max-w-[155px] xl:max-w-[190px]">
+              <div className="flex items-center gap-1 text-[11px] font-semibold text-slate-500">
                 <span className="font-bold text-cyan-700">
                   {PLATFORM_BRAND.name}
                 </span>
-                <ChevronRight className="size-3" />
+                <ChevronRight className="size-2.5 shrink-0" />
                 <span className="truncate text-slate-700">
                   {moduleNames[active]}
                 </span>
               </div>
-              <h1 className="mt-0.5 whitespace-nowrap text-lg font-bold tracking-tight text-slate-900 sm:text-xl">
+              <h1 className="mt-0.5 whitespace-nowrap text-sm sm:text-base xl:text-lg font-bold tracking-tight text-slate-900 truncate">
                 {moduleNames[active]}
               </h1>
             </div>
-            <div className="hidden min-w-[120px] max-w-[240px] xl:max-w-[310px] flex-1 items-center rounded-xl border border-slate-200/90 bg-slate-50/80 px-3 shadow-inner md:flex">
-              <Search className="size-4 shrink-0 text-slate-400" />
+            <div className="hidden min-w-[70px] max-w-[120px] lg:max-w-[140px] xl:max-w-[190px] 2xl:max-w-[240px] flex-1 items-center rounded-xl border border-slate-200/90 bg-slate-50/80 px-2 shadow-inner md:flex">
+              <Search className="size-3.5 shrink-0 text-slate-400" />
               <input
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                className="h-10 min-w-0 flex-1 bg-transparent px-2 text-sm outline-none placeholder:text-slate-400"
-                placeholder="Search command center…"
+                className="h-8 min-w-0 flex-1 bg-transparent px-1.5 text-xs outline-none placeholder:text-slate-400"
+                placeholder="Search…"
                 aria-label="Search portal"
               />
-              <span className="shrink-0 rounded border bg-white px-1.5 py-0.5 text-[10px] font-semibold text-slate-400">
+              <span className="hidden xl:inline shrink-0 rounded border bg-white px-1 py-0.5 text-[9px] font-semibold text-slate-400">
                 Filter
               </span>
             </div>
-            <div className="flex shrink-0 items-center gap-2">
+            <div className="flex shrink items-center gap-1 sm:gap-1.5 xl:gap-2 ml-auto min-w-0">
               <Button
                 variant="outline"
                 size="icon"
-                className="size-9 shrink-0"
+                className="size-7.5 sm:size-8 xl:size-8.5 shrink-0"
                 aria-label="Notifications"
                 onClick={() => selectModule("automations")}
               >
-                <Bell className="size-4" />
+                <Bell className="size-3.5 sm:size-4" />
               </Button>
               <BidIntelligenceWorkspace
                 actorUserId={identity.userId}
                 onImportAssets={() => {setIntakeImportType("assets"); selectModule("imports");}}
                 onPricing={actualRole === "owner_administrator" || actualRole === "finance" ? () => {setFinanceStartTab("pricing"); selectModule("finance");} : undefined}
                 trigger={
-                  <Button className="hidden h-9 px-3 text-xs sm:text-sm bg-gradient-to-r from-[#1467e8] to-[#1598bb] shadow-sm hover:from-[#0f5fdc] hover:to-[#1187a8] sm:inline-flex shrink-0">
-                    <Calculator className="mr-1.5 size-3.5" /> Other job types
+                  <Button className="hidden h-7.5 sm:h-8 px-2 xl:px-2.5 text-xs bg-gradient-to-r from-[#1467e8] to-[#1598bb] shadow-sm hover:from-[#0f5fdc] hover:to-[#1187a8] sm:inline-flex shrink-0">
+                    <Calculator className="mr-1 size-3.5 shrink-0" />
+                    <span className="hidden xl:inline">Other job types</span>
+                    <span className="xl:hidden">Other jobs</span>
                   </Button>
                 }
               />
               {allowedModules.has("spinlife") ? (
-                <Button onClick={() => selectModule("spinlife")} className="hidden h-9 px-3 text-xs sm:text-sm sm:inline-flex shrink-0">
-                  SpinLife work orders
+                <Button onClick={() => selectModule("spinlife")} className="hidden h-7.5 sm:h-8 px-2 xl:px-2.5 text-xs sm:inline-flex shrink-0">
+                  <span className="hidden xl:inline">SpinLife work orders</span>
+                  <span className="xl:hidden">SpinLife</span>
                 </Button>
               ) : null}
               {actualRole === "owner_administrator" ? (
@@ -782,11 +839,19 @@ export function TechFlexCommandCenter({
                       role: actualRole,
                       experience: value,
                     });
-                    setExperience(value as "admin" | "technician");
+                    const nextExp = value as "admin" | "technician";
+                    setExperience(nextExp);
+                    if (typeof window !== "undefined") {
+                      if (nextExp === "technician") {
+                        window.history.pushState(null, "", "/technician/spinlife-work-portal");
+                      } else {
+                        window.history.pushState(null, "", getRoutePath(getDashboardFromRole(actualRole), active));
+                      }
+                    }
                   }}
                 >
                   <SelectTrigger
-                    className="hidden h-9 w-[160px] bg-white text-xs sm:text-sm lg:flex shrink-0"
+                    className="hidden h-7.5 sm:h-8 w-auto min-w-[105px] max-w-[145px] px-2 bg-white text-xs lg:flex shrink-0"
                     aria-label="Change portal experience"
                   >
                     <SelectValue />
@@ -797,16 +862,16 @@ export function TechFlexCommandCenter({
                   </SelectContent>
                 </Select>
               ) : null}
-              <div className="hidden items-center gap-2 border-l pl-3 xl:flex shrink-0">
-                <span className="grid size-8 place-items-center rounded-full bg-gradient-to-br from-[#0a243d] to-[#1467e8] text-xs font-bold text-white shadow-xs ring-1 ring-cyan-200">
+              <div className="flex items-center gap-1 sm:gap-1.5 border-l border-slate-200/80 pl-1.5 sm:pl-2 shrink-0">
+                <span className="grid size-7 sm:size-7.5 place-items-center rounded-full bg-gradient-to-br from-[#0a243d] to-[#1467e8] text-[11px] font-bold text-white shadow-xs ring-1 ring-cyan-200 shrink-0">
                   {initials}
                 </span>
-                <div className="max-w-[140px]">
-                  <p className="truncate text-xs font-bold text-slate-800">
-                    {displayName}
+                <div className="max-w-[85px] sm:max-w-[105px] xl:max-w-[140px]">
+                  <p className="truncate text-[11px] font-bold text-slate-800 leading-tight">
+                    {displayName || identity?.displayName}
                   </p>
                   <p
-                    className="truncate text-[10px] text-slate-500"
+                    className="truncate text-[9px] text-slate-500 leading-none mt-0.5"
                     title={email}
                   >
                     {roleLabel}
@@ -836,14 +901,14 @@ export function TechFlexCommandCenter({
             {allowedModules.has("spinlife")?<Button size="sm" onClick={()=>selectModule("spinlife")}>SpinLife</Button>:null}
           </div>
         </header>
-        <main className="px-4 py-5 pb-24 sm:px-6 sm:pb-28 xl:px-8 xl:py-7 xl:pb-28">
+        <main className="w-full max-w-full min-w-0 px-4 py-5 pb-24 sm:px-6 sm:pb-28 xl:px-8 xl:py-7 xl:pb-28">
           <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.13em] text-cyan-700">
                 {todayLabel}
               </p>
               <p className="mt-1 text-sm text-slate-600">
-                Good morning, {displayName.split(" ")[0]}. Your operational priorities are ready.
+                Good morning, {(displayName || identity?.displayName || "User").split(" ")[0]}. Your operational priorities are ready.
               </p>
             </div>
             <div className="flex items-center gap-2">
