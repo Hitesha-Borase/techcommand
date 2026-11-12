@@ -71,7 +71,8 @@ export const d1Database = {
   async batch(statements: D1PreparedStatementSync[]) {
     const results = [];
     for (const stmt of statements) {
-      results.push(await stmt.all());
+      // Use run() so meta.changes is correctly populated for INSERT/UPDATE/DELETE
+      results.push(await stmt.run());
     }
     return results;
   },
