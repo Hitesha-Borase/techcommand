@@ -39,29 +39,33 @@ class D1PreparedStatementSync {
     }
   }
 
-  async all<T = unknown>(): Promise<{ results: T[]; success: boolean; meta: any }> {
+  async execute<T = unknown>(): Promise<{ results: T[]; success: boolean; meta: { changes: number; last_row_id: number } }> {
     try {
       const db = getSqliteDb();
       const stmt = db.prepare(this.sql);
-      const rows = stmt.all(...this.params) as T[];
-      return { results: rows || [], success: true, meta: { changes: 0 } };
+      const isSelect = /^\s*(SELECT|PRAGMA|WITH)\b/i.test(this.sql);
+      if (isSelect) {
+        const rows = stmt.all(...this.params) as T[];
+        return { results: rows || [], success: true, meta: { changes: 0, last_row_id: 0 } };
+      } else {
+        const res = stmt.run(...this.params);
+        return {
+          results: [],
+          success: true,
+          meta: { changes: Number(res.changes || 0), last_row_id: Number(res.lastInsertRowid || 0) },
+        };
+      }
     } catch (_err) {
-      return { results: [], success: false, meta: { changes: 0 } };
+      return { results: [], success: false, meta: { changes: 0, last_row_id: 0 } };
     }
   }
 
+  async all<T = unknown>(): Promise<{ results: T[]; success: boolean; meta: any }> {
+    return this.execute<T>();
+  }
+
   async run(): Promise<{ success: boolean; meta: { changes: number; last_row_id: number } }> {
-    try {
-      const db = getSqliteDb();
-      const stmt = db.prepare(this.sql);
-      const res = stmt.run(...this.params);
-      return {
-        success: true,
-        meta: { changes: Number(res.changes || 0), last_row_id: Number(res.lastInsertRowid || 0) },
-      };
-    } catch (_err) {
-      return { success: false, meta: { changes: 0, last_row_id: 0 } };
-    }
+    return this.execute();
   }
 
   async raw(): Promise<any[][]> {
@@ -77,8 +81,7 @@ export const d1Database = {
   async batch(statements: D1PreparedStatementSync[]) {
     const results = [];
     for (const stmt of statements) {
-      // Use run() so meta.changes is correctly populated for INSERT/UPDATE/DELETE
-      results.push(await stmt.run());
+      results.push(await stmt.execute());
     }
     return results;
   },
