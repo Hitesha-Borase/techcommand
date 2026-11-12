@@ -1,0 +1,16 @@
+CONFIGURATION EXAMPLE - PLACEHOLDERS ONLY
+
+This is a review checklist, not a ready-to-run environment file. Existing runtime names are in Configuration_Key_Inventory.json. The independent deployment may rename or remove them. D1/R2 resources are bindings, not secret strings.
+
+APPLICATION_ORIGIN=<selected HTTPS staging or production origin>
+AUTH_PROVIDER_URL=<company-controlled identity service URL>
+AUTH_PUBLIC_KEY=<appropriate browser-safe publishable key if provider requires it>
+AUTH_SERVER_SECRET=<server secret store only>
+AI_PROVIDER=<approved independent provider>
+AI_PROVIDER_API_KEY=<server secret store only>
+GOOGLE_MAPS_API_KEY=<restricted key if Maps is in scope>
+WEBSITE_INTAKE_SECRET=<server-to-server intake secret if connector retained>
+POSTHOG_HOST=<existing approved analytics host>
+POSTHOG_PROJECT_TOKEN=<appropriate project token if retained>
+
+Do not use these illustrative names without implementing their mapping. Do not commit actual credentials. Keep privileged auth, session signing, provider and webhook secrets out of browser bundles and logs. Separate staging/production values and external side effects.

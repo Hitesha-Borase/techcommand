@@ -1,0 +1,6 @@
+$ORIGIN techcommandhq.com.
+$TTL 3600
+
+app                             IN CNAME custom-domains.chatgpt.site.
+_openai-site-verification.app   IN TXT   "openai-site-verification=MJrIDTyG_GeTfkaFz5Zz5MQJE5yyYqBSPpXCwzWsGf4"
+_cf-custom-hostname.app         IN TXT   "0aec53e9-8336-4bd8-8158-1cd8d6898246"

@@ -1,0 +1,77 @@
+{
+  "source": "October 24 source handoff runtime-key inventory; actual values omitted",
+  "keys": [
+    {
+      "key": "GOOGLE_MAPS_API_KEY",
+      "is_secret": true,
+      "value_included": false,
+      "migration_note": "Review and securely re-provision if retained."
+    },
+    {
+      "key": "OPENAI_API_KEY",
+      "is_secret": true,
+      "value_included": false,
+      "migration_note": "Legacy provider key. Replace OpenAI runtime use for the independent target; do not assume this is a destination requirement."
+    },
+    {
+      "key": "POSTHOG_HOST",
+      "is_secret": false,
+      "value_included": false,
+      "migration_note": "Review and securely re-provision if retained."
+    },
+    {
+      "key": "POSTHOG_PROJECT_TOKEN",
+      "is_secret": false,
+      "value_included": false,
+      "migration_note": "Review and securely re-provision if retained."
+    },
+    {
+      "key": "TC_AUTH_ADMIN_KEY",
+      "is_secret": true,
+      "value_included": false,
+      "migration_note": "Review and securely re-provision if retained."
+    },
+    {
+      "key": "TC_AUTH_APP_ID",
+      "is_secret": false,
+      "value_included": false,
+      "migration_note": "Review and securely re-provision if retained."
+    },
+    {
+      "key": "TC_AUTH_PUBLIC_KEY",
+      "is_secret": false,
+      "value_included": false,
+      "migration_note": "Review and securely re-provision if retained."
+    },
+    {
+      "key": "TC_AUTH_SESSION_KEY",
+      "is_secret": true,
+      "value_included": false,
+      "migration_note": "Review and securely re-provision if retained."
+    },
+    {
+      "key": "TC_AUTH_TEMP_PASSWORD",
+      "is_secret": true,
+      "value_included": false,
+      "migration_note": "Legacy sensitive bootstrap setting. Review need; never include an actual shared password in a handoff."
+    },
+    {
+      "key": "TC_AUTH_URL",
+      "is_secret": false,
+      "value_included": false,
+      "migration_note": "Review and securely re-provision if retained."
+    },
+    {
+      "key": "WEBSITE_INTAKE_SECRET",
+      "is_secret": true,
+      "value_included": false,
+      "migration_note": "Review and securely re-provision if retained."
+    }
+  ],
+  "binding_names": [
+    "DB",
+    "BUCKET"
+  ],
+  "additional_binding_to_review": "IMAGES",
+  "not_a_complete_destination_env_template": true
+}

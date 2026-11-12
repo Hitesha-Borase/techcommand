@@ -1,0 +1,17 @@
+REFERENCE DOCUMENT DATES AND LIMITS
+
+The current master project brief and October 24 source-handoff migration objective control independent hosting/provider requirements. Source/docs contains more detailed historical release evidence and a broader roadmap.
+
+Work_Order_and_PDF_Build_Spec_2026-09-09.pdf and .md: original detailed document standard. Same content in readable and developer text formats. Includes historical job examples, proposed filename/color/size defaults and a suggested ReportLab implementation. Examples are not production rates; actual partner forms and upload limits require review. Use existing approved assets and current source behavior. The original logo has since been recovered.
+
+Reliability_Repair_Brief_2026-10-16.md: diagnostic observations before the October 20 reliability increment. It does not claim a confirmed root cause or completed fix. Read source/docs/field-reliability-2026-10-20.md for the later increment and its limits.
+
+Historical_Master_Improvement_Prompt.txt: complete prior biomedical, scanning, AI documentation, training and quality roadmap. Retain nonconflicting requirements. Later ordinary-work simplification and independent migration take precedence over older gates and hosting instructions.
+
+Scanner_and_Label_Owner_Guide_2026-10-05.pdf: prior equipment-specific setup for NETUM C750 HID, NIIMBOT M2_H and permanent tags. This is a historical hardware reference; no physical device was retested while preparing this package. Printing a sticker does not update CRM data.
+
+Historical_Integration_Activation_Manual_2026-09-08.pdf: owner/scopes, mapping and activation checklist from the Version 36 period. Recheck current WordPress forms, provider access and runtime implementations. A connected ChatGPT plugin is not automatically a website integration. Its OpenAI section is legacy for the current independence target.
+
+Historical_Readiness_Audit_2026-09-08.pdf: Version 36-era capability and gap audit, not the current version 171 acceptance report. Later source additions supersede its feature inventory where verified.
+
+The original code archive contains its own full technical documentation and tests. Preserve that documentation while adding a dated, accurate independent implementation tracker. Do not turn old automated test totals into claims of current live acceptance.

@@ -1,0 +1,287 @@
+{
+  "project": "TechCommand OS",
+  "prepared_on": "2026-10-28",
+  "execution_notice": "Scenarios for developer acceptance. These tests have not been executed against the independent CRM by the handoff preparer.",
+  "required_evidence_fields": [
+    "release_commit",
+    "environment",
+    "tester",
+    "device_browser",
+    "network_profile_when_relevant",
+    "actual_result",
+    "evidence_path",
+    "defect_or_exception"
+  ],
+  "tests": [
+    {
+      "id": "TC01",
+      "title": "Clean independent release",
+      "steps": "Build and deploy a clean company-repository checkout in staging. Exercise normal sign-in and core work with ChatGPT/Sites removed and direct OpenAI dependencies replaced.",
+      "expected": "No conversation-specific tooling, platform identity headers or OpenAI runtime calls are required for the agreed scope; repeatable deployment documented.",
+      "status": "NOT RUN",
+      "actual_result": null,
+      "evidence_path": null
+    },
+    {
+      "id": "TC02",
+      "title": "Migration reconciliation",
+      "steps": "Compare full deployed schema/migration history, table counts/relationships, file inventory and auth-role links before and after transfer. Restore into an isolated environment.",
+      "expected": "Counts and mappings reconcile with documented exceptions; old documents open; successful DB and file restore evidence retained.",
+      "status": "NOT RUN",
+      "actual_result": null,
+      "evidence_path": null
+    },
+    {
+      "id": "TC03",
+      "title": "Physical mobile sign-in",
+      "steps": "Use actual administrator and separate technician identities on supported phones; expire session, lock phone and return.",
+      "expected": "Sign-in or bounded recovery succeeds; no endless verification; same-user pending work survives and another user cannot access it.",
+      "status": "NOT RUN",
+      "actual_result": null,
+      "evidence_path": null
+    },
+    {
+      "id": "TC04",
+      "title": "Extraction persists",
+      "steps": "Import native PDFs, a scan, screenshots and a multi-asset order with missing serial. Trace extraction through save, reread and form display; simulate malformed/failed provider response.",
+      "expected": "Expected supported fields survive reopen; uncertainties remain visible; original retained; manual entry works; no success based only on provider response.",
+      "status": "NOT RUN",
+      "actual_result": null,
+      "evidence_path": null
+    },
+    {
+      "id": "TC05",
+      "title": "Suffix and leading zeros",
+      "steps": "Use work order 000123N-1 and asset 000123 through import, edit, export, report, invoice, filename and submission.",
+      "expected": "Exact identifier strings retained; no N1 substitution, numeric conversion or unsafe path characters.",
+      "status": "NOT RUN",
+      "actual_result": null,
+      "evidence_path": null
+    },
+    {
+      "id": "TC06",
+      "title": "Exact existing-order editing",
+      "steps": "Open a dashboard task and intake link to the saved order. Save from concurrent tabs and retry first save after response loss.",
+      "expected": "Exact existing record opens; conflicts are reviewable; no silent merge, duplicate job or lost draft.",
+      "status": "NOT RUN",
+      "actual_result": null,
+      "evidence_path": null
+    },
+    {
+      "id": "TC07",
+      "title": "Assign and view pay scope",
+      "steps": "Assign technician A, set agreed pay, then open as A, B and partner.",
+      "expected": "A sees assigned work and authorized own pay; B cannot read it without permission; partner sees no internal pay/cost/margin.",
+      "status": "NOT RUN",
+      "actual_result": null,
+      "evidence_path": null
+    },
+    {
+      "id": "TC08",
+      "title": "Simple incomplete save",
+      "steps": "Start an ordinary delivery with incomplete CRM/equipment details and no schedule, route or AI connection. Save partial notes.",
+      "expected": "Draft and authorized basic fieldwork remain usable; incomplete facts are truthful; final safety/contract requirements still enforced.",
+      "status": "NOT RUN",
+      "actual_result": null,
+      "evidence_path": null
+    },
+    {
+      "id": "TC09",
+      "title": "Offline and lost-response recovery",
+      "steps": "Type notes and capture photos; disconnect mid-upload/save, reload, reconnect and compare exact server state.",
+      "expected": "Honest local/pending/server state; no silent loss, duplicate photo or old-response overwrite; file associations correct.",
+      "status": "NOT RUN",
+      "actual_result": null,
+      "evidence_path": null
+    },
+    {
+      "id": "TC10",
+      "title": "Speech permission and lifecycle",
+      "steps": "On physical supported phones test allow, deny, ignore, cancel, unsupported browser, repeated starts, route change and late result. Inspect microphone policy.",
+      "expected": "No global freeze; recording resources released; accepted transcript preserved; typed notes/save continue; unsupported behavior labeled accurately.",
+      "status": "NOT RUN",
+      "actual_result": null,
+      "evidence_path": null
+    },
+    {
+      "id": "TC11",
+      "title": "Responsive evidence-heavy job",
+      "steps": "Use realistic large job while typing, uploading and running AI/PDF work. Record agreed device/network and latency distributions.",
+      "expected": "Form remains usable; no accumulating subscriptions or full-workspace rerenders; meets targets agreed in milestone 1; no unmeasured speed claim.",
+      "status": "NOT RUN",
+      "actual_result": null,
+      "evidence_path": null
+    },
+    {
+      "id": "TC12",
+      "title": "Readable packet and real form",
+      "steps": "Complete a real approved partner-template fixture. Render every page with long text, rotated/portrait/mobile photos, multiple assets and the configured size limit.",
+      "expected": "Actual form fields/captions/sections correct; no clipping or illegible compression; unknown template goes to review; invoice excluded; original signed source preserved.",
+      "status": "NOT RUN",
+      "actual_result": null,
+      "evidence_path": null
+    },
+    {
+      "id": "TC13",
+      "title": "Invoice accuracy and revision",
+      "steps": "Generate invoice from approved charges with rounding, account terms, long descriptions and a corrected render.",
+      "expected": "Exact totals and identifiers; same approved revision as service packet; no invented taxes/terms; no extra invoice on download or rerender.",
+      "status": "NOT RUN",
+      "actual_result": null,
+      "evidence_path": null
+    },
+    {
+      "id": "TC14",
+      "title": "Included and ambiguous coverage",
+      "steps": "Test included prepaid PM, separately approved repair, expired/missing contract and serial mismatch.",
+      "expected": "No duplicate annual-PM charge; included/no-invoice reason visible; ambiguous charge blocked for review; pay tracked separately.",
+      "status": "NOT RUN",
+      "actual_result": null,
+      "evidence_path": null
+    },
+    {
+      "id": "TC15",
+      "title": "Unauthorized reads and exports",
+      "steps": "Attempt record, file, search, AI retrieval, background job and export access as other technician, account, location and company.",
+      "expected": "Server rejects unauthorized access; private fields absent from responses and client artifacts, not merely hidden by UI.",
+      "status": "NOT RUN",
+      "actual_result": null,
+      "evidence_path": null
+    },
+    {
+      "id": "TC16",
+      "title": "Unfinished and adverse outcomes",
+      "steps": "Use failed/not-tested checks, missing serial, supplied-unused part, absent signature and pickup-only service.",
+      "expected": "No false pass, invented serial/signature/repair or installed part; exceptions and actual disposition remain visible.",
+      "status": "NOT RUN",
+      "actual_result": null,
+      "evidence_path": null
+    },
+    {
+      "id": "TC17",
+      "title": "Repeated finalization",
+      "steps": "Repeat submit/retry after response loss, changed payload, stale revision and concurrent approval.",
+      "expected": "Same exact request returns original result; changed/stale requests conflict; no duplicate report, submission, invoice or payout.",
+      "status": "NOT RUN",
+      "actual_result": null,
+      "evidence_path": null
+    },
+    {
+      "id": "TC18",
+      "title": "Linked CRM history",
+      "steps": "Create/update a permitted account/location/contact/asset and follow its order, visit, report and financial history.",
+      "expected": "Stable linked identifiers; search retrieves authorized records; changes/audit history retained without disconnected duplicate copies.",
+      "status": "NOT RUN",
+      "actual_result": null,
+      "evidence_path": null
+    },
+    {
+      "id": "TC19",
+      "title": "Scheduling and road mileage",
+      "steps": "Use technician and coordinator calendars, origin override, manual mileage and an authorized maps request where included.",
+      "expected": "Appointments persist with time zones and permission rules; driving distance comes from verified routing when available; unavailable maps do not block work.",
+      "status": "NOT RUN",
+      "actual_result": null,
+      "evidence_path": null
+    },
+    {
+      "id": "TC20",
+      "title": "Partner request and quote",
+      "steps": "As scoped partner A submit request, preview/accept/decline quote and track job; try partner B URL and inspect network output.",
+      "expected": "Only permitted account/location visible; accepted quote revision preserved; internal cost/pay/margin absent.",
+      "status": "NOT RUN",
+      "actual_result": null,
+      "evidence_path": null
+    },
+    {
+      "id": "TC21",
+      "title": "Rate snapshot and margin math",
+      "steps": "Apply account rate rules, edit current rate card after acceptance and test cost 10000 cents with configured gross-margin target 0.40.",
+      "expected": "Historical accepted price unchanged; private approval rules hold; example minimum price rounds to 16667 cents, not 14000; no sample becomes production rate.",
+      "status": "NOT RUN",
+      "actual_result": null,
+      "evidence_path": null
+    },
+    {
+      "id": "TC22",
+      "title": "Asset import decisions",
+      "steps": "Import identifiers with leading zeros, duplicates, blanks, unknown columns and a changed existing asset; retry exact import.",
+      "expected": "Explicit create/update/skip; row errors; selected fields only; no blank overwrite, silent merge or duplicated assets.",
+      "status": "NOT RUN",
+      "actual_result": null,
+      "evidence_path": null
+    },
+    {
+      "id": "TC23",
+      "title": "Physical scan and print pilot",
+      "steps": "Use camera, manual and NETUM HID input; scan unknown/retired/wrong-company codes; print actual selected NIIMBOT media and rescan.",
+      "expected": "Exact authorized asset opens without duplicate visit; leading zeros and quiet zones correct; permanent identity separate from PM date/result; actual hardware limitations documented.",
+      "status": "NOT RUN",
+      "actual_result": null,
+      "evidence_path": null
+    },
+    {
+      "id": "TC24",
+      "title": "Multi-asset PM provenance",
+      "steps": "Use two assets with different applicable revisions, actual readings, one incomplete result and instrument calibration metadata.",
+      "expected": "Answers/photos attached to correct asset; approved source and measurement provenance retained; no whole-facility pass or invented due date.",
+      "status": "NOT RUN",
+      "actual_result": null,
+      "evidence_path": null
+    },
+    {
+      "id": "TC25",
+      "title": "Grounded independent AI",
+      "steps": "Evaluate source citations, wrong-model manual, missing source, negation/units and unsupported numeric suggestions across replacement provider and outage.",
+      "expected": "Reviewed suggestions preserve facts and source; wrong/missing references visible; no invented result or automatic approval; manual work continues.",
+      "status": "NOT RUN",
+      "actual_result": null,
+      "evidence_path": null
+    },
+    {
+      "id": "TC26",
+      "title": "Website intake handoff",
+      "steps": "Submit each approved service/contact/recruiting form, attachments and exact duplicate event; simulate invalid signature, timeout and field mismatch.",
+      "expected": "Correct destinations/consent/source preserved; applicant data segregated; no duplicates; visible retry/error status; newsletter not treated as job.",
+      "status": "NOT RUN",
+      "actual_result": null,
+      "evidence_path": null
+    },
+    {
+      "id": "TC27",
+      "title": "Integration transaction evidence",
+      "steps": "For each agreed provider run authorized sandbox transaction, timeout, expiry, malformed message, duplicate and recovery.",
+      "expected": "Field mapping and result visible in both systems; scoped credentials/callbacks documented; actual receipt required for Submitted; no unsupported API claim.",
+      "status": "NOT RUN",
+      "actual_result": null,
+      "evidence_path": null
+    },
+    {
+      "id": "TC28",
+      "title": "Operations and rollback",
+      "steps": "Trigger sanitized error, identify release/correlation reference, restore backups and roll back staged release; inspect telemetry payloads.",
+      "expected": "Actionable recovery and owner-controlled runbook; no notes/audio/signatures/secrets/customer content in telemetry; costs and limits documented.",
+      "status": "NOT RUN",
+      "actual_result": null,
+      "evidence_path": null
+    },
+    {
+      "id": "TC29",
+      "title": "Training boundaries",
+      "steps": "Use learner, own-school coordinator, other school and technician accounts against pinned course, participation and reviewed competence records.",
+      "expected": "Authorized records only; answers/private notes/customer evidence/pay excluded from school views; completion does not fabricate credentials or independent authority.",
+      "status": "NOT RUN",
+      "actual_result": null,
+      "evidence_path": null
+    },
+    {
+      "id": "TC30",
+      "title": "Second-company isolation",
+      "steps": "Create two pilot companies with overlapping visible identifiers and different brands/rules; test every storage/retrieval/cache/export/job surface.",
+      "expected": "No fixed-TechFlex leakage or cross-company records; independent configuration and repeatable onboarding; acceptance required before commercial licensing.",
+      "status": "NOT RUN",
+      "actual_result": null,
+      "evidence_path": null
+    }
+  ]
+}

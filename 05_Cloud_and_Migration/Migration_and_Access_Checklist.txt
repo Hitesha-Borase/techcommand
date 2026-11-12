@@ -1,0 +1,73 @@
+INDEPENDENT MIGRATION AND ACCESS CHECKLIST
+Prepared October 28, 2026
+
+CURRENT BASELINE
+Project: TechCommand OS
+Project ID: appgprj_6a9b93be6e1881918cbfe6c2dc9e54d8
+Current saved version: 171
+Commit: 8d3f5828c84a37409ee17a58762eec6ec3451fff
+Custom hostname: https://app.techcommandhq.com
+Parent domain: techcommandhq.com; DNS managed in Cloudflare.
+Native deployment URL: https://techcommandhq.techflex-8918.chatgpt.site
+Current project/deployment records and custom-domain status checked October 28. Runtime behavior was not certified through an authenticated phone session.
+
+DO NOT CONFUSE THREE SEPARATE THINGS
+1. Cloudflare domain/DNS access.
+2. The existing Sites-managed application, D1 database and R2 objects.
+3. A new company-owned independent Cloudflare or other cloud deployment.
+Control of number 1 does not automatically provide export access to number 2 or provision number 3.
+
+ACCESS TO ARRANGE THROUGH COMPANY ACCOUNTS
+[ ] Private company repository and scoped collaborator access.
+[ ] Current source/deployment project access and supported D1/R2 export route.
+[ ] Cloudflare domain DNS/redirect inventory and selected independent hosting resources.
+[ ] Supabase auth project ownership and identity/role mapping access, if reused.
+[ ] Owner/admin and separate technician test identities; appropriately scoped partner account if included.
+[ ] Protected runtime secret configuration. No password/key/token values belong in the Fiverr message or attachment bundle.
+[ ] Website administrator access to review Elementor form mapping and existing connector, if included.
+[ ] Approved provider OAuth/API accounts and callbacks for each contracted integration.
+[ ] Current original partner forms, account rates/contracts and a qualified reviewer for technical procedures.
+
+SUPPORTED EXPORTS STILL REQUIRED
+[ ] Enumerate complete live deployed schema, indexes and applied migration history. The old native overview returned only 50 alphabetical names; that is not a complete inventory. Source declares 108 tables but does not prove all exist live.
+[ ] Obtain complete live DB schema and rows using supported hosting/provider export, with a documented snapshot/write-reconciliation procedure.
+[ ] Inventory/copy live R2 objects with original keys, sizes, content metadata and checksums where available. Include signatures, reports, original sources, photographs and manuals according to retention policy.
+[ ] Reconcile every required DB file reference to an object; handle orphaned/missing/pending/deleted state explicitly.
+[ ] Preserve auth-to-user, organization membership, role and technician mappings. Plan session reauthentication without inventing or exposing password exports.
+[ ] Inventory secret names and securely provision actual values in the destination. Keys in Configuration_Key_Inventory.json are names only.
+
+IMPORTANT EXISTING-ENDPOINT LIMIT
+Do not use GET /api/documents as a supposedly read-only backup crawler. Its source invokes expired-trash cleanup, which can delete expired records/objects, and its ordinary listing is capped. Entity downloads are not a full bucket export. If provider access cannot export managed storage, request a supported provider-assisted extraction. Do not silently substitute a partial scrape.
+
+STAGING AND RUNTIME
+[ ] Preserve an immutable original archive and checkpoint; import to company Git.
+[ ] Audit current dependency lockfile, Linux build scripts and Sites-specific build plugin.
+[ ] Provision isolated DB/object storage/secrets/assets/images and a repeatable standalone pipeline.
+[ ] Replace ChatGPT redirects and trusted Sites identity-header paths with verified independent authentication and server authorization.
+[ ] Replace direct OpenAI calls for the owner's full provider-independence objective; evaluate required capabilities and failures.
+[ ] Use durable background processing for slow tasks; ensure jobs and retries do not double-charge or overwrite newer fieldwork.
+[ ] If converting D1/SQLite to PostgreSQL, explicitly migrate schemas, queries, transactions and data. This is a separate workstream.
+
+CURRENT DOMAIN RECORD AND HISTORICAL ZONE
+The Sites record reports app.techcommandhq.com active with active SSL and CNAME target custom-domains.chatgpt.site. The included September .zone file is historical evidence only and is labeled DO NOT IMPORT. It does not represent a current zone export, does not contain all root/www rules, and is not the destination's new DNS configuration.
+Earlier notes describe proxied root/www 192.0.2.1 records with redirects to the app. Recheck the actual zone and redirect rules through owner access. Preserve unrelated mail, verification and security records. A redirect is a separate HTTP rule; a CNAME does not itself implement a redirect.
+
+CUTOVER
+[ ] Reconcile source IDs, record counts/relationships, file counts/bytes/hashes and historical document links.
+[ ] Prove authentication and access boundaries, repeated writes, interrupted connections and agreed physical-device scenarios.
+[ ] Test restoration into an isolated environment and rollback from the new release.
+[ ] Document writes during transition: freeze window, final export/delta, reconciliation and who authorizes switch.
+[ ] Only then update the app target, verify HTTPS/login/files/background jobs and retain a recoverable old system.
+[ ] Record production commit, DNS configuration, resource ownership, service limits, costs, support and remaining defects.
+
+DECISIONS FOR MILESTONE 1
+Final hosting/auth/AI stack; actual workload and performance targets; integration scope; preferred account filename patterns; partner form versions/upload limits; export route and cutover window; cost, timeline and support terms. These are not pre-approved purchases or agreed seller commitments.
+
+OFFICIAL REFERENCES CHECKED OR TO USE FOR IMPLEMENTATION
+Cloudflare DNS proxy status: https://developers.cloudflare.com/dns/proxy-status/
+Cloudflare redirects: https://developers.cloudflare.com/rules/url-forwarding/
+Cloudflare D1 export: https://developers.cloudflare.com/d1/best-practices/import-export-data/
+Cloudflare D1 limits: https://developers.cloudflare.com/d1/platform/limits/
+Cloudflare Workers limits: https://developers.cloudflare.com/workers/platform/limits/
+Cloudflare Queues: https://developers.cloudflare.com/queues/
+Verify current provider documentation and contracted service coverage when selecting the destination.

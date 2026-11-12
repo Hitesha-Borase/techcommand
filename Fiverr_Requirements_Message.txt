@@ -1,0 +1,13 @@
+Hi, I’m sending the existing TechCommand OS project for TechFlex Mobility Solutions, a DBA of Astute Restorations LLC. We service mobility, DME and biomedical equipment, including repairs, preventive maintenance, setup and white-glove delivery.
+
+Company: 611 Park Meadow Rd., Suite B, Westerville, OH 43081 | 877-231-8324 | service@techflexmobility.com | www.techflexmobility.com.
+
+TechCommand uses techcommandhq.com, with the current app at app.techcommandhq.com. DNS is managed through Cloudflare. The attached version 171 source is the existing application, not a blank starting point. Our goal is to finish it and move it into company-controlled hosting, accounts and source control, with no required ChatGPT, Sites or OpenAI runtime dependency. Preserve our records, files, branding and useful existing work; avoid an unnecessary rewrite.
+
+The first priority is a simple workflow that works on actual phones: import or paste an order, verify extracted details, assign a technician and agreed pay, let the technician open the job, save notes and photos throughout, record the actual outcome, and produce the partner paperwork plus a branded TechFlex report and photos in one readable PDF. Generate the invoice separately under the account’s billing rules. Missing information must stay missing, and retries must not duplicate jobs, invoices or payouts.
+
+Also retain the linked CRM, scheduling, asset/PM records, partner access, pricing and technician workflows described in the brief. Fix login/session problems, freezing, unreliable saves and extraction before expanding features. Broader integrations and future multi-company licensing should be priced as clear milestones.
+
+Please read 00_START_HERE.txt and the project brief, then review the code and confirm your proposed approach, included scope, milestones, timeline and ongoing hosting/service costs. The source ZIP does not include the live database, uploaded-file bucket, authentication export or secret values; plan those transfers separately through secure owner-controlled access.
+
+Delivery needs to include working staging and production deployments, migrated and reconciled data/files, tested workflows, all editable source, deployment and backup/restore instructions, and a recorded walkthrough. We’ll judge completion by demonstrated end-to-end work, not screenshots or a successful build alone.

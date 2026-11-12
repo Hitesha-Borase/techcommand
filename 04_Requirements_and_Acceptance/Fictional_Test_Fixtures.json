@@ -1,0 +1,85 @@
+{
+  "synthetic": true,
+  "warning": "Development fixtures only. Not real customers, rates, technicians, contracts or completed service.",
+  "companies": [
+    {
+      "id": "demo_company_a",
+      "name": "Example Service Company A"
+    },
+    {
+      "id": "demo_company_b",
+      "name": "Example Service Company B"
+    }
+  ],
+  "accounts": [
+    {
+      "id": "demo_account_a",
+      "company_id": "demo_company_a",
+      "name": "Example Partner A"
+    },
+    {
+      "id": "demo_account_b",
+      "company_id": "demo_company_a",
+      "name": "Example Partner B"
+    }
+  ],
+  "technicians": [
+    {
+      "id": "demo_tech_a",
+      "company_id": "demo_company_a",
+      "display_name": "Example Technician A"
+    },
+    {
+      "id": "demo_tech_b",
+      "company_id": "demo_company_a",
+      "display_name": "Example Technician B"
+    }
+  ],
+  "orders": [
+    {
+      "id": "demo_order_1",
+      "company_id": "demo_company_a",
+      "account_id": "demo_account_a",
+      "external_reference": "000123N-1",
+      "type": "delivery_setup",
+      "assigned_technician_id": "demo_tech_a",
+      "manufacturer": "Example Manufacturer",
+      "model": "Demo Model",
+      "serial_number": null,
+      "findings": null,
+      "performed_work": null,
+      "status": "draft",
+      "approved_customer_charges": null
+    }
+  ],
+  "assets": [
+    {
+      "id": "demo_asset_1",
+      "company_id": "demo_company_a",
+      "visible_label": "000123",
+      "serial_number": null,
+      "pm_outcome": "incomplete"
+    },
+    {
+      "id": "demo_asset_2",
+      "company_id": "demo_company_b",
+      "visible_label": "000123",
+      "serial_number": null,
+      "pm_outcome": "not_tested"
+    }
+  ],
+  "isolated_pricing_math_fixture": {
+    "direct_cost_cents": 10000,
+    "target_gross_margin": 0.4,
+    "minimum_price_cents": 16667,
+    "production_rate": false
+  },
+  "draft_states_to_exercise": [
+    "saved_on_device",
+    "waiting_to_sync",
+    "saved_to_server",
+    "conflict",
+    "upload_failed",
+    "ai_unavailable"
+  ]
+}

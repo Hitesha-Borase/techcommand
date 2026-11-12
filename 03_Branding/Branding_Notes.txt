@@ -1,0 +1,13 @@
+EXISTING BRAND ASSETS
+
+TechFlex_Original_Logo_1254.png is the exact 1254 x 1254 transparent PNG embedded in the existing approved invoice asset. It has not been redrawn, resized or cropped. Preserve proportions and clear space. The full original includes transparent margins.
+SHA-256: bfbbcb5151e85cf95ce5add07af63c0028384d904b7029c272891a6de15e98f0
+Source: source/lib/techflex-invoice-logo.json and docs/INVOICE-BRANDING.md.
+
+TechCommand_Existing_Favicon.svg is copied unchanged from source/public/favicon.svg. Existing favicon colors: #071321, #54D7E8, #4B8DF8. These are source values, not a separately certified brand manual.
+
+Product identity: TechCommand OS by TechFlex Mobility Solutions.
+Source descriptor: Field Service + HTM Operating System.
+Keep the standalone TechCommand product identity and TechFlex attribution. Later company-specific branding must be configurable.
+
+No separately verified full vector TechFlex logo or complete reverse report-artwork package is included. Use the existing approved application assets and review the report layout; do not invent replacement brand artwork.

@@ -1,0 +1,47 @@
+TECHCOMMAND OS FREELANCER HANDOFF
+Prepared October 28, 2026 | TechFlex Mobility Solutions
+
+READ IN THIS ORDER
+1. 01_Project_Brief/TechCommand_Freelancer_Handoff_2026-10-28.pdf
+   The editable Word copy is beside it. These describe the same requirements.
+2. 02_Existing_Source/TechCommand_Source_Migration_Handoff_v171_2026-10-24.zip
+   Unzip it separately. Read handoff/README_FIRST.txt and MIGRATION_INVENTORY.json before attempting to deploy source/.
+3. 05_Cloud_and_Migration/Migration_and_Access_Checklist.txt
+4. 04_Requirements_and_Acceptance/Requirements_Catalog.json and Acceptance_Test_Catalog.json
+5. Relevant reference documents and the existing source/docs/ tracker.
+
+THE JOB
+Finish the existing CRM/field-service system, make daily technician and administrator work dependable, and migrate to independent company-controlled operation. The latest established migration goal includes no required ChatGPT, Sites or OpenAI runtime dependency. Preserve existing useful work, identities, records, relationships, documents and branding. Avoid an unnecessary full rewrite.
+
+SOURCE VERIFIED FOR THIS PACKAGE
+Version 171; source commit 8d3f5828c84a37409ee17a58762eec6ec3451fff.
+The current project record still lists version 171 as of October 28.
+682 tracked source files, 108 source table declarations, 46 SQL migrations.
+All 682 included source-file SHA-256 hashes matched the original handoff manifest.
+The original source ZIP is preserved unchanged.
+No dependency installation, application test run or independent deployment was performed while creating this handoff. Document layout, message length and package integrity were checked separately.
+
+NOT INSIDE THE SOURCE ZIP
+Complete live operational database; live R2 objects; authentication users/session export; runtime secret values; full Git history. These need separate supported transfer and reconciliation. Do not describe the package as a full production backup or a turnkey independent app.
+
+WHAT EACH FOLDER CONTAINS
+01_Project_Brief: master PDF and editable DOCX.
+02_Existing_Source: original v171 source/migration ZIP, including dependency lockfile, application code, schema/migrations, tests, source assets and technical docs.
+03_Branding: exact original transparent TechFlex logo, existing TechCommand favicon and source/usage notes.
+04_Requirements_and_Acceptance: requirements and test catalogs, fictional fixtures, workflow/data/permission rules.
+05_Cloud_and_Migration: migration/access checklist, source map, configuration key inventory, verified project snapshot and historical DNS reference.
+06_Reference_Documents: original detailed PDF/work-order standard, roadmap, repair brief, historical integration/readiness documents and scanner/printer guide.
+07_Website_Connector: existing WordPress intake connector ZIP and installation-review notes.
+Fiverr_Requirements_Message.txt: paste-ready form response, within the screenshot's 2,500-character limit.
+
+DOCUMENT PRECEDENCE
+The current master brief and October 24 migration objective control hosting/provider independence. Do not follow an old instruction to keep Sites hosting or OpenAI dependency when it conflicts with that objective.
+The simple DME/SpinLife workflow permits partial saves and does not require full biomedical records, maps, scheduling or optional AI to start ordinary fieldwork. Mandatory safety, contractual and truthful finalization rules still apply.
+The source already uses pdf-lib. Earlier ReportLab recommendations describe a possible implementation, not a compulsory rewrite.
+Historical filename patterns differ. Preserve existing identifiers and use account-configurable naming with full suffix retention; confirm the preferred visible filename during milestone 1.
+The source tracker and dated release notes contain newer implemented features than the September readiness guide. Recheck all current behavior; historical test totals are not fresh verification.
+
+TO BEGIN
+Review the source and reply with the proposed milestone scope, fees, schedule, selected hosting/auth/AI approach, recurring costs, access needed and remaining blockers. No budget, delivery date or final replacement stack is established by this package. Keep code and infrastructure in TechFlex-controlled accounts. Use synthetic fixtures for development.
+
+The package is for the authorized project developer and contains private company source and business documents. SHA256SUMS.txt covers all packaged files except itself.

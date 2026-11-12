@@ -1,0 +1,7 @@
+EXISTING WEBSITE INTAKE CONNECTOR
+
+The ZIP is the recovered TechCommand WordPress intake connector v1.0.3, unchanged. It contains techcommand-intake/techcommand-intake.php. It is an existing asset to inspect, not a claim that the current website-to-CRM handoff is active.
+
+Review the PHP source, installed plugin version, current Elementor form IDs/field IDs, authorized endpoint and shared-secret handling before installation or activation. Confirm supported PHP/WordPress versions, callback authentication and duplicate-event behavior in staging. Do not import legacy endpoint values blindly.
+
+Map customer service inquiries, partner inquiries and recruiting separately. Preserve source page, consent and required attachments. Keep newsletters out of the service-job queue and applicant data out of customer records. Verify a transaction through to the saved CRM record, including timeout/retry and malformed-input cases. Use the historical integration manual as context and retest against the migrated receiver.

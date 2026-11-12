@@ -1,0 +1,38 @@
+VERSION 171 TECHNICAL SOURCE MAP
+
+Unzip 02_Existing_Source/TechCommand_Source_Migration_Handoff_v171_2026-10-24.zip.
+Root: TechCommand_Source_Migration_Handoff_v171/
+  handoff/README_FIRST.txt: authoritative source-export/migration context.
+  handoff/MIGRATION_INVENTORY.json: source metadata and missing live exports.
+  handoff/SOURCE_FILE_SHA256.json: integrity for all 682 source files.
+  source/: preserved tracked application snapshot, unchanged.
+
+WORKING AREAS WITHIN source/
+package.json and package-lock.json: dependencies, scripts, exact lockfile.
+vite.config.ts, build/sites-vite-plugin.ts, worker/index.ts: existing Vinext/Worker/Sites coupling, image bindings, headers and observability.
+.openai/hosting.json: original project identity, DB and BUCKET binding declarations; not new independent resource provisioning.
+db/index.ts, db/schema.ts, drizzle/: D1/Drizzle access, 108 table declarations, 46 SQL migration files; not a live backup.
+components/techflex-command-center.tsx: administrator workspace and role entry points.
+components/spinlife-portal.tsx, app/api/spinlife/: simple delivery/field order path.
+components/technician-field-portal.tsx, components/field-completion.tsx, app/api/completions/: assigned work, field completion and review.
+components/bid-intelligence-workspace.tsx, app/api/bid-intelligence/, app/api/intakes/, app/api/work-orders/, app/api/dispatch/: intake, pricing and assignment.
+components/client-partner-portal.tsx: client/account-scoped experience to verify.
+lib/techflex-pdfs.ts, lib/spinlife-document-policy.ts: branded PDF and naming logic; current PDF engine is pdf-lib.
+lib/techflex-invoice-logo.json, lib/platform-brand.ts, public/favicon.svg: original identity assets.
+lib/password-auth.ts, lib/portal-auth.ts, app/chatgpt-auth.ts, app/api/auth/, supabase/functions/techcommand-access/: password/auth bridge plus legacy Sites identity paths to replace safely.
+lib/structured-ai.ts, lib/asset-ai-research.ts and app/api/ai/: provider-specific AI dependencies to replace behind an explicit interface.
+app/api/documents/, app/api/attachments/: ordinary file access, not a complete backup tool. Documents listing has cleanup side effects.
+docs/IMPLEMENTATION-TRACKER.md, docs/RELIABILITY-LEDGER.md, docs/field-reliability-2026-10-20.md: historical status and tests to rerun/verify.
+docs/MASTER-PROJECT-INSTRUCTION.md, docs/WORKFLOW-SIMPLIFICATION.md: broad roadmap and simplified day-to-day priorities.
+docs/INVOICE-BRANDING.md, docs/ASSET-SCANNING.md, docs/INDEPENDENT-LOGIN.md: specific existing implementation notes.
+tests/: existing tests and synthetic fixtures. Historical passing totals do not replace independent staging acceptance.
+
+CURRENT BUILD CONSTRAINTS
+package.json declares Node >=22.13.0. Linux scripts use flock, curl and GNU timeout. Existing README is starter/hosting-oriented and contains obsolete starter assumptions, including an initially empty schema; inspect actual files. The snapshot does not include node_modules or the full Git history.
+Do not call the package a ready-to-deploy independent app. Review scripts and dependencies in the new environment, remove Sites coupling and document standalone commands.
+
+INVESTIGATION ITEMS
+worker/index.ts currently sets Permissions-Policy microphone=(). Evaluate in conjunction with existing browser speech features on supported physical devices.
+Widespread TECHFLEX_ORG_ID references make company isolation a real implementation task.
+October 20 notes record 15 baseline failures, focused passing tests and unverified physical/live-provider behavior. No suite was rerun for this documentation package.
+The existing Supabase project is an authentication/provisioning dependency. Main operational records use D1.

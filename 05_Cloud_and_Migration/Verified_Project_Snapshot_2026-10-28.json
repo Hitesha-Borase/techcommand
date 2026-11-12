@@ -1,0 +1,26 @@
+{
+  "checked_on": "2026-10-28",
+  "timezone": "America/New_York",
+  "project": "TechCommand OS",
+  "project_id": "appgprj_6a9b93be6e1881918cbfe6c2dc9e54d8",
+  "latest_saved_version": 171,
+  "source_commit": "8d3f5828c84a37409ee17a58762eec6ec3451fff",
+  "source_archive_prepared_on": "2026-10-24",
+  "deployment_record_status": "succeeded",
+  "deployment_record_updated_at": "2026-10-20T14:54:48.747997+00:00",
+  "current_custom_domain": "https://app.techcommandhq.com",
+  "custom_domain_record_status": "active",
+  "ssl_record_status": "active",
+  "cname_target": "custom-domains.chatgpt.site.",
+  "native_deployment_url": "https://techcommandhq.techflex-8918.chatgpt.site",
+  "source_file_count": 682,
+  "verified_matching_source_hashes": 682,
+  "source_declared_tables": 108,
+  "source_sql_migrations": 46,
+  "verification_limits": [
+    "Metadata is not proof of runtime workflow health.",
+    "No application suite, independent build or authenticated physical-device journey was run for this handoff.",
+    "Public web fetches from the research environment were unavailable; this is not a public-outage finding.",
+    "No current Cloudflare zone export, live database export, R2 export, auth export or runtime secret values are included."
+  ]
+}

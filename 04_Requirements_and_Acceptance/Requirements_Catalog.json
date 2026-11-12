@@ -1,0 +1,356 @@
+{
+  "project": "TechCommand OS",
+  "prepared_on": "2026-10-28",
+  "version_baseline": 171,
+  "interpretation": "Consolidated completion and preservation catalog. Priorities are delivery guidance; confirm contracted milestone scope. Entries are requirements, not claims of completed implementation.",
+  "status_values": [
+    "planned",
+    "implemented",
+    "tested",
+    "deployed",
+    "blocked"
+  ],
+  "requirements": [
+    {
+      "id": "R01",
+      "priority": "P0",
+      "area": "Migration",
+      "title": "Independent operation",
+      "acceptance": "Clean checkout builds and deploys through company-owned accounts without Sites/ChatGPT/OpenAI runtime dependency.",
+      "test_ids": [
+        "TC01"
+      ],
+      "verification_status": "Requires independent staging verification"
+    },
+    {
+      "id": "R02",
+      "priority": "P0",
+      "area": "Migration",
+      "title": "Complete data and file preservation",
+      "acceptance": "Obtain supported full live exports; reconcile record relationships, file references and auth mappings; restore-test before cutover.",
+      "test_ids": [
+        "TC02"
+      ],
+      "verification_status": "Requires independent staging verification"
+    },
+    {
+      "id": "R03",
+      "priority": "P0",
+      "area": "Access",
+      "title": "Reliable mobile identity",
+      "acceptance": "Normal technician sign-in, first-password flow and session recovery work without endless role verification.",
+      "test_ids": [
+        "TC03"
+      ],
+      "verification_status": "Requires independent staging verification"
+    },
+    {
+      "id": "R04",
+      "priority": "P0",
+      "area": "Intake",
+      "title": "Document and pasted-text intake",
+      "acceptance": "Retain originals; extract available source facts from multiple supported files and allow reviewed corrections/partial saves.",
+      "test_ids": [
+        "TC04"
+      ],
+      "verification_status": "Requires independent staging verification"
+    },
+    {
+      "id": "R05",
+      "priority": "P0",
+      "area": "Identity",
+      "title": "Exact work-order references",
+      "acceptance": "Preserve complete account-scoped external identifiers, meaningful suffixes and leading zeros everywhere.",
+      "test_ids": [
+        "TC05"
+      ],
+      "verification_status": "Requires independent staging verification"
+    },
+    {
+      "id": "R06",
+      "priority": "P0",
+      "area": "Intake",
+      "title": "Reopen the same existing record",
+      "acceptance": "Inbox/task links open the exact saved order; concurrent edits and duplicate conflicts do not silently merge or create records.",
+      "test_ids": [
+        "TC06"
+      ],
+      "verification_status": "Requires independent staging verification"
+    },
+    {
+      "id": "R07",
+      "priority": "P0",
+      "area": "Dispatch",
+      "title": "Assignment and technician pay",
+      "acceptance": "Administrator selects technician and agreed pay; assigned user sees exact job; client pricing remains separate.",
+      "test_ids": [
+        "TC07"
+      ],
+      "verification_status": "Requires independent staging verification"
+    },
+    {
+      "id": "R08",
+      "priority": "P0",
+      "area": "Field",
+      "title": "Simple partial documentation",
+      "acceptance": "Draft saves and normal work do not require optional maps, AI, complete CRM/biomedical profiles or premature finalization.",
+      "test_ids": [
+        "TC08"
+      ],
+      "verification_status": "Requires independent staging verification"
+    },
+    {
+      "id": "R09",
+      "priority": "P0",
+      "area": "Field",
+      "title": "Durable notes and evidence",
+      "acceptance": "Save throughout with honest local/server states, resumable uploads, revision checks and conflict recovery.",
+      "test_ids": [
+        "TC09"
+      ],
+      "verification_status": "Requires independent staging verification"
+    },
+    {
+      "id": "R10",
+      "priority": "P0",
+      "area": "Field",
+      "title": "Microphone failure isolation",
+      "acceptance": "Explicit start/stop/cancel; typed notes and save usable on denial, timeout, unsupported browser and late events.",
+      "test_ids": [
+        "TC10"
+      ],
+      "verification_status": "Requires independent staging verification"
+    },
+    {
+      "id": "R11",
+      "priority": "P0",
+      "area": "Field",
+      "title": "Responsive forms",
+      "acceptance": "Defer optional bundles and slow work; no lost newer edits or browser stalls during background operations.",
+      "test_ids": [
+        "TC11"
+      ],
+      "verification_status": "Requires independent staging verification"
+    },
+    {
+      "id": "R12",
+      "priority": "P0",
+      "area": "Documents",
+      "title": "One organized service packet",
+      "acceptance": "Reviewed partner form where required, TechFlex report and captioned photos; correct pagination, original evidence and full reference.",
+      "test_ids": [
+        "TC12"
+      ],
+      "verification_status": "Requires independent staging verification"
+    },
+    {
+      "id": "R13",
+      "priority": "P0",
+      "area": "Documents",
+      "title": "Separate deterministic invoice",
+      "acceptance": "Same approved revision; account authorization and terms; cent-accurate totals; invoice outside service packet.",
+      "test_ids": [
+        "TC13"
+      ],
+      "verification_status": "Requires independent staging verification"
+    },
+    {
+      "id": "R14",
+      "priority": "P0",
+      "area": "Finance",
+      "title": "Contract-aware nonduplicate billing",
+      "acceptance": "Prepaid/included service not charged again; ambiguity reviewed; rendering and retries never create duplicate receivables/payouts.",
+      "test_ids": [
+        "TC14"
+      ],
+      "verification_status": "Requires independent staging verification"
+    },
+    {
+      "id": "R15",
+      "priority": "P0",
+      "area": "Access",
+      "title": "Server permissions and financial privacy",
+      "acceptance": "Verify user/account/location/assignment/company for records, storage, AI and exports; hide internal costs/pay/margin from partners.",
+      "test_ids": [
+        "TC15"
+      ],
+      "verification_status": "Requires independent staging verification"
+    },
+    {
+      "id": "R16",
+      "priority": "P0",
+      "area": "Integrity",
+      "title": "Truthful evidence and approvals",
+      "acceptance": "Unknown data stays unknown; failed/unperformed checks do not become passed; preserve authentic approvals and outcome distinctions.",
+      "test_ids": [
+        "TC16"
+      ],
+      "verification_status": "Requires independent staging verification"
+    },
+    {
+      "id": "R17",
+      "priority": "P0",
+      "area": "Recovery",
+      "title": "Idempotent finalization",
+      "acceptance": "Retry same request safely after lost response; prevent duplicate submissions, report revisions, invoices and pay effects.",
+      "test_ids": [
+        "TC17"
+      ],
+      "verification_status": "Requires independent staging verification"
+    },
+    {
+      "id": "R18",
+      "priority": "P1",
+      "area": "CRM",
+      "title": "Linked business entities",
+      "acceptance": "Accounts, customers, contacts, locations, contracts, work, assets and finance remain linked with history/search.",
+      "test_ids": [
+        "TC18"
+      ],
+      "verification_status": "Requires independent staging verification"
+    },
+    {
+      "id": "R19",
+      "priority": "P1",
+      "area": "Schedule",
+      "title": "Usable scheduling and routes",
+      "acceptance": "Shared coordinator/technician schedule and permissioned self-scheduling; Westerville origin default with override; manual fallback if routing unavailable.",
+      "test_ids": [
+        "TC19"
+      ],
+      "verification_status": "Requires independent staging verification"
+    },
+    {
+      "id": "R20",
+      "priority": "P1",
+      "area": "Partner",
+      "title": "Scoped partner portal",
+      "acceptance": "Individual identities and account/location scope; requests, quote review/acceptance, job tracking and messaging.",
+      "test_ids": [
+        "TC20"
+      ],
+      "verification_status": "Requires independent staging verification"
+    },
+    {
+      "id": "R21",
+      "priority": "P1",
+      "area": "Pricing",
+      "title": "Versioned account rate rules",
+      "acceptance": "Preserve accepted snapshots, rate overrides and account terms; private configured 40 percent gross-margin guardrail distinguished from markup.",
+      "test_ids": [
+        "TC21"
+      ],
+      "verification_status": "Requires independent staging verification"
+    },
+    {
+      "id": "R22",
+      "priority": "P1",
+      "area": "Assets",
+      "title": "Safe facility asset import",
+      "acceptance": "Preview/map rows, retain leading zeros, explicit create/update/skip, no blank overwrite, collision handling and retry deduplication.",
+      "test_ids": [
+        "TC22"
+      ],
+      "verification_status": "Requires independent staging verification"
+    },
+    {
+      "id": "R23",
+      "priority": "P1",
+      "area": "Assets",
+      "title": "Scan and label exact equipment",
+      "acceptance": "Camera/HID/manual scan; exact authorized resolution, permanent history and separately dated PM stickers.",
+      "test_ids": [
+        "TC23"
+      ],
+      "verification_status": "Requires independent staging verification"
+    },
+    {
+      "id": "R24",
+      "priority": "P1",
+      "area": "Biomedical",
+      "title": "Per-asset PM and approved procedures",
+      "acceptance": "Versioned applicable source, measurements/units/instrument provenance, per-device exceptions and truthful facility summaries.",
+      "test_ids": [
+        "TC24"
+      ],
+      "verification_status": "Requires independent staging verification"
+    },
+    {
+      "id": "R25",
+      "priority": "P1",
+      "area": "AI",
+      "title": "Provider-independent grounded assistance",
+      "acceptance": "Independent replacement evaluated on actual extraction/research/transcription needs; source-supported reviewed outputs and manual fallback.",
+      "test_ids": [
+        "TC25"
+      ],
+      "verification_status": "Requires independent staging verification"
+    },
+    {
+      "id": "R26",
+      "priority": "P1",
+      "area": "Website",
+      "title": "Verified website-to-CRM intake",
+      "acceptance": "Review existing WordPress connector, correct field IDs, separate service/recruiting/newsletter data, authenticate and deduplicate.",
+      "test_ids": [
+        "TC26"
+      ],
+      "verification_status": "Requires independent staging verification"
+    },
+    {
+      "id": "R27",
+      "priority": "P1",
+      "area": "Integrations",
+      "title": "Verified provider transactions",
+      "acceptance": "Each agreed Calendar/Gmail/Drive/Maps/QuickBooks/800.com/SpinLife-FaST connection passes mapping, transaction, failure, audit and recovery tests.",
+      "test_ids": [
+        "TC27"
+      ],
+      "verification_status": "Requires independent staging verification"
+    },
+    {
+      "id": "R28",
+      "priority": "P1",
+      "area": "Operations",
+      "title": "Observable maintained production",
+      "acceptance": "Sanitized PostHog/errors, release identifiers, actionable failures, backups/restore, documented deployment/rollback and costs.",
+      "test_ids": [
+        "TC28"
+      ],
+      "verification_status": "Requires independent staging verification"
+    },
+    {
+      "id": "R29",
+      "priority": "P2",
+      "area": "Academy",
+      "title": "Preserve training and school scope",
+      "acceptance": "Separate learner participation, assessed competence and service authority; own-school/learner records and reviewed content revisions.",
+      "test_ids": [
+        "TC29"
+      ],
+      "verification_status": "Requires independent staging verification"
+    },
+    {
+      "id": "R30",
+      "priority": "P2",
+      "area": "Commercial",
+      "title": "Multi-company licensing readiness",
+      "acceptance": "Replace fixed TechFlex organization assumptions and verify tenant isolation, configurable brand/rules, onboarding and usage controls.",
+      "test_ids": [
+        "TC30"
+      ],
+      "verification_status": "Requires independent staging verification"
+    },
+    {
+      "id": "R31",
+      "priority": "P2",
+      "area": "Hardware",
+      "title": "Proven optional hardware support",
+      "acceptance": "Pilot actual NETUM C750 HID and NIIMBOT M2_H workflows; printers/instruments/NFC/native packaging only for separately agreed needs.",
+      "test_ids": [
+        "TC23"
+      ],
+      "verification_status": "Requires independent staging verification"
+    }
+  ]
+}

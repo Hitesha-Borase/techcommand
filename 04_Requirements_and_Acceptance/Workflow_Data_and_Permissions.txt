@@ -1,0 +1,33 @@
+WORKFLOW DATA AND PERMISSION RULES
+
+The authoritative implementation is inside the existing source, especially db/schema.ts, lib/portal-auth.ts and relevant API handlers. This file is a handoff guide, not a replacement schema or a claim that all controls are already complete.
+
+CORE RELATIONSHIPS
+Company -> account -> location -> department -> physical asset.
+Work order -> source documents -> authorized scope -> assignment -> one or more visits/assets.
+Visit/asset -> findings/actions/tests/measurements -> parts -> photo/evidence -> reviewed report revision.
+Approved report revision -> packet artifact and authorized separate invoice preparation.
+Technician compensation is linked but independent of customer invoice/payment state.
+Contracts/rate cards/procedures/forms/documents retain the revision used at the time.
+
+IDENTIFIERS
+Keep immutable internal IDs separate from the account-scoped complete external work-order string. Keep physical asset ID, visible permanent tag, legacy alias, model/SKU and serial separate. Preserve leading zeros and suffixes. Never merge by customer name or a similar-looking label alone.
+
+STATE DIMENSIONS
+Visit progress, equipment outcome, document state, review state, partner submission, customer billing and technician payout are distinct. A completed pickup is not a repair; a diagnostic visit can be finished with parts pending. A completed visit does not mean paid or submitted. Missing information is not passed testing.
+
+DRAFT AND FINALIZATION
+Permit partial saves throughout ordinary work. A final approved record must retain its truthful evidence snapshot, authentic sign-off, revision and rendered artifacts. Exact retries use the same idempotency key; changed payloads or stale revisions need conflict handling. Corrections after approval use auditable revisions/addenda, not silent replacement of signed history.
+
+ACCESS BOUNDARIES
+Check company, account/location, role/action and technician assignment on the server for both reads and writes. Repeat checks for object storage, previews, downloads, search, AI retrieval, background processing and exports.
+Partner/client access exposes only its allowed business records and approved documents. Never include internal cost, technician pay, margin, pricing reasoning or other accounts.
+Technicians see assigned jobs and explicitly permitted self-service functions. Administrator-assisted use must not cause the field workflow to depend on owner privileges.
+School/Academy functions must retain learner/school/track scope and separate participation from verified competence and service authorization.
+
+BUSINESS RULES
+Approved account rates, accepted quote snapshots and executed contract coverage control billing. Preserve the configured internal 40 percent gross-margin goal, not a blanket 40 percent markup. Account terms differ; Net 15, Net 30 and due-on-receipt examples are not universal defaults. Included/prepaid service has an explicit nonbillable reason or covered outcome without a duplicate charge.
+Do not activate live partner automation or send external messages merely because an integration exists. Preserve the owner's prior stopped SpinLife automation unless explicitly restarted.
+
+PAPERWORK
+Use the actual approved partner template when required; unknown template versions need review. The service packet combines that form, the branded report and appropriately captioned photos. Invoice remains separate. Keep originals, approved input revision, template revision, artifact hashes and submission receipt/history. File naming is account configurable and retains the full meaningful work-order reference.
