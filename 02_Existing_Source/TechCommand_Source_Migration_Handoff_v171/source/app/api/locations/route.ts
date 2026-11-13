@@ -128,8 +128,11 @@ export async function POST(request: Request) {
       "owner_administrator",
       "operations_administrator",
       "finance",
+<<<<<<< HEAD
       "biomedical_lead",
       "dispatcher",
+=======
+>>>>>>> 17ebf6d9fa9a65562b293d1018c04545a1e0ef9a
     ]);
     await ensureLocationsSchema();
     const db = getDatabase();

@@ -68,6 +68,7 @@ export async function POST(request: Request) {
       "finance",
       "biomedical_lead",
       "dispatcher",
+      "finance",
     ]);
     const input = schema.parse(await request.json());
     const locationId = input.locationId || null;

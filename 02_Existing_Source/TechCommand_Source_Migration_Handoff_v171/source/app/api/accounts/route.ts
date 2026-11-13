@@ -170,111 +170,20 @@ async function ensureAccountsSchema() {
 export async function GET(request: Request) {
   try {
     await requirePortalRole(request, [...readRoles]);
-    await ensureAccountsSchema();
-
-    const db = getDatabase();
-    const store = getAccountsStore();
-    const accountsMap = new Map<string, any>();
-
-    // 1. Fetch from D1 database
-    if (db) {
-      try {
-        const result = await db.prepare(
-          `SELECT * FROM accounts WHERE COALESCE(status, 'active') != 'archived' ORDER BY name`
-        ).all();
-
-        for (const a of (result.results || []) as any[]) {
-          const accountId = String(a.id);
-          const accObj = {
-            id: accountId,
-            externalId: a.external_id || a.externalId || null,
-            name: String(a.name || ""),
-            accountType: String(a.account_type || a.accountType || "facility"),
-            status: String(a.status || "active"),
-            billingEmail: a.billing_email || a.billingEmail || null,
-            paymentTermsDays: Number(a.payment_terms_days || a.paymentTermsDays || 30),
-            serviceLevel: a.service_level || a.serviceLevel || null,
-            serviceDiscipline: a.service_discipline || a.serviceDiscipline || null,
-            updatedAt: a.updated_at || a.updatedAt || new Date().toISOString(),
-            locationCount: 0,
-            assetCount: 0,
-          };
-          accountsMap.set(accountId, accObj);
-          store.set(accountId, accObj);
-        }
-      } catch (dbErr) {
-        console.warn("[API ACCOUNTS GET] D1 query warning:", dbErr);
-      }
-    }
-
-    // 2. Merge accounts from in-memory store
-    for (const [id, acc] of store.entries()) {
-      if (!accountsMap.has(id)) {
-        accountsMap.set(id, {
-          id: String(acc.id),
-          externalId: acc.externalId || acc.external_id || null,
-          name: String(acc.name || ""),
-          accountType: String(acc.accountType || acc.account_type || "facility"),
-          status: String(acc.status || "active"),
-          billingEmail: acc.billingEmail || acc.billing_email || null,
-          paymentTermsDays: Number(acc.paymentTermsDays || acc.payment_terms_days || 30),
-          serviceLevel: acc.serviceLevel || acc.service_level || null,
-          serviceDiscipline: acc.serviceDiscipline || acc.service_discipline || null,
-          updatedAt: acc.updatedAt || acc.updated_at || new Date().toISOString(),
-          locationCount: 0,
-          assetCount: 0,
-        });
-
-        // Sync to D1
-        if (db) {
-          try {
-            await db.prepare(
-              `INSERT OR REPLACE INTO accounts
-                (id, organization_id, external_id, name, account_type, status, billing_email, payment_terms_days, service_level, service_discipline, record_version, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
-            ).bind(
-              acc.id,
-              acc.organizationId || TECHFLEX_ORG_ID,
-              acc.externalId || null,
-              acc.name,
-              acc.accountType || "facility",
-              acc.billingEmail || null,
-              acc.paymentTermsDays || 30,
-              acc.serviceLevel || null,
-              acc.serviceDiscipline || null,
-            ).run();
-          } catch {}
-        }
-      }
-    }
-
-    const accountsList = Array.from(accountsMap.values());
-    accountsList.sort((a, b) => a.name.localeCompare(b.name));
-
-    // 3. Attach dynamic locationCount and assetCount from D1
-    if (accountsList.length > 0 && db) {
-      try {
-        const locRes = await db.prepare(
-          "SELECT account_id, COUNT(*) as count FROM locations WHERE COALESCE(status, 'active') = 'active' GROUP BY account_id"
-        ).all();
-        const locMap = new Map((locRes.results || []).map((l: any) => [l.account_id, Number(l.count)]));
-        for (const acc of accountsList) {
-          if (locMap.has(acc.id)) acc.locationCount = locMap.get(acc.id)!;
-        }
-      } catch {}
-
-      try {
-        const assetRes = await db.prepare(
-          "SELECT account_id, COUNT(*) as count FROM assets WHERE COALESCE(status, 'in_service') != 'retired' GROUP BY account_id"
-        ).all();
-        const assetMap = new Map((assetRes.results || []).map((s: any) => [s.account_id, Number(s.count)]));
-        for (const acc of accountsList) {
-          if (assetMap.has(acc.id)) acc.assetCount = assetMap.get(acc.id)!;
-        }
-      } catch {}
-    }
-
-    return Response.json({ accounts: accountsList }, { headers: privateNoStore });
+    const result = await env.DB.prepare(
+      `SELECT a.id, a.external_id AS externalId, a.name, a.account_type AS accountType,
+              a.status, a.billing_email AS billingEmail, a.payment_terms_days AS paymentTermsDays,
+              a.service_discipline AS serviceDiscipline, a.service_level AS serviceLevel, a.updated_at AS updatedAt,
+              COUNT(DISTINCT l.id) AS locationCount,
+              COUNT(DISTINCT s.id) AS assetCount
+         FROM accounts a
+         LEFT JOIN locations l ON l.account_id = a.id AND l.status = 'active'
+         LEFT JOIN assets s ON s.account_id = a.id AND s.organization_id = a.organization_id AND s.status != 'retired'
+        WHERE a.organization_id = ? AND a.status != 'archived'
+        GROUP BY a.id
+        ORDER BY a.name`,
+    ).bind(TECHFLEX_ORG_ID).all();
+    return Response.json({ accounts: result?.results || [] }, { headers: privateNoStore });
   } catch (error) {
     return apiError(error);
   }
@@ -286,8 +195,6 @@ export async function POST(request: Request) {
       "owner_administrator",
       "operations_administrator",
       "finance",
-      "biomedical_lead",
-      "dispatcher",
     ]);
     await ensureAccountsSchema();
     const orgId = resolveOrganizationId(identity, request) || TECHFLEX_ORG_ID;
@@ -295,80 +202,36 @@ export async function POST(request: Request) {
     const input = accountSchema.parse(body);
     const id = crypto.randomUUID();
 
-    const accountRecord = {
-      id,
-      organizationId: orgId,
-      externalId: input.externalId || null,
-      name: input.name,
-      accountType: input.accountType,
-      status: "active",
-      billingEmail: input.billingEmail || null,
-      paymentTermsDays: input.paymentTermsDays ?? 30,
-      serviceLevel: input.serviceLevel || null,
-      serviceDiscipline: input.serviceDiscipline || null,
-      locationCount: 0,
-      assetCount: 0,
-      updatedAt: new Date().toISOString(),
-    };
+    // Ensure parent organization and actor user records exist so foreign keys never fail
+    await env.DB.prepare(
+      "INSERT OR IGNORE INTO organizations (id, legal_name, display_name) VALUES (?, 'Astute Restorations LLC', 'TechFlex Mobility Solutions')",
+    ).bind(TECHFLEX_ORG_ID).run();
+    await env.DB.prepare(
+      "INSERT OR IGNORE INTO users (id, auth_subject, email, display_name, status) VALUES (?, ?, ?, ?, 'active')",
+    ).bind(identity.userId, identity.authSubject, identity.email, identity.displayName).run();
 
-    // 1. Save to in-memory store
-    const store = getAccountsStore();
-    store.set(id, accountRecord);
-
-    // 2. Save to D1 database
-    const db = getDatabase();
-    if (db) {
-      try {
-        await db.exec("PRAGMA foreign_keys = OFF;");
-        await db.prepare(
-          `INSERT OR REPLACE INTO accounts
-            (id, organization_id, external_id, name, account_type, status, billing_email, payment_terms_days, service_level, service_discipline, record_version, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-        ).bind(
-          id,
-          orgId,
-          input.externalId || null,
-          input.name,
-          input.accountType,
-          input.billingEmail || null,
-          input.paymentTermsDays ?? 30,
-          input.serviceLevel || null,
-          input.serviceDiscipline || null,
-        ).run();
-      } catch (dbErr) {
-        console.error("[API ACCOUNTS POST] D1 insert failed, trying baseline insert:", dbErr);
-        try {
-          await db.prepare(
-            `INSERT OR REPLACE INTO accounts
-              (id, organization_id, external_id, name, account_type, status, billing_email, payment_terms_days, service_level, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-          ).bind(
-            id,
-            orgId,
-            input.externalId || null,
-            input.name,
-            input.accountType,
-            input.billingEmail || null,
-            input.paymentTermsDays ?? 30,
-            input.serviceLevel || null,
-          ).run();
-        } catch (baselineErr) {
-          console.error("[API ACCOUNTS POST] Baseline D1 insert failed:", baselineErr);
-        }
-      }
-
-      // Safe audit log insert
-      try {
-        await db.prepare(
-          `INSERT INTO audit_logs
-            (id, organization_id, actor_user_id, action, entity_type, entity_id, after_json)
-           VALUES (?, ?, ?, 'account.created', 'account', ?, ?)`,
-        ).bind(crypto.randomUUID(), orgId, identity.userId || null, id, JSON.stringify(input)).run();
-      } catch (auditErr) {
-        console.warn("[API ACCOUNTS POST] Audit log insert warning:", auditErr);
-      }
-    }
-
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO accounts
+          (id, organization_id, external_id, name, account_type, status, billing_email, payment_terms_days, service_level, service_discipline)
+         VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)`,
+      ).bind(
+        id,
+        TECHFLEX_ORG_ID,
+        input.externalId || null,
+        input.name,
+        input.accountType,
+        input.billingEmail || null,
+        input.paymentTermsDays,
+        input.serviceLevel || null,
+        input.serviceDiscipline || null,
+      ),
+      env.DB.prepare(
+        `INSERT INTO audit_logs
+          (id, organization_id, actor_user_id, action, entity_type, entity_id, after_json)
+         VALUES (?, ?, ?, 'account.created', 'account', ?, ?)`,
+      ).bind(crypto.randomUUID(), TECHFLEX_ORG_ID, identity.userId, id, JSON.stringify(input)),
+    ]);
     return Response.json({ account: { id, ...input, status: "active" } }, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) {
