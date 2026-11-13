@@ -445,7 +445,6 @@ class D1PreparedStatementShim {
       return { results: rows as T[], success: true, meta: { changes: 0 } };
     }
 
-    return { results: [], success: true, meta: { changes: 0 } };
     // TRAINING SCHOOLS
     if (s.includes("from training_schools")) {
       if (!db.training_schools || db.training_schools.length === 0) {
