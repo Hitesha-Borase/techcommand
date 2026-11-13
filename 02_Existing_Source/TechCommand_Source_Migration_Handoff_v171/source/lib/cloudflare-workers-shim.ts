@@ -72,6 +72,55 @@ type LocationRecord = {
   status: string;
 };
 
+type CustomerRecord = {
+  id: string;
+  organizationId: string;
+  organization_id: string;
+  accountId: string;
+  account_id: string;
+  accountName: string;
+  locationId: string | null;
+  location_id: string | null;
+  locationName: string | null;
+  externalId: string | null;
+  external_id: string | null;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  address1: string | null;
+  address_1: string | null;
+  address2: string | null;
+  address_2: string | null;
+  city: string | null;
+  state: string | null;
+  postalCode: string | null;
+  postal_code: string | null;
+  notes: string | null;
+  status: string;
+  workOrderCount: number;
+  documentCount: number;
+  updatedAt: string;
+  updated_at: string;
+};
+
+type ContactRecord = {
+  id: string;
+  accountId: string;
+  account_id: string;
+  accountName: string;
+  locationId: string | null;
+  location_id: string | null;
+  locationName: string | null;
+  name: string;
+  title: string | null;
+  email: string | null;
+  phone: string | null;
+  contactType: string;
+  contact_type: string;
+  isPrimary: number;
+  is_primary: number;
+};
+
 const g = globalThis as any;
 if (!g.__TECHCOMMAND_DB__) {
   g.__TECHCOMMAND_DB__ = {
@@ -144,8 +193,104 @@ if (!g.__TECHCOMMAND_DB__) {
         status: "active",
       },
     ] as LocationRecord[],
-    customers: [],
-    contacts: [],
+    customers: [
+      {
+        id: "cust_demo_1",
+        organizationId: "techflex",
+        organization_id: "techflex",
+        accountId: "df9041f0-012c-4b71-8a6c-f51c45284dc6",
+        account_id: "df9041f0-012c-4b71-8a6c-f51c45284dc6",
+        accountName: "TechFlex Mobility Solutions",
+        locationId: "loc_demo_1",
+        location_id: "loc_demo_1",
+        locationName: "Main Facility Clinic",
+        externalId: null,
+        external_id: null,
+        name: "John Smith",
+        email: "john.smith@techflexmobility.com",
+        phone: "614-555-0101",
+        address1: "742 Evergreen Terrace",
+        address_1: "742 Evergreen Terrace",
+        address2: null,
+        address_2: null,
+        city: "Columbus",
+        state: "OH",
+        postalCode: "43215",
+        postal_code: "43215",
+        notes: "Primary demo customer",
+        status: "active",
+        workOrderCount: 0,
+        documentCount: 0,
+        updatedAt: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      {
+        id: "cust_demo_2",
+        organizationId: "techflex",
+        organization_id: "techflex",
+        accountId: "e1531f3f-348a-4f14-9f38-9dad240c2bae",
+        account_id: "e1531f3f-348a-4f14-9f38-9dad240c2bae",
+        accountName: "demoooo",
+        locationId: null,
+        location_id: null,
+        locationName: null,
+        externalId: null,
+        external_id: null,
+        name: "Demo Customer Two",
+        email: "demo2@example.com",
+        phone: "614-555-0202",
+        address1: null,
+        address_1: null,
+        address2: null,
+        address_2: null,
+        city: null,
+        state: null,
+        postalCode: null,
+        postal_code: null,
+        notes: null,
+        status: "active",
+        workOrderCount: 0,
+        documentCount: 0,
+        updatedAt: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    ] as CustomerRecord[],
+    contacts: [
+      {
+        id: "cont_demo_1",
+        accountId: "df9041f0-012c-4b71-8a6c-f51c45284dc6",
+        account_id: "df9041f0-012c-4b71-8a6c-f51c45284dc6",
+        accountName: "TechFlex Mobility Solutions",
+        locationId: "loc_demo_1",
+        location_id: "loc_demo_1",
+        locationName: "Main Facility Clinic",
+        name: "Sarah Johnson",
+        title: "Operations Manager",
+        email: "sarah.johnson@techflexmobility.com",
+        phone: "614-555-0303",
+        contactType: "operations",
+        contact_type: "operations",
+        isPrimary: 1,
+        is_primary: 1,
+      },
+      {
+        id: "cont_demo_2",
+        accountId: "e1531f3f-348a-4f14-9f38-9dad240c2bae",
+        account_id: "e1531f3f-348a-4f14-9f38-9dad240c2bae",
+        accountName: "demoooo",
+        locationId: null,
+        location_id: null,
+        locationName: null,
+        name: "Demo Contact",
+        title: "Manager",
+        email: "contact@demo.com",
+        phone: "614-555-0404",
+        contactType: "general",
+        contact_type: "general",
+        isPrimary: 0,
+        is_primary: 0,
+      },
+    ] as ContactRecord[],
     audit_logs: [],
   };
 }
@@ -175,9 +320,14 @@ class D1PreparedStatementShim {
     const db = g.__TECHCOMMAND_DB__;
     const s = this.sql.toLowerCase();
 
-    // ACCOUNTS
+    // ACCOUNTS - hierarchy check (WHERE a.id = ?) or full list
     if (s.includes("from accounts")) {
-      const rows = db.accounts.filter((a: AccountRecord) => a.status !== "archived");
+      let rows = db.accounts.filter((a: AccountRecord) => a.status !== "archived");
+      // If this is a hierarchy/lookup query (has WHERE a.id = ?), filter by accountId param
+      if (s.includes("where a.id = ?") || s.includes("where a.id=?")) {
+        const accountId = this.params[0];
+        rows = rows.filter((a: AccountRecord) => a.id === accountId);
+      }
       return { results: rows as T[], success: true, meta: { changes: 0 } };
     }
 
@@ -212,6 +362,17 @@ class D1PreparedStatementShim {
         },
       ];
       return { results: userRows as T[], success: true, meta: { changes: 0 } };
+    }
+
+    // CUSTOMERS
+    if (s.includes("from customers")) {
+      const rows = db.customers.filter((c: CustomerRecord) => c.status !== "archived");
+      return { results: rows as T[], success: true, meta: { changes: 0 } };
+    }
+
+    // CONTACTS
+    if (s.includes("from contacts")) {
+      return { results: db.contacts as T[], success: true, meta: { changes: 0 } };
     }
 
     // ORGANIZATIONS
@@ -289,6 +450,75 @@ class D1PreparedStatementShim {
       db.locations.unshift(newLoc);
       if (parentAcc) {
         parentAcc.locationCount = (parentAcc.locationCount || 0) + 1;
+      }
+      return { success: true, meta: { changes: 1, last_row_id: 1 } };
+    }
+
+    // INSERT INTO CUSTOMERS
+    if (s.includes("insert into customers")) {
+      const [id, orgId, accountId, locationId, extId, name, email, phone, addr1, addr2, city, state, zip, notes] = this.params;
+      const parentAcc = db.accounts.find((a: AccountRecord) => a.id === accountId);
+      const parentLoc = db.locations.find((l: LocationRecord) => l.id === locationId);
+      const newCustomer: CustomerRecord = {
+        id: id || crypto.randomUUID(),
+        organizationId: orgId || "techflex",
+        organization_id: orgId || "techflex",
+        accountId: accountId,
+        account_id: accountId,
+        accountName: parentAcc?.name || "Unknown Account",
+        locationId: locationId || null,
+        location_id: locationId || null,
+        locationName: parentLoc?.name || null,
+        externalId: extId || null,
+        external_id: extId || null,
+        name: name || "New Customer",
+        email: email || null,
+        phone: phone || null,
+        address1: addr1 || null,
+        address_1: addr1 || null,
+        address2: addr2 || null,
+        address_2: addr2 || null,
+        city: city || null,
+        state: state || null,
+        postalCode: zip || null,
+        postal_code: zip || null,
+        notes: notes || null,
+        status: "active",
+        workOrderCount: 0,
+        documentCount: 0,
+        updatedAt: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      db.customers.unshift(newCustomer);
+      return { success: true, meta: { changes: 1, last_row_id: 1 } };
+    }
+
+    // INSERT INTO CONTACTS
+    if (s.includes("insert into contacts")) {
+      const [id, accountId, locationId, name, title, email, phone, contactType, isPrimary] = this.params;
+      const parentAcc = db.accounts.find((a: AccountRecord) => a.id === accountId);
+      const parentLoc = db.locations.find((l: LocationRecord) => l.id === locationId);
+      const newContact: ContactRecord = {
+        id: id || crypto.randomUUID(),
+        accountId: accountId,
+        account_id: accountId,
+        accountName: parentAcc?.name || "Unknown Account",
+        locationId: locationId || null,
+        location_id: locationId || null,
+        locationName: parentLoc?.name || null,
+        name: name || "New Contact",
+        title: title || null,
+        email: email || null,
+        phone: phone || null,
+        contactType: contactType || "general",
+        contact_type: contactType || "general",
+        isPrimary: isPrimary ? 1 : 0,
+        is_primary: isPrimary ? 1 : 0,
+      };
+      if (isPrimary) {
+        db.contacts.unshift(newContact);
+      } else {
+        db.contacts.push(newContact);
       }
       return { success: true, meta: { changes: 1, last_row_id: 1 } };
     }
