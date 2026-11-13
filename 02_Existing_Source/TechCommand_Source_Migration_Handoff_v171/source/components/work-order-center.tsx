@@ -719,10 +719,9 @@ export function WorkOrderCenter({ initialAssetId, onAssetLoaded, initialTarget, 
     const all = assets.data?.assets ?? [];
     return all.filter((asset) => {
       if (form.accountId && asset.accountId !== form.accountId) return false;
-      if (form.locationId && asset.locationId !== form.locationId) return false;
       return true;
     });
-  }, [assets.data, form.accountId, form.locationId]);
+  }, [assets.data, form.accountId]);
   const create = useMutation({
     mutationFn: () =>
       json<{
@@ -1497,7 +1496,7 @@ export function WorkOrderCenter({ initialAssetId, onAssetLoaded, initialTarget, 
                         <SelectItem key={customer.id} value={customer.id}>
                           {customer.name}
                           {customer.phone ? ` · ${customer.phone}` : ""}
-                          {!form.accountId && customer.accountName ? ` (${customer.accountName})` : ""}
+                          {!form.accountId && (customer as unknown as { accountName?: string }).accountName ? ` (${(customer as unknown as { accountName?: string }).accountName})` : ""}
                         </SelectItem>
                       ))}
                     </SelectContent>

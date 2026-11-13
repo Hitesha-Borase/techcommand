@@ -628,7 +628,7 @@ export function TechFlexCommandCenter({
   else if (active === "demo") content = <DemoCenter onStartPlatformTour={() => movePlatformTour(0)} />;
   else content = <FoundationView module={active} />;
 
-  const initials = (displayName || identity?.displayName || "TC")
+  const initials = (displayName || session.data?.displayName || "TC")
     .split(" ")
     .filter(Boolean)
     .map((part) => part[0])
