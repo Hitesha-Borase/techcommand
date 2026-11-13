@@ -42,4 +42,8 @@ next-env.d.ts
 /outputs/
 /work/
 
+# local database & storage
+.local-dev.sqlite*
+.local-storage/
+
 wrangler.toml
