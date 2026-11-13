@@ -18,14 +18,30 @@ const actionSchema = z.discriminatedUnion("action", [
   }),
 ]);
 
+function getDatabase(): any {
+  return (globalThis as any).__D1_DB__ || (globalThis as any).__WORKER_ENV__?.DB || env?.DB;
+}
+
+const allowedRoles = [
+  "owner_administrator",
+  "operations_administrator",
+  "finance",
+  "dispatcher",
+  "biomedical_lead",
+] as const;
+
 export async function GET(request: Request) {
   try {
-    await requirePortalRole(request, [
-      "owner_administrator",
-      "operations_administrator",
-      "biomedical_lead",
-    ]);
-    const result = await env.DB.prepare(
+    await requirePortalRole(request, [...allowedRoles]);
+    const db = getDatabase();
+    if (!db) {
+      return Response.json({
+        requests: [],
+        emailIntegration: googleWorkspaceEmailStatus(),
+      });
+    }
+
+    const result = await db.prepare(
       `SELECT f.id, f.channel, f.destination, f.campaign_name AS campaignName,
               f.status, f.message_subject AS messageSubject,
               f.message_body AS messageBody, f.review_url AS reviewUrl,
@@ -46,9 +62,10 @@ export async function GET(request: Request) {
         LIMIT 200`,
     )
       .bind(TECHFLEX_ORG_ID)
-      .all<Record<string, unknown>>();
+      .all();
+
     return Response.json({
-      requests: result.results.map((row) => ({
+      requests: (result?.results || []).map((row: any) => ({
         ...row,
         missing: [
           !row.destination
@@ -68,11 +85,11 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const identity = await requirePortalRole(request, [
-      "owner_administrator",
-      "operations_administrator",
-      "biomedical_lead",
-    ]);
+    const identity = await requirePortalRole(request, [...allowedRoles]);
+    const db = getDatabase();
+    if (!db) {
+      return Response.json({ error: "Database not available" }, { status: 500 });
+    }
     const input = actionSchema.parse(await request.json());
     if (input.action === "sync_email") {
       const result = await processGoogleWorkspaceEmailOutbox(25);
@@ -87,18 +104,18 @@ export async function POST(request: Request) {
         );
       return Response.json(result);
     }
-    const requestRow = await env.DB.prepare(
+    const requestRow = (await db.prepare(
       `SELECT id, work_order_id AS workOrderId, channel, status
          FROM customer_feedback_requests
         WHERE id = ? AND organization_id = ?`,
     )
       .bind(input.feedbackRequestId, TECHFLEX_ORG_ID)
-      .first<{
+      .first()) as {
         id: string;
         workOrderId: string;
         channel: string;
         status: string;
-      }>();
+      } | null;
     if (!requestRow || requestRow.channel !== "sms")
       return Response.json(
         { error: "SMS follow-up not found." },
@@ -106,20 +123,20 @@ export async function POST(request: Request) {
       );
     const status =
       input.action === "mark_sms_enrolled" ? "enrolled" : "suppressed";
-    await env.DB.batch([
-      env.DB.prepare(
+    await db.batch([
+      db.prepare(
         `UPDATE customer_feedback_requests SET status = ?,
            sent_at = CASE WHEN ? = 'enrolled' THEN CURRENT_TIMESTAMP ELSE sent_at END,
            record_version = record_version + 1, updated_at = CURRENT_TIMESTAMP
          WHERE id = ? AND organization_id = ?`,
       ).bind(status, status, requestRow.id, TECHFLEX_ORG_ID),
-      env.DB.prepare(
+      db.prepare(
         `UPDATE admin_tasks SET status = 'complete', completed_at = CURRENT_TIMESTAMP,
            completed_by = ?, record_version = record_version + 1,
            updated_at = CURRENT_TIMESTAMP
          WHERE source = 'customer_feedback' AND source_record_id = ?`,
       ).bind(identity.userId, `feedback_sms:${requestRow.workOrderId}`),
-      env.DB.prepare(
+      db.prepare(
         `INSERT INTO audit_logs
           (id, organization_id, actor_user_id, action, entity_type, entity_id, after_json)
          VALUES (?, ?, ?, ?, 'customer_feedback', ?, ?)`,
