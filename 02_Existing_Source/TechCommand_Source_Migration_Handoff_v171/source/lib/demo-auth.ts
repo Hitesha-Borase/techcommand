@@ -77,7 +77,12 @@ export function getDemoAccountFromCookie(cookieHeader: string | null): DemoAccou
 
 export async function seedAllDemoUsers() {
   try {
-    await env.DB.prepare(`
+    if (!env?.DB) {
+      console.warn("seedAllDemoUsers: env.DB is not configured yet.");
+      return;
+    }
+
+    await env.DB.exec(`
       CREATE TABLE IF NOT EXISTS local_credentials (
         id TEXT PRIMARY KEY,
         email TEXT UNIQUE NOT NULL,
@@ -86,8 +91,57 @@ export async function seedAllDemoUsers() {
         display_name TEXT NOT NULL,
         description TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
-      )
-    `).run();
+      );
+      CREATE TABLE IF NOT EXISTS organizations (
+        id TEXT PRIMARY KEY,
+        legal_name TEXT NOT NULL,
+        display_name TEXT NOT NULL,
+        timezone TEXT DEFAULT 'America/New_York' NOT NULL,
+        currency TEXT DEFAULT 'USD' NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS roles (
+        id TEXT PRIMARY KEY,
+        organization_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT,
+        is_system INTEGER DEFAULT 0 NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY,
+        auth_subject TEXT,
+        email TEXT UNIQUE NOT NULL,
+        display_name TEXT NOT NULL,
+        status TEXT DEFAULT 'active' NOT NULL,
+        last_seen_at TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS memberships (
+        id TEXT PRIMARY KEY,
+        organization_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        role_id TEXT NOT NULL,
+        status TEXT DEFAULT 'active' NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        UNIQUE(organization_id, user_id, role_id)
+      );
+      CREATE TABLE IF NOT EXISTS technicians (
+        id TEXT PRIMARY KEY,
+        organization_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        technician_code TEXT,
+        employment_type TEXT DEFAULT 'contractor' NOT NULL,
+        status TEXT DEFAULT 'active' NOT NULL,
+        service_disciplines_json TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+      );
+    `);
 
     await env.DB.prepare(
       "INSERT OR IGNORE INTO organizations (id, legal_name, display_name, timezone, currency) VALUES (?, ?, ?, ?, ?)",
