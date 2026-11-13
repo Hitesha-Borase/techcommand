@@ -64,6 +64,7 @@ export async function POST(request: Request) {
       "owner_administrator",
       "operations_administrator",
       "dispatcher",
+      "biomedical_lead",
       "finance",
     ]);
     const input = schema.parse(await request.json());

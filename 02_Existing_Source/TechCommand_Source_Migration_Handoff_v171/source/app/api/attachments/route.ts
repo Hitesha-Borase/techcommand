@@ -1,4 +1,4 @@
-﻿import { SupabaseBucket } from "@/lib/supabase-storage";
+import { SupabaseBucket } from "@/lib/supabase-storage";
 import { env } from "cloudflare:workers";
 import {
   TECHFLEX_ORG_ID,
@@ -302,8 +302,92 @@ async function queueAttachmentCleanup(attachmentId: string, storageKey: string) 
   await completeAttachmentCleanup({ pendingId, attachmentId, storageKey });
 }
 
+async function ensureAttachmentsSchema() {
+  try {
+    const db = (globalThis as any).__D1_DB__ || (globalThis as any).__WORKER_ENV__?.DB || env?.DB;
+    if (!db) return;
+    try {
+      const check = await db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='attachments'").first();
+      if (check) return;
+    } catch {}
+
+    const ddlStatements = [
+      `CREATE TABLE IF NOT EXISTS attachments (
+        id TEXT PRIMARY KEY NOT NULL,
+        organization_id TEXT NOT NULL,
+        entity_type TEXT NOT NULL,
+        entity_id TEXT NOT NULL,
+        storage_key TEXT NOT NULL,
+        file_name TEXT NOT NULL,
+        content_type TEXT NOT NULL,
+        size_bytes INTEGER NOT NULL,
+        checksum TEXT,
+        category TEXT DEFAULT 'general' NOT NULL,
+        uploaded_by TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+      )`,
+      `CREATE TABLE IF NOT EXISTS audit_logs (
+        id TEXT PRIMARY KEY NOT NULL,
+        organization_id TEXT NOT NULL,
+        actor_user_id TEXT,
+        action TEXT NOT NULL,
+        entity_type TEXT NOT NULL,
+        entity_id TEXT NOT NULL,
+        before_json TEXT,
+        after_json TEXT,
+        occurred_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+      )`,
+      `CREATE TABLE IF NOT EXISTS multipart_upload_sessions (
+        upload_id TEXT PRIMARY KEY NOT NULL,
+        organization_id TEXT NOT NULL,
+        attachment_id TEXT NOT NULL,
+        entity_type TEXT NOT NULL,
+        entity_id TEXT NOT NULL,
+        category TEXT NOT NULL,
+        storage_key TEXT NOT NULL,
+        source_file_name TEXT NOT NULL,
+        safe_name TEXT NOT NULL,
+        content_type TEXT NOT NULL,
+        size_bytes INTEGER NOT NULL,
+        initiated_by TEXT NOT NULL,
+        status TEXT DEFAULT 'active' NOT NULL,
+        expires_at TEXT NOT NULL,
+        completed_at TEXT,
+        ended_at TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+      )`,
+      `CREATE TABLE IF NOT EXISTS document_records (
+        id TEXT PRIMARY KEY NOT NULL,
+        organization_id TEXT NOT NULL,
+        scope_type TEXT NOT NULL,
+        scope_id TEXT,
+        attachment_id TEXT NOT NULL,
+        category TEXT NOT NULL,
+        title TEXT NOT NULL,
+        effective_on TEXT,
+        expires_on TEXT,
+        searchable_text TEXT,
+        uploaded_by TEXT,
+        status TEXT DEFAULT 'current' NOT NULL,
+        deleted_at TEXT,
+        record_version INTEGER DEFAULT 1 NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+      )`
+    ];
+    for (const stmt of ddlStatements) {
+      try {
+        await db.prepare(stmt).run();
+      } catch {}
+    }
+  } catch (err) {
+    console.warn("ensureAttachmentsSchema warning:", err);
+  }
+}
+
 async function retryPendingAttachmentCleanup() {
   try {
+    await ensureAttachmentsSchema();
     const pending = await env.DB.prepare(
       `SELECT p.id AS pendingId, p.entity_id AS attachmentId,
               json_extract(p.before_json, '$.storageKey') AS storageKey
@@ -312,7 +396,7 @@ async function retryPendingAttachmentCleanup() {
           AND NOT EXISTS (SELECT 1 FROM audit_logs c WHERE c.id=p.id || ':completed')
         LIMIT 100`,
     ).bind(TECHFLEX_ORG_ID).all<PendingAttachmentCleanup>();
-    for (const item of pending.results) await completeAttachmentCleanup(item);
+    for (const item of pending.results || []) await completeAttachmentCleanup(item);
   } catch (error) {
     safeServerLog("attachment_cleanup", error);
   }
@@ -541,6 +625,7 @@ export async function GET(request: Request) {
       "technician",
       "auditor",
     ]);
+    await ensureAttachmentsSchema();
     const url = new URL(request.url);
     const attachmentId = url.searchParams.get("attachmentId");
     if (attachmentId) {

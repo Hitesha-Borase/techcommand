@@ -22,7 +22,17 @@ const hierarchySql = `SELECT l.id FROM locations l
 
 export async function GET(request: Request) {
   try {
-    const identity = await requirePortalRole(request, ["owner_administrator", "operations_administrator", "dispatcher", "biomedical_lead", "technician", "auditor"]);
+    const identity = await requirePortalRole(request, [
+      "owner_administrator",
+      "operations_administrator",
+      "dispatcher",
+      "biomedical_lead",
+      "finance",
+      "technician",
+      "auditor",
+      "client_administrator",
+      "client_location_user",
+    ]);
     const isTechnician = identity.role === "technician";
     if (isTechnician && !identity.technicianId) {
       return Response.json({ error: "Your technician profile must be linked before you can view assigned equipment. Contact your administrator." }, { status: 403 });
