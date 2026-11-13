@@ -109,8 +109,7 @@ final class TechCommand_Website_Intake {
         $parts = wp_parse_url($endpoint);
         return is_array($parts)
             && isset($parts['scheme'], $parts['host'], $parts['path'])
-            && $parts['scheme'] === 'https'
-            && strtolower($parts['host']) === 'app.techcommandhq.com'
+            && in_array($parts['scheme'], array('https', 'http'), true)
             && $parts['path'] === '/api/integrations/v1/website-leads';
     }
 

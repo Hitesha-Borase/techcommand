@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Website Contact Form Simulator | TechFlex Mobility Solutions</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    body { background-color: #f1f5f9; padding: 30px 15px; color: #1e293b; }
+    .container { max-width: 650px; margin: 0 auto; background: #ffffff; border-radius: 16px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1); overflow: hidden; border: 1px solid #e2e8f0; }
+    .header { background: linear-gradient(135deg, #071827, #0b3954); color: white; padding: 24px 28px; }
+    .badge { display: inline-block; background: #06b6d4; color: #071827; font-size: 11px; font-weight: 800; padding: 3px 10px; border-radius: 9999px; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
+    .header h1 { font-size: 24px; font-weight: 800; }
+    .header p { font-size: 13px; color: #94a3b8; margin-top: 4px; }
+    form { padding: 28px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+    .full-width { grid-column: 1 / -1; }
+    label { display: block; font-size: 13px; font-weight: 600; color: #334155; margin-bottom: 6px; }
+    input, select, textarea { width: 100%; padding: 10px 14px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; background: #f8fafc; transition: all 0.2s; outline: none; }
+    input:focus, select:focus, textarea:focus { border-color: #0284c7; background: #ffffff; box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.15); }
+    textarea { resize: vertical; min-height: 90px; }
+    .submit-btn { width: 100%; background: #0284c7; color: white; border: none; padding: 14px; border-radius: 10px; font-size: 15px; font-weight: 700; cursor: pointer; transition: background 0.2s; display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 10px; }
+    .submit-btn:hover { background: #0369a1; }
+    .submit-btn:disabled { background: #94a3b8; cursor: not-allowed; }
+    #result-box { display: none; margin-top: 20px; padding: 16px; border-radius: 10px; font-size: 14px; }
+    .success { background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; }
+    .error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+    .nav-btn { display: inline-block; margin-top: 12px; background: #059669; color: white; text-decoration: none; padding: 8px 16px; border-radius: 6px; font-weight: 600; font-size: 13px; }
+    .nav-btn:hover { background: #047857; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <div class="header">
+    <span class="badge">Live Connector Simulator</span>
+    <h1>Send us a message</h1>
+    <p>Replicating techflexmobility.com/contact Elementor Form &rarr; TechCommand Intake</p>
+  </div>
+
+  <form id="leadForm">
+    <div class="grid">
+      <div>
+        <label for="name">Contact Name *</label>
+        <input type="text" id="name" name="name" required placeholder="e.g. Johnathan Miller" value="Michael Vance">
+      </div>
+      <div>
+        <label for="company">Company or Facility</label>
+        <input type="text" id="company" name="company" placeholder="e.g. Ohio Health Rehab" value="Vance Care Home">
+      </div>
+
+      <div>
+        <label for="phone">Phone Number *</label>
+        <input type="tel" id="phone" name="phone" required placeholder="e.g. 614-555-0199" value="614-555-7744">
+      </div>
+      <div>
+        <label for="email">Email Address *</label>
+        <input type="email" id="email" name="email" required placeholder="e.g. client@example.com" value="michael.vance@gmail.com">
+      </div>
+
+      <div class="full-width">
+        <label for="serviceType">What can we help you with? *</label>
+        <select id="serviceType" name="serviceType" required>
+          <option value="Power Wheelchair Service & Repair" selected>Power Wheelchair Service & Repair</option>
+          <option value="Hospital Bed & Patient Lift PM">Hospital Bed & Patient Lift PM</option>
+          <option value="Scooter Battery & Motor Diagnostic">Scooter Battery & Motor Diagnostic</option>
+          <option value="General Service Quote">General Service Quote</option>
+        </select>
+      </div>
+
+      <div>
+        <label for="manufacturer">Equipment Manufacturer</label>
+        <input type="text" id="manufacturer" name="manufacturer" placeholder="e.g. Permobil / Pride" value="Permobil">
+      </div>
+      <div>
+        <label for="model">Model & Serial Number</label>
+        <input type="text" id="model" name="model" placeholder="e.g. M3 Corpus / SN-88219" value="M3 Corpus (SN-88219)">
+      </div>
+
+      <div>
+        <label for="city">Service City *</label>
+        <input type="text" id="city" name="city" required placeholder="e.g. Columbus" value="Columbus">
+      </div>
+      <div>
+        <label for="zip">Zip Code *</label>
+        <input type="text" id="zip" name="zip" required placeholder="e.g. 43215" value="43215">
+      </div>
+
+      <div class="full-width">
+        <label for="message">Message / Problem Description *</label>
+        <textarea id="message" name="message" required placeholder="Describe the problem...">Chair pulls to the left when driving forward and battery light is flashing 3 times.</textarea>
+      </div>
+    </div>
+
+    <button type="submit" class="submit-btn" id="submitBtn">
+      <span>🚀 Submit Website Lead to TechCommand OS</span>
+    </button>
+
+    <div id="result-box"></div>
+  </form>
+</div>
+
+<script>
+  const form = document.getElementById('leadForm');
+  const resultBox = document.getElementById('result-box');
+  const submitBtn = document.getElementById('submitBtn');
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = 'Sending via API Connector...';
+    resultBox.style.display = 'none';
+
+    const payload = {
+      workflow: 'service_request',
+      submissionId: 'wp-sim-' + Date.now(),
+      name: document.getElementById('name').value,
+      company: document.getElementById('company').value,
+      phone: document.getElementById('phone').value,
+      email: document.getElementById('email').value,
+      serviceType: document.getElementById('serviceType').value,
+      equipmentType: 'Mobility Equipment',
+      manufacturer: document.getElementById('manufacturer').value,
+      model: document.getElementById('model').value,
+      address: document.getElementById('city').value + ', OH ' + document.getElementById('zip').value,
+      message: document.getElementById('message').value,
+      sourcePageUrl: 'https://techflexmobility.com/contact/'
+    };
+
+    try {
+      const response = await fetch('/api/integrations/v1/website-leads', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer techcommand-intake-secret-local'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.accepted) {
+        resultBox.className = 'success';
+        resultBox.style.display = 'block';
+        resultBox.innerHTML = `
+          <strong>🎉 Success! Lead Connector Worked!</strong><br>
+          Submission ID: <code>${data.submission.id}</code><br>
+          Yeh lead live aapke TechCommand software mein successfully deliver ho gayi hai!<br><br>
+          <a href="/admin/work-orders" target="_blank" class="nav-btn">👉 Open Work Orders → Intake Inbox</a>
+        `;
+      } else {
+        throw new Error(data.error || 'Server rejected lead submission.');
+      }
+    } catch (err) {
+      resultBox.className = 'error';
+      resultBox.style.display = 'block';
+      resultBox.innerHTML = `<strong>Submission Error:</strong> ${err.message}`;
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = '<span>🚀 Submit Another Lead</span>';
+    }
+  });
+</script>
+
+</body>
+</html>
+
