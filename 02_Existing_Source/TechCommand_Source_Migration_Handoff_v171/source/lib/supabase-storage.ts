@@ -32,7 +32,13 @@ function serviceKey(): string {
 function isRemote(): boolean {
   const url = supabaseUrl();
   const key = serviceKey();
-  return Boolean(url && key && url.startsWith("http"));
+  return Boolean(
+    url &&
+    key &&
+    url.startsWith("http") &&
+    !key.startsWith("dummy") &&
+    !key.includes("configured-in-dashboard")
+  );
 }
 
 function localFilePath(key: string): string {
@@ -60,37 +66,39 @@ const localFileCache = new Map<string, { bytes: ArrayBuffer; contentType: string
 async function saveLocalFile(storageKey: string, bytes: ArrayBuffer, contentType: string) {
   localFileCache.set(storageKey, { bytes, contentType });
   try {
-    const fs = await import("node:fs");
-    const path = await import("node:path");
-    const baseDir = ".wrangler/uploads";
-    if (!fs.existsSync(baseDir)) fs.mkdirSync(baseDir, { recursive: true });
-    const hex = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(storageKey))))
-      .map(b => b.toString(16).padStart(2, "0"))
-      .join("");
-    const safePath = path.join(baseDir, `${hex}.bin`);
-    fs.writeFileSync(safePath, Buffer.from(bytes));
-    fs.writeFileSync(`${safePath}.meta.json`, JSON.stringify({ storageKey, contentType }));
+    const filePath = localFilePath(storageKey);
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(filePath, Buffer.from(bytes));
+    fs.writeFileSync(
+      `${filePath}.meta.json`,
+      JSON.stringify({ storageKey, contentType, size: bytes.byteLength }),
+      "utf-8"
+    );
   } catch {}
 }
 
 async function getLocalFile(storageKey: string): Promise<{ bytes: ArrayBuffer; contentType: string } | null> {
   if (localFileCache.has(storageKey)) return localFileCache.get(storageKey)!;
   try {
-    const fs = await import("node:fs");
-    const path = await import("node:path");
-    const baseDir = ".wrangler/uploads";
-    const hex = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(storageKey))))
-      .map(b => b.toString(16).padStart(2, "0"))
-      .join("");
-    const safePath = path.join(baseDir, `${hex}.bin`);
-    if (fs.existsSync(safePath)) {
-      const buffer = fs.readFileSync(safePath);
+    const filePath = localFilePath(storageKey);
+    if (fs.existsSync(filePath)) {
+      const buffer = fs.readFileSync(filePath);
       let contentType = "application/octet-stream";
-      if (fs.existsSync(`${safePath}.meta.json`)) {
+      if (fs.existsSync(`${filePath}.meta.json`)) {
         try {
-          const meta = JSON.parse(fs.readFileSync(`${safePath}.meta.json`, "utf-8"));
-          contentType = meta.contentType || contentType;
+          const meta = JSON.parse(fs.readFileSync(`${filePath}.meta.json`, "utf-8"));
+          if (meta.contentType) contentType = meta.contentType;
         } catch {}
+      } else {
+        const ext = path.extname(storageKey).toLowerCase();
+        if (ext === ".pdf") contentType = "application/pdf";
+        else if (ext === ".png") contentType = "image/png";
+        else if (ext === ".jpg" || ext === ".jpeg") contentType = "image/jpeg";
+        else if (ext === ".webp") contentType = "image/webp";
+        else if (ext === ".heic") contentType = "image/heic";
       }
       const item = {
         bytes: buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer,
@@ -116,16 +124,18 @@ export async function storagePut(
     rawBytes = body;
   } else if (typeof body === "string") {
     rawBytes = new TextEncoder().encode(body).buffer as ArrayBuffer;
+  } else if (body && typeof (body as any).getReader === "function") {
+    const res = new Response(body as any);
+    rawBytes = await res.arrayBuffer();
   } else {
-    rawBytes = await new Response(body).arrayBuffer();
+    rawBytes = await new Response(body as any).arrayBuffer();
   }
 
   const contentType = opts?.contentType || "application/octet-stream";
   // Always backup to local storage first so offline/local dev is 100% resilient
   await saveLocalFile(storageKey, rawBytes, contentType);
 
-  const key = serviceKey();
-  if (!key || key.startsWith("dummy") || key.includes("configured-in-dashboard")) {
+  if (!isRemote()) {
     return;
   }
 
@@ -152,15 +162,14 @@ export async function storagePut(
   }
 }
 
-/** Download bytes from Supabase Storage or local fallback. Returns ArrayBuffer or null. */
+/** Download bytes from Supabase Storage or local filesystem. Returns ArrayBuffer or null. */
 export async function storageGet(
   storageKey: string,
 ): Promise<{ bytes: ArrayBuffer; contentType: string } | null> {
   const local = await getLocalFile(storageKey);
   if (local) return local;
 
-  const key = serviceKey();
-  if (!key || key.startsWith("dummy") || key.includes("configured-in-dashboard")) {
+  if (!isRemote()) {
     return null;
   }
 
@@ -177,15 +186,23 @@ export async function storageGet(
   }
 }
 
-/** Delete a file or files from Supabase Storage and local fallback. */
+/** Delete a file or files from Supabase Storage or local filesystem. */
 export async function storageDelete(storageKey: string | string[]): Promise<void> {
   const prefixes = Array.isArray(storageKey) ? storageKey : [storageKey];
-  for (const k of prefixes) {
-    localFileCache.delete(k);
+  for (const prefix of prefixes) {
+    localFileCache.delete(prefix);
+    try {
+      const filePath = localFilePath(prefix);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+      if (fs.existsSync(`${filePath}.meta.json`)) {
+        fs.unlinkSync(`${filePath}.meta.json`);
+      }
+    } catch {}
   }
 
-  const key = serviceKey();
-  if (!key || key.startsWith("dummy") || key.includes("configured-in-dashboard")) {
+  if (!isRemote()) {
     return;
   }
 
