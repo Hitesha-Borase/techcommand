@@ -56,6 +56,7 @@ export async function GET(request: Request) {
       "owner_administrator",
       "operations_administrator",
       "dispatcher",
+      "biomedical_lead",
       "finance",
     ]);
     const result = await env.DB.prepare(

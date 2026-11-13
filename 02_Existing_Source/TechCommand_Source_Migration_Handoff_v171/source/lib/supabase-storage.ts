@@ -7,8 +7,11 @@
  */
 
 import { env } from "cloudflare:workers";
+import fs from "node:fs";
+import path from "node:path";
 
 const BUCKET_NAME = "techcommand-files";
+const LOCAL_STORAGE_DIR = path.resolve(process.cwd(), ".local-storage", BUCKET_NAME);
 
 function supabaseUrl(): string {
   return (
@@ -26,6 +29,17 @@ function serviceKey(): string {
   );
 }
 
+function isRemote(): boolean {
+  const url = supabaseUrl();
+  const key = serviceKey();
+  return Boolean(url && key && url.startsWith("http"));
+}
+
+function localFilePath(key: string): string {
+  const safeParts = key.split("/").filter((p) => p !== ".." && p !== "." && p.trim() !== "");
+  return path.resolve(LOCAL_STORAGE_DIR, ...safeParts);
+}
+
 function storageBase(): string {
   return `${supabaseUrl()}/storage/v1`;
 }
@@ -41,6 +55,9 @@ function encodeStorageKey(key: string): string {
   return key.split("/").map(encodeURIComponent).join("/");
 }
 
+<<<<<<< HEAD
+/** Upload bytes or stream to Supabase Storage or local filesystem fallback. */
+=======
 const localFileCache = new Map<string, { bytes: ArrayBuffer; contentType: string }>();
 
 async function saveLocalFile(storageKey: string, bytes: ArrayBuffer, contentType: string) {
@@ -90,12 +107,49 @@ async function getLocalFile(storageKey: string): Promise<{ bytes: ArrayBuffer; c
 }
 
 /** Upload bytes or stream to Supabase Storage with local resilient fallback. */
+>>>>>>> f99295206e29585c1681549a7356779b82b384e4
 export async function storagePut(
   storageKey: string,
   body: ArrayBuffer | ArrayBufferView | ReadableStream<any> | string,
   opts?: { contentType?: string; contentDisposition?: string },
 ): Promise<void> {
+<<<<<<< HEAD
+  if (!isRemote()) {
+    const filePath = localFilePath(storageKey);
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    let buffer: Buffer;
+    if (body instanceof ArrayBuffer) {
+      buffer = Buffer.from(body);
+    } else if (ArrayBuffer.isView(body)) {
+      buffer = Buffer.from(body.buffer, body.byteOffset, body.byteLength);
+    } else if (typeof body === "string") {
+      buffer = Buffer.from(body, "utf-8");
+    } else if (body && typeof (body as any).getReader === "function") {
+      const res = new Response(body as any);
+      buffer = Buffer.from(await res.arrayBuffer());
+    } else {
+      buffer = Buffer.from(body as any);
+    }
+    fs.writeFileSync(filePath, buffer);
+    if (opts?.contentType) {
+      fs.writeFileSync(
+        `${filePath}.meta.json`,
+        JSON.stringify({ contentType: opts.contentType, size: buffer.length }),
+        "utf-8"
+      );
+    }
+    return;
+  }
+
+  const url = `${storageBase()}/object/${BUCKET_NAME}/${encodeStorageKey(storageKey)}`;
+  
+  let payload: BodyInit;
+=======
   let rawBytes: ArrayBuffer;
+>>>>>>> f99295206e29585c1681549a7356779b82b384e4
   if (ArrayBuffer.isView(body)) {
     rawBytes = body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength) as ArrayBuffer;
   } else if (body instanceof ArrayBuffer) {
@@ -138,6 +192,59 @@ export async function storagePut(
   }
 }
 
+<<<<<<< HEAD
+/** Download bytes from Supabase Storage or local filesystem. Returns ArrayBuffer or null. */
+export async function storageGet(
+  storageKey: string,
+): Promise<{ bytes: ArrayBuffer; contentType: string } | null> {
+  if (!isRemote()) {
+    const filePath = localFilePath(storageKey);
+    if (!fs.existsSync(filePath)) return null;
+    const buffer = fs.readFileSync(filePath);
+    let contentType = "application/octet-stream";
+    if (fs.existsSync(`${filePath}.meta.json`)) {
+      try {
+        const meta = JSON.parse(fs.readFileSync(`${filePath}.meta.json`, "utf-8"));
+        if (meta.contentType) contentType = meta.contentType;
+      } catch {}
+    } else {
+      const ext = path.extname(storageKey).toLowerCase();
+      if (ext === ".pdf") contentType = "application/pdf";
+      else if (ext === ".png") contentType = "image/png";
+      else if (ext === ".jpg" || ext === ".jpeg") contentType = "image/jpeg";
+      else if (ext === ".webp") contentType = "image/webp";
+      else if (ext === ".heic") contentType = "image/heic";
+    }
+    const bytes = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+    return { bytes, contentType };
+  }
+
+  const url = `${storageBase()}/object/${BUCKET_NAME}/${encodeStorageKey(storageKey)}`;
+  const res = await fetch(url, { headers: authHeaders() });
+  if (res.status === 404 || !res.ok) return null;
+  const bytes = await res.arrayBuffer();
+  const contentType = res.headers.get("content-type") || "application/octet-stream";
+  return { bytes, contentType };
+}
+
+/** Delete a file or files from Supabase Storage or local filesystem. */
+export async function storageDelete(storageKey: string | string[]): Promise<void> {
+  if (!isRemote()) {
+    const prefixes = Array.isArray(storageKey) ? storageKey : [storageKey];
+    for (const prefix of prefixes) {
+      const filePath = localFilePath(prefix);
+      if (fs.existsSync(filePath)) {
+        try { fs.unlinkSync(filePath); } catch {}
+      }
+      if (fs.existsSync(`${filePath}.meta.json`)) {
+        try { fs.unlinkSync(`${filePath}.meta.json`); } catch {}
+      }
+    }
+    return;
+  }
+
+  const url = `${storageBase()}/object/${BUCKET_NAME}`;
+=======
 /** Download bytes from Supabase Storage or local fallback. Returns ArrayBuffer or null. */
 export async function storageGet(
   storageKey: string,
@@ -165,6 +272,7 @@ export async function storageGet(
 
 /** Delete a file or files from Supabase Storage and local fallback. */
 export async function storageDelete(storageKey: string | string[]): Promise<void> {
+>>>>>>> f99295206e29585c1681549a7356779b82b384e4
   const prefixes = Array.isArray(storageKey) ? storageKey : [storageKey];
   for (const k of prefixes) {
     localFileCache.delete(k);
