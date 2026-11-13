@@ -342,8 +342,9 @@ export function apiError(error: unknown) {
   }
   const reference = createErrorReference();
   safeServerLog("api_request", error, reference);
+  console.error(">>> [API ERROR DETAILED]:", error);
   return Response.json(
-    { error: "The portal could not complete that request.", reference },
+    { error: "The portal could not complete that request.", reference, debug: (error as any)?.message || String(error) },
     { status: 500, headers: { "X-TechCommand-Error-Reference": reference } },
   );
 }

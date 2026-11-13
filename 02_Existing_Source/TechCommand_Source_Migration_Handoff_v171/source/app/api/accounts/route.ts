@@ -42,7 +42,7 @@ export async function GET(request: Request) {
         GROUP BY a.id
         ORDER BY a.name`,
     ).bind(TECHFLEX_ORG_ID).all();
-    return Response.json({ accounts: result.results }, { headers: privateNoStore });
+    return Response.json({ accounts: result?.results || [] }, { headers: privateNoStore });
   } catch (error) {
     return apiError(error);
   }
