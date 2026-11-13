@@ -314,6 +314,50 @@ if (!g.__TECHCOMMAND_DB__) {
       },
     ] as ContactRecord[],
     audit_logs: [],
+    training_schools: [
+      {
+        id: "7b43f9a2-2c5e-4db4-8cb3-1d2a4f6e8001",
+        name: "Columbus Technical College",
+        coordinator_email: "coordinator@columbustech.edu",
+        coordinatorEmail: "coordinator@columbustech.edu",
+        active: 1,
+        record_version: 0,
+        version: 0,
+        data_json: JSON.stringify({
+          id: "7b43f9a2-2c5e-4db4-8cb3-1d2a4f6e8001",
+          name: "Columbus Technical College",
+          program: "Biomedical Equipment Technology",
+          coordinatorName: "Prof. Robert Davis",
+          coordinatorEmail: "coordinator@columbustech.edu",
+          requirements: "Clinical internship agreement on file",
+          active: 1,
+        }),
+      },
+      {
+        id: "7b43f9a2-2c5e-4db4-8cb3-1d2a4f6e8002",
+        name: "Ohio Institute of Allied Health",
+        coordinator_email: "health@oiah.edu",
+        coordinatorEmail: "health@oiah.edu",
+        active: 1,
+        record_version: 0,
+        version: 0,
+        data_json: JSON.stringify({
+          id: "7b43f9a2-2c5e-4db4-8cb3-1d2a4f6e8002",
+          name: "Ohio Institute of Allied Health",
+          program: "DME & Assistive Technology",
+          coordinatorName: "Dr. Karen Vance",
+          coordinatorEmail: "health@oiah.edu",
+          requirements: "40 hours minimum field placement",
+          active: 1,
+        }),
+      },
+    ],
+    training_placements: [],
+    technicians: [
+      { id: "tech_demo_1", name: "Brandon (Lead Biomedical Engineer)" },
+      { id: "tech_demo_2", name: "James (Field Service Specialist)" },
+      { id: "tech_demo_3", name: "Floyd Boyer (Compliance Officer)" },
+    ],
   };
 }
 
@@ -471,6 +515,79 @@ class D1PreparedStatementShim {
       return { results: db.contacts as T[], success: true, meta: { changes: 0 } };
     }
 
+    // TRAINING SCHOOLS
+    if (s.includes("from training_schools")) {
+      if (!db.training_schools || db.training_schools.length === 0) {
+        db.training_schools = [
+          {
+            id: "7b43f9a2-2c5e-4db4-8cb3-1d2a4f6e8001",
+            name: "Columbus Technical College",
+            coordinator_email: "coordinator@columbustech.edu",
+            coordinatorEmail: "coordinator@columbustech.edu",
+            active: 1,
+            record_version: 0,
+            version: 0,
+            data_json: JSON.stringify({
+              id: "7b43f9a2-2c5e-4db4-8cb3-1d2a4f6e8001",
+              name: "Columbus Technical College",
+              program: "Biomedical Equipment Technology",
+              coordinatorName: "Prof. Robert Davis",
+              coordinatorEmail: "coordinator@columbustech.edu",
+              requirements: "Clinical internship agreement on file",
+              active: 1,
+            }),
+          },
+          {
+            id: "7b43f9a2-2c5e-4db4-8cb3-1d2a4f6e8002",
+            name: "Ohio Institute of Allied Health",
+            coordinator_email: "health@oiah.edu",
+            coordinatorEmail: "health@oiah.edu",
+            active: 1,
+            record_version: 0,
+            version: 0,
+            data_json: JSON.stringify({
+              id: "7b43f9a2-2c5e-4db4-8cb3-1d2a4f6e8002",
+              name: "Ohio Institute of Allied Health",
+              program: "DME & Assistive Technology",
+              coordinatorName: "Dr. Karen Vance",
+              coordinatorEmail: "health@oiah.edu",
+              requirements: "40 hours minimum field placement",
+              active: 1,
+            }),
+          },
+        ];
+      }
+      const schools = db.training_schools;
+      if (/\bwhere\s+id\s*=\s*\?/i.test(s) || /\band\s+id\s*=\s*\?/i.test(s)) {
+        const id = this.params[0] === "techflex" ? this.params[1] : this.params[0];
+        const matched = schools.filter((sc: any) => sc.id === id);
+        return { results: matched as T[], success: true, meta: { changes: 0 } };
+      }
+      return { results: schools as T[], success: true, meta: { changes: 0 } };
+    }
+
+    // TRAINING PLACEMENTS
+    if (s.includes("from training_placements")) {
+      const placements = db.training_placements || [];
+      return { results: placements as T[], success: true, meta: { changes: 0 } };
+    }
+
+    // TECHNICIANS
+    if (s.includes("from technicians")) {
+      if (!db.technicians || db.technicians.length === 0) {
+        db.technicians = [
+          { id: "tech_demo_1", name: "Brandon (Lead Biomedical Engineer)" },
+          { id: "tech_demo_2", name: "James (Field Service Specialist)" },
+          { id: "tech_demo_3", name: "Floyd Boyer (Compliance Officer)" },
+        ];
+      }
+      const techs = db.technicians;
+      if (s.includes("where t.id=?") || s.includes("where id=?")) {
+        return { results: [{ id: this.params[0] || "tech_demo_1", status: "active" }] as T[], success: true, meta: { changes: 0 } };
+      }
+      return { results: techs as T[], success: true, meta: { changes: 0 } };
+    }
+
     // ORGANIZATIONS
     if (s.includes("from organizations")) {
       return {
@@ -616,6 +733,31 @@ class D1PreparedStatementShim {
       } else {
         db.contacts.push(newContact);
       }
+      return { success: true, meta: { changes: 1, last_row_id: 1 } };
+    }
+
+    // INSERT / UPDATE TRAINING SCHOOLS
+    if (s.includes("training_schools")) {
+      if (!db.training_schools) db.training_schools = [];
+      if (s.includes("insert into training_schools")) {
+        const [id, orgId, name, coordEmail, active, dataJson] = this.params;
+        db.training_schools.unshift({
+          id: id || crypto.randomUUID(),
+          name,
+          coordinator_email: coordEmail,
+          coordinatorEmail: coordEmail,
+          active: Number(active ?? 1),
+          record_version: 0,
+          version: 0,
+          data_json: dataJson || JSON.stringify({ id, name, coordinatorEmail: coordEmail, active }),
+        });
+      }
+      return { success: true, meta: { changes: 1, last_row_id: 1 } };
+    }
+
+    // INSERT INTO TRAINING PLACEMENTS
+    if (s.includes("training_placements")) {
+      if (!db.training_placements) db.training_placements = [];
       return { success: true, meta: { changes: 1, last_row_id: 1 } };
     }
 
