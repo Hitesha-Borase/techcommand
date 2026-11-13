@@ -59,8 +59,11 @@ export async function GET(request: Request) {
       "operations_administrator",
       "dispatcher",
       "biomedical_lead",
+      "finance",
       "technician",
       "auditor",
+      "client_administrator",
+      "client_location_user",
     ]);
     const assetId = new URL(request.url).searchParams.get("assetId");
     if (assetId) await requireAssetIdentity(assetId, identity);

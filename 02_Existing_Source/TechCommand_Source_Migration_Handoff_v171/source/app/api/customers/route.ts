@@ -65,6 +65,8 @@ export async function POST(request: Request) {
     const identity = await requirePortalRole(request, [
       "owner_administrator",
       "operations_administrator",
+      "finance",
+      "biomedical_lead",
       "dispatcher",
     ]);
     const input = schema.parse(await request.json());

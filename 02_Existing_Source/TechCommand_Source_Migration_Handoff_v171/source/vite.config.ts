@@ -15,14 +15,12 @@ const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
 
 const localBindingConfig = {
   main: "./worker/index.ts",
-  compatibility_date: "2024-09-23",
-  compatibility_flags: ["nodejs_compat"],
   d1_databases: d1
     ? [
         {
           binding: d1,
-          database_name: "site-creator-d1",
-          database_id: SITE_CREATOR_PLACEHOLDER_DATABASE_ID,
+          database_name: "techcommand-db",
+          database_id: "f9722e9b-3c84-43d4-9c56-5b3e4d6090f4",
         },
       ]
     : [],
@@ -62,6 +60,7 @@ export default defineConfig(async () => {
         viteEnvironment: { name: "rsc", childEnvironments: ["ssr"] },
         inspectorPort: false,
         config: localBindingConfig,
+        persistState: true,
       }),
     ],
   };

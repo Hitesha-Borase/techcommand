@@ -108,6 +108,7 @@ function AddAccountForm({ close }: { close: () => void }) {
     }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["accounts"] });
+      await queryClient.refetchQueries({ queryKey: ["accounts"] });
       toast.success("Account created", { description: name });
       close();
     },
@@ -151,6 +152,8 @@ function AddLocationForm({ accounts, close }: { accounts: Account[]; close: () =
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["accounts"] }),
         queryClient.invalidateQueries({ queryKey: ["locations"] }),
+        queryClient.refetchQueries({ queryKey: ["accounts"] }),
+        queryClient.refetchQueries({ queryKey: ["locations"] }),
       ]);
       toast.success("Location created", { description: name });
       close();

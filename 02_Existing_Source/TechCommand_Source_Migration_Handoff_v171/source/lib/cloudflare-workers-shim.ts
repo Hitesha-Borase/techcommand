@@ -4,11 +4,19 @@ import path from "node:path";
 
 let dbInstance: DatabaseSync | null = null;
 
-function getSqliteDb(): DatabaseSync {
+function getActiveDb(): any {
+  return (globalThis as any).__D1_DB__ || (globalThis as any).__WORKER_ENV__?.DB;
+}
+
+function getSqliteDb(): DatabaseSync | null {
   if (!dbInstance) {
-    const dbPath = path.resolve(process.cwd(), ".local-dev.sqlite");
-    dbInstance = new DatabaseSync(dbPath);
-    dbInstance.exec("PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;");
+    try {
+      const dbPath = path.resolve(process.cwd(), ".local-dev.sqlite");
+      dbInstance = new DatabaseSync(dbPath);
+      dbInstance.exec("PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;");
+    } catch {
+      return null;
+    }
   }
   return dbInstance;
 }
@@ -27,8 +35,13 @@ class D1PreparedStatementSync {
   }
 
   async first<T = unknown>(colName?: string): Promise<T | null> {
+    const active = getActiveDb();
+    if (active) {
+      return active.prepare(this.sql).bind(...this.params).first(colName);
+    }
     try {
       const db = getSqliteDb();
+      if (!db) return null;
       const stmt = db.prepare(this.sql);
       const row = stmt.get(...this.params) as Record<string, any> | undefined;
       if (!row) return null;
@@ -40,8 +53,18 @@ class D1PreparedStatementSync {
   }
 
   async execute<T = unknown>(): Promise<{ results: T[]; success: boolean; meta: { changes: number; last_row_id: number } }> {
+    const active = getActiveDb();
+    if (active) {
+      const res = await active.prepare(this.sql).bind(...this.params).all();
+      return {
+        results: (res?.results || []) as T[],
+        success: true,
+        meta: { changes: Number(res?.meta?.changes || 0), last_row_id: Number(res?.meta?.last_row_id || 0) },
+      };
+    }
     try {
       const db = getSqliteDb();
+      if (!db) return { results: [], success: false, meta: { changes: 0, last_row_id: 0 } };
       const stmt = db.prepare(this.sql);
       const isSelect = /^\s*(SELECT|PRAGMA|WITH)\b/i.test(this.sql);
       if (isSelect) {
@@ -61,10 +84,27 @@ class D1PreparedStatementSync {
   }
 
   async all<T = unknown>(): Promise<{ results: T[]; success: boolean; meta: any }> {
+    const active = getActiveDb();
+    if (active) {
+      const res = await active.prepare(this.sql).bind(...this.params).all();
+      return {
+        results: (res?.results || []) as T[],
+        success: true,
+        meta: res?.meta || {},
+      };
+    }
     return this.execute<T>();
   }
 
   async run(): Promise<{ success: boolean; meta: { changes: number; last_row_id: number } }> {
+    const active = getActiveDb();
+    if (active) {
+      const res = await active.prepare(this.sql).bind(...this.params).run();
+      return {
+        success: true,
+        meta: { changes: Number(res?.meta?.changes || 0), last_row_id: Number(res?.meta?.last_row_id || 0) },
+      };
+    }
     return this.execute();
   }
 
@@ -76,9 +116,13 @@ class D1PreparedStatementSync {
 
 export const d1Database = {
   prepare(sql: string) {
+    const active = getActiveDb();
+    if (active) return active.prepare(sql);
     return new D1PreparedStatementSync(sql);
   },
-  async batch(statements: D1PreparedStatementSync[]) {
+  async batch(statements: any[]) {
+    const active = getActiveDb();
+    if (active) return active.batch(statements);
     const results = [];
     for (const stmt of statements) {
       results.push(await stmt.execute());
@@ -86,8 +130,10 @@ export const d1Database = {
     return results;
   },
   async exec(sql: string) {
+    const active = getActiveDb();
+    if (active) return active.exec(sql);
     const db = getSqliteDb();
-    db.exec(sql);
+    if (db) db.exec(sql);
     return { count: 1, duration: 0 };
   },
 };
@@ -97,6 +143,8 @@ export const env: Record<string, any> = new Proxy(
   {
     get(target: Record<string, any>, prop: string) {
       if (prop === "DB") {
+        const active = getActiveDb();
+        if (active) return active;
         return d1Database;
       }
       if (prop === "BUCKET") {
