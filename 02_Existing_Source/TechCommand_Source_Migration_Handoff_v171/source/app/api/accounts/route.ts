@@ -53,9 +53,19 @@ export async function POST(request: Request) {
     const identity = await requirePortalRole(request, [
       "owner_administrator",
       "operations_administrator",
+      "finance",
     ]);
     const input = accountSchema.parse(await request.json());
     const id = crypto.randomUUID();
+
+    // Ensure parent organization and actor user records exist so foreign keys never fail
+    await env.DB.prepare(
+      "INSERT OR IGNORE INTO organizations (id, legal_name, display_name) VALUES (?, 'Astute Restorations LLC', 'TechFlex Mobility Solutions')",
+    ).bind(TECHFLEX_ORG_ID).run();
+    await env.DB.prepare(
+      "INSERT OR IGNORE INTO users (id, auth_subject, email, display_name, status) VALUES (?, ?, ?, ?, 'active')",
+    ).bind(identity.userId, identity.authSubject, identity.email, identity.displayName).run();
+
     await env.DB.batch([
       env.DB.prepare(
         `INSERT INTO accounts

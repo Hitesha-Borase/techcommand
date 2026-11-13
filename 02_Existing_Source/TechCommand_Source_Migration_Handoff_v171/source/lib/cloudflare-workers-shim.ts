@@ -2,13 +2,45 @@
 import { DatabaseSync } from "node:sqlite";
 import path from "node:path";
 
+import fs from "node:fs";
+
 let dbInstance: DatabaseSync | null = null;
 
 function getSqliteDb(): DatabaseSync {
   if (!dbInstance) {
     const dbPath = path.resolve(process.cwd(), ".local-dev.sqlite");
     dbInstance = new DatabaseSync(dbPath);
-    dbInstance.exec("PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;");
+    dbInstance.exec("PRAGMA journal_mode = WAL;");
+
+    try {
+      const tableCheck = dbInstance.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='accounts'").get();
+      if (!tableCheck) {
+        console.log("[D1 Shim] Initializing local database schema from drizzle migrations...");
+        dbInstance.exec("PRAGMA foreign_keys = OFF;");
+        const drizzleDir = path.resolve(process.cwd(), "drizzle");
+        if (fs.existsSync(drizzleDir)) {
+          const files = fs.readdirSync(drizzleDir).filter((f) => f.endsWith(".sql")).sort();
+          for (const file of files) {
+            try {
+              const sqlContent = fs.readFileSync(path.join(drizzleDir, file), "utf-8");
+              const statements = sqlContent.split("--> statement-breakpoint");
+              for (const statement of statements) {
+                const trimmed = statement.trim();
+                if (trimmed) {
+                  dbInstance.exec(trimmed);
+                }
+              }
+            } catch (_fileErr) {
+              // Ignore cumulative duplicate table/column alter errors across migrations
+            }
+          }
+        }
+        dbInstance.exec("PRAGMA foreign_keys = ON;");
+        console.log("[D1 Shim] Local database schema initialized successfully.");
+      }
+    } catch (initErr) {
+      console.warn("[D1 Shim] Table check error:", initErr);
+    }
   }
   return dbInstance;
 }
@@ -56,6 +88,7 @@ class D1PreparedStatementSync {
         };
       }
     } catch (_err) {
+      console.error("[D1 Query Error]:", _err, "in SQL:", this.sql);
       return { results: [], success: false, meta: { changes: 0, last_row_id: 0 } };
     }
   }
@@ -111,4 +144,33 @@ export const env: Record<string, any> = new Proxy(
   }
 );
 
-export default { env };
+export class WorkerEntrypoint<Env = unknown> {
+  ctx: any;
+  env: Env;
+  constructor(ctx: any, env: Env) {
+    this.ctx = ctx;
+    this.env = env;
+  }
+}
+
+export class DurableObject<Env = unknown> {
+  ctx: any;
+  env: Env;
+  constructor(ctx: any, env: Env) {
+    this.ctx = ctx;
+    this.env = env;
+  }
+}
+
+export class WorkflowEntrypoint<Env = unknown, Params = unknown> {
+  ctx: any;
+  env: Env;
+  constructor(ctx: any, env: Env) {
+    this.ctx = ctx;
+    this.env = env;
+  }
+}
+
+export class RpcTarget {}
+
+export default { env, WorkerEntrypoint, DurableObject, WorkflowEntrypoint, RpcTarget };

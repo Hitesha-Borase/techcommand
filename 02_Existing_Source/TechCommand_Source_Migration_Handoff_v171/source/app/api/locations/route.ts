@@ -57,6 +57,7 @@ export async function POST(request: Request) {
     const identity = await requirePortalRole(request, [
       "owner_administrator",
       "operations_administrator",
+      "finance",
     ]);
     const input = locationSchema.parse(await request.json());
     const account = await env.DB.prepare(

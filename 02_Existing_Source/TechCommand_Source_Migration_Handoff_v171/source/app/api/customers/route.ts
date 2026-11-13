@@ -66,6 +66,7 @@ export async function POST(request: Request) {
       "owner_administrator",
       "operations_administrator",
       "dispatcher",
+      "finance",
     ]);
     const input = schema.parse(await request.json());
     const locationId = input.locationId || null;
