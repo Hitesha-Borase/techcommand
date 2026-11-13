@@ -6,7 +6,7 @@ import { DEMO_ACCOUNTS, ensureDemoUserInDb, getDemoAccountFromCookie } from "@/l
 
 const input = z.discriminatedUnion("action", [
   z.object({ action: z.literal("login"), login: z.string().trim().min(1).max(254).optional(), email: z.string().trim().min(1).max(254).optional(), password: z.string().min(1).max(256) }).strict(),
-  z.object({ action: z.literal("password"), password: z.string().min(12, "Use at least 12 characters for your own password.").max(256) }).strict(),
+  z.object({ action: z.literal("password"), password: z.string().min(6, "Use at least 6 characters for your password.").max(256) }).strict(),
   z.object({ action: z.enum(["refresh", "logout", "owner"]) }).strict(),
 ]).refine(data => data.action !== "login" || !!data.login !== !!data.email, "Enter a username or email, not both.");
 
@@ -88,6 +88,29 @@ export async function POST(request: Request) {
       return passwordResponse({ ok: true, needsPasswordChange: result.user.app_metadata.tc_temporary === true }, result.session);
     }
     if (data.action !== "password") throw new PasswordAuthError(400, "Choose a sign-in action.");
+    const demo = getDemoAccountFromCookie(request.headers.get("cookie"));
+    if (demo) {
+      if (DEMO_ACCOUNTS[demo.email]) {
+        DEMO_ACCOUNTS[demo.email].password = data.password;
+      }
+      try {
+        const { env } = await import("cloudflare:workers");
+        if (env?.DB) {
+          await env.DB.prepare("UPDATE local_credentials SET password = ? WHERE email = ?")
+            .bind(data.password, demo.email)
+            .run();
+        }
+      } catch (dbErr) {
+        console.error("Failed to update demo local_credentials:", dbErr);
+      }
+      const headers = new Headers();
+      headers.set("Set-Cookie", `tc_demo_user=${demo.email}; Path=/; SameSite=Lax; Max-Age=604800`);
+      headers.set("Location", "/");
+      if (nativeForm) {
+        return new Response(null, { status: 303, headers });
+      }
+      return new Response(JSON.stringify({ ok: true, message: "Password updated successfully." }), { headers });
+    }
     const { user, session } = await verifyPasswordSession(request, true);
     const identity = await getPasswordPortalIdentity(user, true);
     await authBridge("change_password", { providerId: user.id, expectedEpoch: session.epoch, password: data.password, actorUserId: identity.userId });

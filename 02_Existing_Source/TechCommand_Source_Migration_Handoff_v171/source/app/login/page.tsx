@@ -10,6 +10,6 @@ export default async function Login({searchParams}:{searchParams:Promise<Record<
  error:typeof query.error==="string"?query.error:undefined,
  change:typeof query.change==="string"?query.change:undefined,
  });
- if(state.confirmed && state.initialStep==="ready") redirect("/");
+ if(state.confirmed && state.initialStep==="ready" && query.change !== "1") redirect("/");
  return <PasswordLogin {...state}/>;
 }
