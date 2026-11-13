@@ -102,6 +102,11 @@ async function ensureIntakesSchema() {
   if (!db) return;
 
   try {
+    const check = await db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='work_order_intakes'").first();
+    if (check) return;
+  } catch {}
+
+  try {
     await db.exec("PRAGMA foreign_keys = OFF;");
   } catch {}
 

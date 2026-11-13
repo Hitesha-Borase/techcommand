@@ -86,9 +86,15 @@ const duplicateFileMessage = "This file is already attached to the selected reco
 
 async function ensureDocumentsSchema() {
   try {
-    if (!env?.DB) return;
-    await env.DB.exec(`
-      CREATE TABLE IF NOT EXISTS attachments (
+    const db = (globalThis as any).__D1_DB__ || (globalThis as any).__WORKER_ENV__?.DB || env?.DB;
+    if (!db) return;
+    try {
+      const check = await db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='attachments'").first();
+      if (check) return;
+    } catch {}
+
+    const ddlStatements = [
+      `CREATE TABLE IF NOT EXISTS attachments (
         id TEXT PRIMARY KEY NOT NULL,
         organization_id TEXT NOT NULL,
         entity_type TEXT NOT NULL,
@@ -101,8 +107,8 @@ async function ensureDocumentsSchema() {
         category TEXT DEFAULT 'general' NOT NULL,
         uploaded_by TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
-      );
-      CREATE TABLE IF NOT EXISTS document_records (
+      )`,
+      `CREATE TABLE IF NOT EXISTS document_records (
         id TEXT PRIMARY KEY NOT NULL,
         organization_id TEXT NOT NULL,
         scope_type TEXT NOT NULL,
@@ -119,8 +125,8 @@ async function ensureDocumentsSchema() {
         record_version INTEGER DEFAULT 1 NOT NULL,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
         updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
-      );
-      CREATE TABLE IF NOT EXISTS audit_logs (
+      )`,
+      `CREATE TABLE IF NOT EXISTS audit_logs (
         id TEXT PRIMARY KEY NOT NULL,
         organization_id TEXT NOT NULL,
         actor_user_id TEXT,
@@ -130,8 +136,8 @@ async function ensureDocumentsSchema() {
         before_json TEXT,
         after_json TEXT,
         occurred_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
-      );
-      CREATE TABLE IF NOT EXISTS multipart_upload_sessions (
+      )`,
+      `CREATE TABLE IF NOT EXISTS multipart_upload_sessions (
         upload_id TEXT PRIMARY KEY NOT NULL,
         organization_id TEXT NOT NULL,
         attachment_id TEXT NOT NULL,
@@ -149,8 +155,13 @@ async function ensureDocumentsSchema() {
         completed_at TEXT,
         ended_at TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
-      );
-    `);
+      )`
+    ];
+    for (const stmt of ddlStatements) {
+      try {
+        await db.prepare(stmt).run();
+      } catch {}
+    }
   } catch (err) {
     console.warn("ensureDocumentsSchema warning:", err);
   }

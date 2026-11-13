@@ -26,60 +26,66 @@ async function ensureLocationsSchema() {
   const db = getDatabase();
   if (!db) return;
   try {
-    await db.exec(`
-      CREATE TABLE IF NOT EXISTS locations (
-        id TEXT PRIMARY KEY NOT NULL,
-        account_id TEXT NOT NULL,
-        external_id TEXT,
-        name TEXT NOT NULL,
-        location_type TEXT,
-        department TEXT,
-        status TEXT DEFAULT 'active' NOT NULL,
-        address_1 TEXT NOT NULL,
-        address_2 TEXT,
-        city TEXT NOT NULL,
-        state TEXT NOT NULL,
-        postal_code TEXT NOT NULL,
-        country TEXT DEFAULT 'US' NOT NULL,
-        timezone TEXT DEFAULT 'America/New_York' NOT NULL,
-        record_version INTEGER DEFAULT 1 NOT NULL,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
-        updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
-      );
-      CREATE TABLE IF NOT EXISTS departments (
-        id TEXT PRIMARY KEY NOT NULL,
-        location_id TEXT NOT NULL,
-        name TEXT NOT NULL,
-        floor TEXT,
-        room TEXT,
-        cost_center TEXT,
-        status TEXT DEFAULT 'active' NOT NULL,
-        record_version INTEGER DEFAULT 1 NOT NULL,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
-        updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
-      );
-      CREATE TABLE IF NOT EXISTS assets (
-        id TEXT PRIMARY KEY NOT NULL,
-        organization_id TEXT NOT NULL,
-        account_id TEXT NOT NULL,
-        location_id TEXT NOT NULL,
-        category_id TEXT,
-        asset_tag TEXT NOT NULL,
-        customer_asset_id TEXT,
-        manufacturer TEXT NOT NULL,
-        model TEXT NOT NULL,
-        serial_number TEXT,
-        description TEXT,
-        department TEXT,
-        risk_class TEXT NOT NULL,
-        status TEXT DEFAULT 'in_service' NOT NULL,
-        record_version INTEGER DEFAULT 1 NOT NULL,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
-        updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
-      );
-    `);
-  } catch (err) {
-    console.warn("ensureLocationsSchema warning:", err);
+    const check = await db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='locations'").first();
+    if (check) return;
+  } catch {}
+
+  const ddlStatements = [
+    `CREATE TABLE IF NOT EXISTS locations (
+      id TEXT PRIMARY KEY NOT NULL,
+      account_id TEXT NOT NULL,
+      external_id TEXT,
+      name TEXT NOT NULL,
+      location_type TEXT,
+      department TEXT,
+      status TEXT DEFAULT 'active' NOT NULL,
+      address_1 TEXT NOT NULL,
+      address_2 TEXT,
+      city TEXT NOT NULL,
+      state TEXT NOT NULL,
+      postal_code TEXT NOT NULL,
+      country TEXT DEFAULT 'US' NOT NULL,
+      timezone TEXT DEFAULT 'America/New_York' NOT NULL,
+      record_version INTEGER DEFAULT 1 NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    )`,
+    `CREATE TABLE IF NOT EXISTS departments (
+      id TEXT PRIMARY KEY NOT NULL,
+      location_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      floor TEXT,
+      room TEXT,
+      cost_center TEXT,
+      status TEXT DEFAULT 'active' NOT NULL,
+      record_version INTEGER DEFAULT 1 NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    )`,
+    `CREATE TABLE IF NOT EXISTS assets (
+      id TEXT PRIMARY KEY NOT NULL,
+      organization_id TEXT NOT NULL,
+      account_id TEXT NOT NULL,
+      location_id TEXT NOT NULL,
+      category_id TEXT,
+      asset_tag TEXT NOT NULL,
+      customer_asset_id TEXT,
+      manufacturer TEXT NOT NULL,
+      model TEXT NOT NULL,
+      serial_number TEXT,
+      description TEXT,
+      department TEXT,
+      risk_class TEXT NOT NULL,
+      status TEXT DEFAULT 'in_service' NOT NULL,
+      record_version INTEGER DEFAULT 1 NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    )`
+  ];
+  for (const stmt of ddlStatements) {
+    try {
+      await db.prepare(stmt).run();
+    } catch {}
   }
 }
 

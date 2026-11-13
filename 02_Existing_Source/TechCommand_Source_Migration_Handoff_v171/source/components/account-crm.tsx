@@ -102,11 +102,22 @@ function AddAccountForm({ close }: { close: () => void }) {
   const [serviceLevel, setServiceLevel] = useState("");
   const [serviceDiscipline, setServiceDiscipline] = useState("");
   const mutation = useMutation({
-    mutationFn: () => api("/api/accounts", {
+    mutationFn: () => api<{ account?: Account }>("/api/accounts", {
       method: "POST",
       body: JSON.stringify({ name, accountType, billingEmail, paymentTermsDays: Number(terms), serviceLevel, serviceDiscipline: serviceDiscipline || null }),
     }),
-    onSuccess: async () => {
+    onSuccess: async (data) => {
+      if (data?.account) {
+        queryClient.setQueryData(["accounts"], (old: { accounts: Account[] } | undefined) => {
+          const list = old?.accounts || [];
+          return {
+            accounts: [
+              data.account!,
+              ...list.filter((a) => a.id !== data.account!.id),
+            ],
+          };
+        });
+      }
       await queryClient.invalidateQueries({ queryKey: ["accounts"] });
       await queryClient.refetchQueries({ queryKey: ["accounts"] });
       toast.success("Account created", { description: name });
@@ -144,11 +155,22 @@ function AddLocationForm({ accounts, close }: { accounts: Account[]; close: () =
   const [postalCode, setPostalCode] = useState("");
   const [departmentName, setDepartmentName] = useState("");
   const mutation = useMutation({
-    mutationFn: () => api("/api/locations", {
+    mutationFn: () => api<{ location?: Location }>("/api/locations", {
       method: "POST",
       body: JSON.stringify({ accountId, name, locationType, address1, city, state, postalCode, departmentName }),
     }),
-    onSuccess: async () => {
+    onSuccess: async (data) => {
+      if (data?.location) {
+        queryClient.setQueryData(["locations"], (old: { locations: Location[] } | undefined) => {
+          const list = old?.locations || [];
+          return {
+            locations: [
+              data.location!,
+              ...list.filter((l) => l.id !== data.location!.id),
+            ],
+          };
+        });
+      }
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["accounts"] }),
         queryClient.invalidateQueries({ queryKey: ["locations"] }),
