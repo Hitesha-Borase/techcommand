@@ -184,6 +184,7 @@ export async function POST(request: Request) {
       "operations_administrator",
       "dispatcher",
       "biomedical_lead",
+      "finance",
     ]);
     const input = inputSchema.parse(await request.json());
     if (input.externalSource.replace(/\s/g, "").toLowerCase() === "spinlife") {

@@ -3,6 +3,11 @@ import handler from "vinext/server/app-router-entry";
 
 export default {
   async fetch(request: Request, env: any, ctx: any): Promise<Response> {
+    if (env) {
+      (globalThis as any).__WORKER_ENV__ = env;
+      if (env.DB) (globalThis as any).__D1_DB__ = env.DB;
+    }
+
     const response = await handler.fetch(request, env, ctx);
 
     // Resolve PDF Page 6 Permissions-Policy conflict: allow microphone and camera for field voice notes & scanning

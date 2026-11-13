@@ -3,10 +3,11 @@
 
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Eye, EyeOff, KeyRound, LogOut, ShieldCheck, Sparkles } from "lucide-react";
+import { CheckCircle2, Eye, EyeOff, KeyRound, LogOut, ShieldCheck, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { z } from "zod";
 import { clearIdentityBoundClientState } from "@/lib/identity-cache";
 import { clearIdentityBoundDeviceState } from "@/lib/device-state";
@@ -183,10 +184,10 @@ export function PasswordLogin({
                     autoCapitalize="none"
                     autoCorrect="off"
                     spellCheck={false}
-                    minLength={change ? 12 : 1}
+                    minLength={change ? 6 : 1}
                     maxLength={256}
                     required
-                    placeholder="Enter password"
+                    placeholder={change ? "Enter new password (min. 6 characters)" : "Enter password"}
                     value={passVal}
                     onChange={(e) => setPassVal(e.target.value)}
                     className="h-9 text-xs bg-slate-50/80 border-slate-200 focus:bg-white focus:border-blue-500 rounded-lg pr-9 transition-all"
@@ -204,7 +205,7 @@ export function PasswordLogin({
                     name="confirmation"
                     type={visible ? "text" : "password"}
                     autoComplete="new-password"
-                    minLength={12}
+                    minLength={6}
                     maxLength={256}
                     required
                     placeholder="Re-enter new password"
@@ -220,6 +221,14 @@ export function PasswordLogin({
                 <KeyRound className="size-3.5" />
                 {change ? "Save Password & Open My Work" : "Sign In to Dashboard"}
               </Button>
+
+              {change ? (
+                <div className="pt-2 text-center">
+                  <a href="/" className="text-xs text-slate-500 hover:text-slate-800 hover:underline">
+                    ← Cancel & Return to Dashboard
+                  </a>
+                </div>
+              ) : null}
 
               {!change && (
                 <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-2.5 text-xs mt-2">
@@ -307,55 +316,208 @@ export function PortalLoginControls({ passwordLogin }: { passwordLogin: boolean 
   const client = useQueryClient();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [openModal, setOpenModal] = useState(false);
+  const [newPass, setNewPass] = useState("");
+  const [confirmPass, setConfirmPass] = useState("");
+  const [showPass, setShowPass] = useState(false);
+  const [modalBusy, setModalBusy] = useState(false);
+  const [modalError, setModalError] = useState("");
+  const [modalSuccess, setModalSuccess] = useState(false);
+
+  async function handlePasswordChange(e: React.FormEvent) {
+    e.preventDefault();
+    setModalError("");
+    if (newPass.length < 6) {
+      setModalError("Password must be at least 6 characters.");
+      return;
+    }
+    if (newPass !== confirmPass) {
+      setModalError("Passwords do not match. Enter the same password twice.");
+      return;
+    }
+    setModalBusy(true);
+    try {
+      const res = await fetch("/api/auth", {
+        method: "POST",
+        credentials: "same-origin",
+        cache: "no-store",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ action: "password", password: newPass }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.ok !== true) {
+        throw new Error(data.error || "Password update failed. Please try again.");
+      }
+      setModalSuccess(true);
+      setTimeout(() => {
+        setOpenModal(false);
+        setModalSuccess(false);
+        setNewPass("");
+        setConfirmPass("");
+      }, 1500);
+    } catch (err: unknown) {
+      setModalError(err instanceof Error ? err.message : "Failed to update password.");
+    } finally {
+      setModalBusy(false);
+    }
+  }
+
   return (
-    <div className="flex min-h-8 items-center justify-end gap-3 border-b border-slate-200/60 bg-white/90 px-3 sm:px-4 xl:px-6 py-0.5 text-xs text-slate-600 lg:pl-[210px] xl:pl-[235px] 2xl:pl-[258px]">
-      {passwordLogin ? (
-        <a className="inline-flex h-7 items-center font-medium text-blue-700 hover:underline" href="/login?change=1">
-          Change password
-        </a>
-      ) : null}
-      <Button
-        variant="ghost"
-        size="sm"
-        className="h-7 px-2 text-xs text-slate-600 hover:text-slate-900"
-        disabled={busy}
-        onClick={async () => {
-          setBusy(true);
-          setError("");
-          let departingUserId = client.getQueryData<{ userId?: string }>(["portal-identity"])?.userId || "";
-          if (!departingUserId) {
+    <>
+      <div className="flex min-h-8 items-center justify-end gap-3 border-b border-slate-200/60 bg-white/90 px-3 sm:px-4 xl:px-6 py-0.5 text-xs text-slate-600 lg:pl-[210px] xl:pl-[235px] 2xl:pl-[258px]">
+        {passwordLogin ? (
+          <button
+            type="button"
+            onClick={() => {
+              setModalError("");
+              setModalSuccess(false);
+              setNewPass("");
+              setConfirmPass("");
+              setOpenModal(true);
+            }}
+            className="inline-flex h-7 items-center font-medium text-blue-700 hover:underline cursor-pointer"
+          >
+            Change password
+          </button>
+        ) : null}
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 px-2 text-xs text-slate-600 hover:text-slate-900"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            setError("");
+            let departingUserId = client.getQueryData<{ userId?: string }>(["portal-identity"])?.userId || "";
+            if (!departingUserId) {
+              try {
+                const response = await portalFetch("/api/me");
+                departingUserId =
+                  (await portalJson<{ identity?: { userId?: string } }>(response, "Your identity could not be confirmed for safe sign-out.")).identity?.userId || "";
+              } catch {
+                setError("Your identity could not be confirmed for safe sign-out. Keep this page open and try again.");
+                setBusy(false);
+                return;
+              }
+            }
             try {
-              const response = await portalFetch("/api/me");
-              departingUserId =
-                (await portalJson<{ identity?: { userId?: string } }>(response, "Your identity could not be confirmed for safe sign-out.")).identity?.userId || "";
+              await authAction({ action: "logout" });
             } catch {
-              setError("Your identity could not be confirmed for safe sign-out. Keep this page open and try again.");
+              setError("Sign-out was not confirmed. Try again.");
               setBusy(false);
               return;
             }
-          }
-          try {
-            await authAction({ action: "logout" });
-          } catch {
-            setError("Sign-out was not confirmed. Try again.");
-            setBusy(false);
-            return;
-          }
-          let deviceCleanupFailed = false;
-          try {
-            await clearIdentityBoundDeviceState(departingUserId);
-          } catch {
-            deviceCleanupFailed = true;
-          }
-          clearIdentityBoundClientState(client);
-          window.dispatchEvent(new Event("techcommand:session-required"));
-          window.location.assign(deviceCleanupFailed ? "/login?device_cleanup=check" : "/login");
-        }}
-      >
-        <LogOut />
-        {busy ? "Signing out…" : "Sign out"}
-      </Button>
-      {error ? <p role="alert" className="text-red-700">{error}</p> : null}
-    </div>
+            let deviceCleanupFailed = false;
+            try {
+              await clearIdentityBoundDeviceState(departingUserId);
+            } catch {
+              deviceCleanupFailed = true;
+            }
+            clearIdentityBoundClientState(client);
+            window.dispatchEvent(new Event("techcommand:session-required"));
+            window.location.assign(deviceCleanupFailed ? "/login?device_cleanup=check" : "/login");
+          }}
+        >
+          <LogOut />
+          {busy ? "Signing out…" : "Sign out"}
+        </Button>
+        {error ? <p role="alert" className="text-red-700">{error}</p> : null}
+      </div>
+
+      <Dialog open={openModal} onOpenChange={setOpenModal}>
+        <DialogContent className="sm:max-w-md bg-white p-6 rounded-2xl shadow-2xl border border-slate-200">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <KeyRound className="size-4 text-blue-600" />
+              Change Password
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-500">
+              Enter and confirm your new password below.
+            </DialogDescription>
+          </DialogHeader>
+
+          {modalSuccess ? (
+            <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-4 text-center space-y-1 my-2">
+              <div className="text-emerald-700 font-bold text-sm flex items-center justify-center gap-1.5">
+                <CheckCircle2 className="size-4" /> Password Updated!
+              </div>
+              <p className="text-xs text-emerald-600">Your new password has been saved successfully.</p>
+            </div>
+          ) : (
+            <form onSubmit={handlePasswordChange} className="space-y-4 pt-1">
+              {modalError ? (
+                <div className="rounded-lg bg-red-50 border border-red-200 p-2.5 text-xs text-red-700 font-medium">
+                  {modalError}
+                </div>
+              ) : null}
+
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="modal-new-pass" className="text-xs font-semibold text-slate-700">
+                    New Password
+                  </Label>
+                  <button
+                    type="button"
+                    onClick={() => setShowPass(!showPass)}
+                    className="text-[11px] text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1 cursor-pointer"
+                  >
+                    {showPass ? <><EyeOff className="size-3" /> Hide</> : <><Eye className="size-3" /> Show</>}
+                  </button>
+                </div>
+                <Input
+                  id="modal-new-pass"
+                  type={showPass ? "text" : "password"}
+                  value={newPass}
+                  onChange={(e) => setNewPass(e.target.value)}
+                  placeholder="Enter new password (min. 6 characters)"
+                  minLength={6}
+                  maxLength={256}
+                  required
+                  className="h-9 text-xs"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="modal-confirm-pass" className="text-xs font-semibold text-slate-700">
+                  Confirm New Password
+                </Label>
+                <Input
+                  id="modal-confirm-pass"
+                  type={showPass ? "text" : "password"}
+                  value={confirmPass}
+                  onChange={(e) => setConfirmPass(e.target.value)}
+                  placeholder="Re-enter new password"
+                  minLength={6}
+                  maxLength={256}
+                  required
+                  className="h-9 text-xs"
+                />
+              </div>
+
+              <DialogFooter className="flex items-center justify-end gap-2 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="text-xs h-8 cursor-pointer"
+                  onClick={() => setOpenModal(false)}
+                  disabled={modalBusy}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  size="sm"
+                  className="text-xs h-8 bg-blue-600 hover:bg-blue-700 text-white font-medium cursor-pointer"
+                  disabled={modalBusy}
+                >
+                  {modalBusy ? "Updating…" : "Update Password"}
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

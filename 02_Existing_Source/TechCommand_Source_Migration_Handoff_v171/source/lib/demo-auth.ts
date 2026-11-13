@@ -77,7 +77,12 @@ export function getDemoAccountFromCookie(cookieHeader: string | null): DemoAccou
 
 export async function seedAllDemoUsers() {
   try {
-    await env.DB.prepare(`
+    if (!env?.DB) {
+      console.warn("seedAllDemoUsers: env.DB is not configured yet.");
+      return;
+    }
+
+    await env.DB.exec(`
       CREATE TABLE IF NOT EXISTS local_credentials (
         id TEXT PRIMARY KEY,
         email TEXT UNIQUE NOT NULL,
@@ -86,8 +91,141 @@ export async function seedAllDemoUsers() {
         display_name TEXT NOT NULL,
         description TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
-      )
-    `).run();
+      );
+      CREATE TABLE IF NOT EXISTS organizations (
+        id TEXT PRIMARY KEY,
+        legal_name TEXT NOT NULL,
+        display_name TEXT NOT NULL,
+        timezone TEXT DEFAULT 'America/New_York' NOT NULL,
+        currency TEXT DEFAULT 'USD' NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS roles (
+        id TEXT PRIMARY KEY,
+        organization_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT,
+        is_system INTEGER DEFAULT 0 NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY,
+        auth_subject TEXT,
+        email TEXT UNIQUE NOT NULL,
+        display_name TEXT NOT NULL,
+        status TEXT DEFAULT 'active' NOT NULL,
+        last_seen_at TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS memberships (
+        id TEXT PRIMARY KEY,
+        organization_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        role_id TEXT NOT NULL,
+        status TEXT DEFAULT 'active' NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        UNIQUE(organization_id, user_id, role_id)
+      );
+      CREATE TABLE IF NOT EXISTS technicians (
+        id TEXT PRIMARY KEY,
+        organization_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        technician_code TEXT,
+        employment_type TEXT DEFAULT 'contractor' NOT NULL,
+        status TEXT DEFAULT 'active' NOT NULL,
+        service_disciplines_json TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS accounts (
+        id TEXT PRIMARY KEY NOT NULL,
+        organization_id TEXT NOT NULL,
+        external_id TEXT,
+        name TEXT NOT NULL,
+        account_type TEXT NOT NULL,
+        status TEXT DEFAULT 'active' NOT NULL,
+        billing_email TEXT,
+        payment_terms_days INTEGER DEFAULT 30 NOT NULL,
+        service_level TEXT,
+        service_discipline TEXT,
+        notes TEXT,
+        record_version INTEGER DEFAULT 1 NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS audit_logs (
+        id TEXT PRIMARY KEY NOT NULL,
+        organization_id TEXT NOT NULL,
+        actor_user_id TEXT,
+        action TEXT NOT NULL,
+        entity_type TEXT NOT NULL,
+        entity_id TEXT NOT NULL,
+        before_json TEXT,
+        after_json TEXT,
+        occurred_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS locations (
+        id TEXT PRIMARY KEY NOT NULL,
+        account_id TEXT NOT NULL,
+        external_id TEXT,
+        name TEXT NOT NULL,
+        location_type TEXT,
+        department TEXT,
+        status TEXT DEFAULT 'active' NOT NULL,
+        address_1 TEXT NOT NULL,
+        address_2 TEXT,
+        city TEXT NOT NULL,
+        state TEXT NOT NULL,
+        postal_code TEXT NOT NULL,
+        country TEXT DEFAULT 'US' NOT NULL,
+        timezone TEXT DEFAULT 'America/New_York' NOT NULL,
+        record_version INTEGER DEFAULT 1 NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS departments (
+        id TEXT PRIMARY KEY NOT NULL,
+        location_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        floor TEXT,
+        room TEXT,
+        cost_center TEXT,
+        status TEXT DEFAULT 'active' NOT NULL,
+        record_version INTEGER DEFAULT 1 NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS assets (
+        id TEXT PRIMARY KEY NOT NULL,
+        organization_id TEXT NOT NULL,
+        account_id TEXT NOT NULL,
+        location_id TEXT NOT NULL,
+        category_id TEXT,
+        asset_tag TEXT NOT NULL,
+        customer_asset_id TEXT,
+        manufacturer TEXT NOT NULL,
+        model TEXT NOT NULL,
+        serial_number TEXT,
+        description TEXT,
+        department TEXT,
+        risk_class TEXT NOT NULL,
+        status TEXT DEFAULT 'in_service' NOT NULL,
+        record_version INTEGER DEFAULT 1 NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+      );
+    `);
+
+    try { await env.DB.exec("ALTER TABLE accounts ADD COLUMN service_discipline TEXT;"); } catch {}
+    try { await env.DB.exec("ALTER TABLE accounts ADD COLUMN service_level TEXT;"); } catch {}
+    try { await env.DB.exec("ALTER TABLE accounts ADD COLUMN billing_email TEXT;"); } catch {}
+    try { await env.DB.exec("ALTER TABLE accounts ADD COLUMN payment_terms_days INTEGER DEFAULT 30;"); } catch {}
+    try { await env.DB.exec("ALTER TABLE accounts ADD COLUMN status TEXT DEFAULT 'active';"); } catch {}
+    try { await env.DB.exec("ALTER TABLE accounts ADD COLUMN record_version INTEGER DEFAULT 1;"); } catch {}
 
     await env.DB.prepare(
       "INSERT OR IGNORE INTO organizations (id, legal_name, display_name, timezone, currency) VALUES (?, ?, ?, ?, ?)",

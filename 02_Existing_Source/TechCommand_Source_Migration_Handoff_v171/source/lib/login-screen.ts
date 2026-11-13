@@ -17,6 +17,15 @@ export async function loginScreen(request: Request, options: {check?:string;erro
  await seedAllDemoUsers();
  const demoUser = getDemoAccountFromCookie(request.headers.get("cookie"));
  if (demoUser) {
+   if (options.change === "1") {
+     return {
+       configured: true,
+       initialStep: "password" as LoginStep,
+       initialEmail: demoUser.email,
+       initialError: options.error && Object.hasOwn(loginFeedback, options.error) ? loginFeedback[options.error as keyof typeof loginFeedback] : "",
+       confirmed: false,
+     };
+   }
    return { configured: true, initialStep: "ready" as LoginStep, initialEmail: demoUser.email, initialError: "", confirmed: true };
  }
  const configured = true;

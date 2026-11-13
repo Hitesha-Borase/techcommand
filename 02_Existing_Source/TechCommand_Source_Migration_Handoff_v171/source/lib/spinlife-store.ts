@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { TECHFLEX_ORG_ID, PortalHttpError, type PortalIdentity } from "./portal-auth";
 import { spinlifeData, spinlifeVisitSchema, type SpinLifeJob, type SpinLifeJobSummary } from "./spinlife-simple";
 
-export const spinlifeAdminRoles = ["owner_administrator", "operations_administrator", "dispatcher", "biomedical_lead"] as const;
+export const spinlifeAdminRoles = ["owner_administrator", "operations_administrator", "dispatcher", "biomedical_lead", "finance"] as const;
 export const spinlifeRoles = [...spinlifeAdminRoles, "technician"] as const;
 export const privateHeaders = { "Cache-Control": "private, no-store" };
 const select = `SELECT i.id, i.external_id AS externalId, i.status, i.data_json AS dataJson, i.record_version AS intakeVersion,

@@ -24,7 +24,6 @@ yarn-error.log*
 
 # Secrets & local config
 **/.env*
-**/wrangler.toml
 
 # Duplicate archives (already extracted in folders)
 02_Existing_Source/*.zip

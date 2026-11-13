@@ -2,7 +2,17 @@ import { env } from "cloudflare:workers";
 import { TECHFLEX_ORG_ID, PortalHttpError, type PortalIdentity } from "@/lib/portal-auth";
 import type { ScannedAsset } from "@/lib/asset-scanning";
 
-export const assetReadRoles = ["owner_administrator", "operations_administrator", "dispatcher", "biomedical_lead", "technician", "auditor"] as const;
+export const assetReadRoles = [
+  "owner_administrator",
+  "operations_administrator",
+  "dispatcher",
+  "biomedical_lead",
+  "finance",
+  "technician",
+  "auditor",
+  "client_administrator",
+  "client_location_user",
+] as const;
 export const assetManageRoles = ["owner_administrator", "operations_administrator", "biomedical_lead"] as const;
 
 export const assetIdentitySql = `SELECT s.id, s.asset_tag AS assetTag, s.customer_asset_id AS customerAssetId,

@@ -107,7 +107,11 @@ function AddAccountForm({ close }: { close: () => void }) {
       body: JSON.stringify({ name, accountType, billingEmail, paymentTermsDays: Number(terms), serviceLevel, serviceDiscipline: serviceDiscipline || null }),
     }),
     onSuccess: async () => {
+<<<<<<< HEAD
       await queryClient.invalidateQueries({ queryKey: ["accounts"] });
+=======
+>>>>>>> 17ebf6d9fa9a65562b293d1018c04545a1e0ef9a
+      await queryClient.refetchQueries({ queryKey: ["accounts"] });
       toast.success("Account created", { description: name });
       close();
     },
@@ -149,8 +153,13 @@ function AddLocationForm({ accounts, close }: { accounts: Account[]; close: () =
     }),
     onSuccess: async () => {
       await Promise.all([
+<<<<<<< HEAD
         queryClient.invalidateQueries({ queryKey: ["accounts"] }),
         queryClient.invalidateQueries({ queryKey: ["locations"] }),
+=======
+>>>>>>> 17ebf6d9fa9a65562b293d1018c04545a1e0ef9a
+        queryClient.refetchQueries({ queryKey: ["accounts"] }),
+        queryClient.refetchQueries({ queryKey: ["locations"] }),
       ]);
       toast.success("Location created", { description: name });
       close();
@@ -235,7 +244,7 @@ export function AccountCrm({ mode }: { mode: "accounts" | "locations" }) {
         {!loading && !error && (mode === "accounts" ? accounts : locations).length === 0 ? <EmptyState mode={mode} onOpen={() => setOpen(true)} /> : null}
         {!loading && !error && (mode === "accounts" ? accounts : locations).length > 0 && (mode === "accounts" ? filteredAccounts : filteredLocations).length === 0 ? <div className="space-y-3 px-5 py-10 text-center text-sm text-slate-600"><p>No {mode} match your filter. Your saved records have not been removed.</p><Button variant="outline" onClick={() => setSearch("")}>Clear filter</Button></div> : null}
         {!loading && mode === "accounts" && filteredAccounts.length > 0 ? (
-          <Table><TableHeader><TableRow className="bg-slate-50"><TableHead className="pl-5">ACCOUNT</TableHead><TableHead>TYPE</TableHead><TableHead>LOCATIONS</TableHead><TableHead>BIOMEDICAL ASSETS</TableHead><TableHead>TERMS / SLA</TableHead></TableRow></TableHeader><TableBody>{filteredAccounts.map((account) => <TableRow key={account.id}><TableCell className="pl-5"><p className="font-bold text-slate-900">{account.name}</p><p className="mt-1 text-xs text-slate-500">{account.billingEmail || "No billing email"}</p></TableCell><TableCell className="capitalize text-slate-600">{account.serviceDiscipline === "biomedical" ? "Biomedical / PM" : account.serviceDiscipline === "dme_mobility" ? "DME / Mobility" : "Work type pending"} · {account.accountType.replaceAll("_", " ")}</TableCell><TableCell className="font-bold">{account.locationCount}</TableCell><TableCell className="font-bold">{account.serviceDiscipline === "dme_mobility" ? "—" : account.assetCount}</TableCell><TableCell><p className="font-semibold">{account.paymentTermsDays} days</p><p className="mt-1 text-xs text-slate-500">{account.serviceLevel || "Standard"}</p></TableCell></TableRow>)}</TableBody></Table>
+          <Table><TableHeader><TableRow className="bg-slate-50"><TableHead className="pl-5">ACCOUNT</TableHead><TableHead>TYPE</TableHead><TableHead>LOCATIONS</TableHead><TableHead>BIOMEDICAL ASSETS</TableHead><TableHead>TERMS / SLA</TableHead></TableRow></TableHeader><TableBody>{filteredAccounts.map((account) => <TableRow key={account.id}><TableCell className="pl-5"><p className="font-bold text-slate-900">{account.name}</p><p className="mt-1 text-xs text-slate-500">{account.billingEmail || "No billing email"}</p></TableCell><TableCell className="capitalize text-slate-600">{account.serviceDiscipline === "biomedical" ? "Biomedical / PM" : account.serviceDiscipline === "dme_mobility" ? "DME / Mobility" : "Work type pending"} · {(account.accountType || "facility").replaceAll("_", " ")}</TableCell><TableCell className="font-bold">{account.locationCount}</TableCell><TableCell className="font-bold">{account.serviceDiscipline === "dme_mobility" ? "—" : account.assetCount}</TableCell><TableCell><p className="font-semibold">{account.paymentTermsDays} days</p><p className="mt-1 text-xs text-slate-500">{account.serviceLevel || "Standard"}</p></TableCell></TableRow>)}</TableBody></Table>
         ) : null}
         {!loading && mode === "locations" && filteredLocations.length > 0 ? (
           <Table><TableHeader><TableRow className="bg-slate-50"><TableHead className="pl-5">LOCATION</TableHead><TableHead>ACCOUNT</TableHead><TableHead>ADDRESS</TableHead><TableHead>DEPARTMENTS</TableHead><TableHead>BIOMEDICAL ASSETS</TableHead></TableRow></TableHeader><TableBody>{filteredLocations.map((location) => <TableRow key={location.id}><TableCell className="pl-5"><p className="font-bold text-slate-900">{location.name}</p><p className="mt-1 text-xs capitalize text-slate-500">{location.locationType?.replaceAll("_", " ") || "Service location"}</p></TableCell><TableCell className="font-semibold">{location.accountName}</TableCell><TableCell className="text-slate-600">{location.address1}, {location.city}, {location.state} {location.postalCode}</TableCell><TableCell className="font-bold">{location.departmentCount}</TableCell><TableCell className="font-bold">{location.assetCount}</TableCell></TableRow>)}</TableBody></Table>

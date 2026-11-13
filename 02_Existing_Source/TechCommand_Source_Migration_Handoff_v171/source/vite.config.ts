@@ -7,7 +7,8 @@ import { telemetryRelease } from "./build/telemetry-release.mjs";
 const SITE_CREATOR_PLACEHOLDER_DATABASE_ID =
   "00000000-0000-4000-8000-000000000000";
 
-const { d1, r2 } = hostingConfig;
+const d1 = hostingConfig.d1 || "DB";
+const { r2 } = hostingConfig;
 
 // macOS Seatbelt blocks FSEvents, so Codex previews need polling for HMR.
 const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
@@ -18,8 +19,8 @@ const localBindingConfig = {
     ? [
         {
           binding: d1,
-          database_name: "site-creator-d1",
-          database_id: SITE_CREATOR_PLACEHOLDER_DATABASE_ID,
+          database_name: "techcommand-db",
+          database_id: "f9722e9b-3c84-43d4-9c56-5b3e4d6090f4",
         },
       ]
     : [],
@@ -59,6 +60,7 @@ export default defineConfig(async () => {
         viteEnvironment: { name: "rsc", childEnvironments: ["ssr"] },
         inspectorPort: false,
         config: localBindingConfig,
+        persistState: true,
       }),
     ],
   };
