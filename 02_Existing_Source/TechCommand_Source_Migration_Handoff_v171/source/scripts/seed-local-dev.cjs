@@ -13,3 +13,4 @@ db.exec(`
 `);
 
 console.log("Seeded .local-dev.sqlite successfully!");
+
