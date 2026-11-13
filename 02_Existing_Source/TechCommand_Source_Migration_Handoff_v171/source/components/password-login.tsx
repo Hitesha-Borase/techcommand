@@ -344,7 +344,7 @@ export function PortalLoginControls({ passwordLogin }: { passwordLogin: boolean 
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({ action: "password", password: newPass }),
       });
-      const data = await res.json().catch(() => ({}));
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
       if (!res.ok || data.ok !== true) {
         throw new Error(data.error || "Password update failed. Please try again.");
       }

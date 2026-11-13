@@ -107,10 +107,7 @@ function AddAccountForm({ close }: { close: () => void }) {
       body: JSON.stringify({ name, accountType, billingEmail, paymentTermsDays: Number(terms), serviceLevel, serviceDiscipline: serviceDiscipline || null }),
     }),
     onSuccess: async () => {
-<<<<<<< HEAD
       await queryClient.invalidateQueries({ queryKey: ["accounts"] });
-=======
->>>>>>> 17ebf6d9fa9a65562b293d1018c04545a1e0ef9a
       await queryClient.refetchQueries({ queryKey: ["accounts"] });
       toast.success("Account created", { description: name });
       close();
@@ -153,11 +150,8 @@ function AddLocationForm({ accounts, close }: { accounts: Account[]; close: () =
     }),
     onSuccess: async () => {
       await Promise.all([
-<<<<<<< HEAD
         queryClient.invalidateQueries({ queryKey: ["accounts"] }),
         queryClient.invalidateQueries({ queryKey: ["locations"] }),
-=======
->>>>>>> 17ebf6d9fa9a65562b293d1018c04545a1e0ef9a
         queryClient.refetchQueries({ queryKey: ["accounts"] }),
         queryClient.refetchQueries({ queryKey: ["locations"] }),
       ]);

@@ -1,24 +1,3 @@
-<<<<<<< HEAD
-// Real local SQLite-backed D1 shim for Cloudflare Workers under Node.js / Next.js
-import { DatabaseSync } from "node:sqlite";
-import path from "node:path";
-
-let dbInstance: DatabaseSync | null = null;
-
-function getActiveDb(): any {
-  return (globalThis as any).__D1_DB__ || (globalThis as any).__WORKER_ENV__?.DB;
-}
-
-function getSqliteDb(): DatabaseSync | null {
-  if (!dbInstance) {
-    try {
-      const dbPath = path.resolve(process.cwd(), ".local-dev.sqlite");
-      dbInstance = new DatabaseSync(dbPath);
-      dbInstance.exec("PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;");
-    } catch {
-      return null;
-    }
-=======
 // Robust in-memory & global D1 database shim for local development
 export class WorkerEntrypoint<Env = unknown> {
   ctx: any;
@@ -26,7 +5,6 @@ export class WorkerEntrypoint<Env = unknown> {
   constructor(ctx: any, env: Env) {
     this.ctx = ctx;
     this.env = env;
->>>>>>> 17ebf6d9fa9a65562b293d1018c04545a1e0ef9a
   }
 }
 
@@ -49,6 +27,10 @@ export class WorkflowEntrypoint<Env = unknown, Params = unknown> {
 }
 
 export class RpcTarget {}
+
+function getActiveDb(): any {
+  return (globalThis as any).__D1_DB__ || (globalThis as any).__WORKER_ENV__?.DB;
+}
 
 type AccountRecord = {
   id: string;
@@ -330,81 +312,11 @@ class D1PreparedStatementShim {
     return new D1PreparedStatementShim(this.sql, params);
   }
 
-<<<<<<< HEAD
-  async first<T = unknown>(colName?: string): Promise<T | null> {
-    const active = getActiveDb();
-    if (active) {
-      return active.prepare(this.sql).bind(...this.params).first(colName);
-    }
-    try {
-      const db = getSqliteDb();
-      if (!db) return null;
-      const stmt = db.prepare(this.sql);
-      const row = stmt.get(...this.params) as Record<string, any> | undefined;
-      if (!row) return null;
-      if (colName) return (row[colName] ?? null) as T;
-      return row as T;
-    } catch (_err) {
-      return null;
-    }
-  }
-
-  async execute<T = unknown>(): Promise<{ results: T[]; success: boolean; meta: { changes: number; last_row_id: number } }> {
-    const active = getActiveDb();
-    if (active) {
-      const res = await active.prepare(this.sql).bind(...this.params).all();
-      return {
-        results: (res?.results || []) as T[],
-        success: true,
-        meta: { changes: Number(res?.meta?.changes || 0), last_row_id: Number(res?.meta?.last_row_id || 0) },
-      };
-    }
-    try {
-      const db = getSqliteDb();
-      if (!db) return { results: [], success: false, meta: { changes: 0, last_row_id: 0 } };
-      const stmt = db.prepare(this.sql);
-      const isSelect = /^\s*(SELECT|PRAGMA|WITH)\b/i.test(this.sql);
-      if (isSelect) {
-        const rows = stmt.all(...this.params) as T[];
-        return { results: rows || [], success: true, meta: { changes: 0, last_row_id: 0 } };
-      } else {
-        const res = stmt.run(...this.params);
-        return {
-          results: [],
-          success: true,
-          meta: { changes: Number(res.changes || 0), last_row_id: Number(res.lastInsertRowid || 0) },
-        };
-      }
-    } catch (_err) {
-      return { results: [], success: false, meta: { changes: 0, last_row_id: 0 } };
-    }
-  }
-
-  async all<T = unknown>(): Promise<{ results: T[]; success: boolean; meta: any }> {
-    const active = getActiveDb();
-    if (active) {
-      const res = await active.prepare(this.sql).bind(...this.params).all();
-      return {
-        results: (res?.results || []) as T[],
-        success: true,
-        meta: res?.meta || {},
-      };
-    }
-    return this.execute<T>();
-  }
-
-  async run(): Promise<{ success: boolean; meta: { changes: number; last_row_id: number } }> {
-    const active = getActiveDb();
-    if (active) {
-      const res = await active.prepare(this.sql).bind(...this.params).run();
-      return {
-        success: true,
-        meta: { changes: Number(res?.meta?.changes || 0), last_row_id: Number(res?.meta?.last_row_id || 0) },
-      };
-    }
-    return this.execute();
-=======
   async first<T = unknown>(col?: string): Promise<T | null> {
+    const active = getActiveDb();
+    if (active) {
+      return active.prepare(this.sql).bind(...this.params).first(col);
+    }
     const res = await this.all<T>();
     const row = res.results[0] || null;
     if (!row) return null;
@@ -413,13 +325,22 @@ class D1PreparedStatementShim {
   }
 
   async all<T = unknown>(): Promise<{ results: T[]; success: boolean; meta: any }> {
+    const active = getActiveDb();
+    if (active) {
+      const res = await active.prepare(this.sql).bind(...this.params).all();
+      return {
+        results: (res?.results || []) as T[],
+        success: true,
+        meta: res?.meta || { changes: 0 },
+      };
+    }
+
     const db = g.__TECHCOMMAND_DB__;
     const s = this.sql.toLowerCase();
 
     // ACCOUNTS - hierarchy check (WHERE a.id = ?) or full list
     if (s.includes("from accounts")) {
       let rows = db.accounts.filter((a: AccountRecord) => a.status !== "archived");
-      // If this is a hierarchy/lookup query (has WHERE a.id = ?), filter by accountId param
       if (s.includes("where a.id = ?") || s.includes("where a.id=?")) {
         const accountId = this.params[0];
         rows = rows.filter((a: AccountRecord) => a.id === accountId);
@@ -462,37 +383,56 @@ class D1PreparedStatementShim {
 
     // CUSTOMERS
     if (s.includes("from customers")) {
-      const rows = db.customers.filter((c: CustomerRecord) => c.status !== "archived");
+      let rows = db.customers.filter((c: CustomerRecord) => c.status !== "archived");
+      if (s.includes("where c.id = ?") || s.includes("where c.id=?")) {
+        const custId = this.params[0];
+        rows = rows.filter((c: CustomerRecord) => c.id === custId);
+      }
       return { results: rows as T[], success: true, meta: { changes: 0 } };
     }
 
     // CONTACTS
     if (s.includes("from contacts")) {
-      return { results: db.contacts as T[], success: true, meta: { changes: 0 } };
+      let rows = db.contacts;
+      if (s.includes("where c.account_id = ?") || s.includes("where c.account_id=?")) {
+        const accId = this.params[0];
+        rows = rows.filter((c: ContactRecord) => c.accountId === accId || c.account_id === accId);
+      }
+      return { results: rows as T[], success: true, meta: { changes: 0 } };
     }
 
-    // ORGANIZATIONS
-    if (s.includes("from organizations")) {
-      return {
-        results: [{ id: "techflex", legal_name: "Astute Restorations LLC", display_name: "TechFlex Mobility Solutions" }] as T[],
-        success: true,
-        meta: { changes: 0 },
-      };
-    }
-
-    return { results: [] as T[], success: true, meta: { changes: 0 } };
+    return { results: [], success: true, meta: { changes: 0 } };
   }
 
   async run(): Promise<{ success: boolean; meta: { changes: number; last_row_id: number } }> {
+    const active = getActiveDb();
+    if (active) {
+      const res = await active.prepare(this.sql).bind(...this.params).run();
+      return {
+        success: true,
+        meta: { changes: Number(res?.meta?.changes || 0), last_row_id: Number(res?.meta?.last_row_id || 0) },
+      };
+    }
+
     const db = g.__TECHCOMMAND_DB__;
     const s = this.sql.toLowerCase();
 
-    // INSERT INTO ACCOUNTS
-    if (s.includes("insert into accounts")) {
-      const [id, orgId, extId, name, accType, billEmail, terms, sLevel, sDisc] = this.params;
-      const accountId = id || crypto.randomUUID();
-      const newAccount: AccountRecord = {
-        id: accountId,
+    // INSERT / UPDATE ACCOUNTS
+    if (s.includes("into accounts")) {
+      const [
+        id,
+        orgId,
+        extId,
+        name,
+        accType,
+        email,
+        terms,
+        serviceLevel,
+        discipline,
+      ] = this.params;
+      const existingIdx = db.accounts.findIndex((a: AccountRecord) => a.id === id);
+      const record: AccountRecord = {
+        id,
         organizationId: orgId || "techflex",
         organization_id: orgId || "techflex",
         externalId: extId || null,
@@ -501,45 +441,47 @@ class D1PreparedStatementShim {
         accountType: accType || "facility",
         account_type: accType || "facility",
         status: "active",
-        billingEmail: billEmail || null,
-        billing_email: billEmail || null,
+        billingEmail: email || null,
+        billing_email: email || null,
         paymentTermsDays: Number(terms || 30),
         payment_terms_days: Number(terms || 30),
-        serviceLevel: sLevel || "Standard",
-        service_level: sLevel || "Standard",
-        serviceDiscipline: sDisc || null,
-        service_discipline: sDisc || null,
+        serviceLevel: serviceLevel || null,
+        service_level: serviceLevel || null,
+        serviceDiscipline: discipline || null,
+        service_discipline: discipline || null,
         locationCount: 0,
         assetCount: 0,
         updatedAt: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
-      // Prepend so newest appears first
-      db.accounts.unshift(newAccount);
+      if (existingIdx >= 0) {
+        db.accounts[existingIdx] = record;
+      } else {
+        db.accounts.unshift(record);
+      }
       return { success: true, meta: { changes: 1, last_row_id: 1 } };
     }
 
-    // INSERT INTO LOCATIONS
-    if (s.includes("insert into locations")) {
-      const [id, orgId, accId, name, locType, a1, city, state, zip, dept] = this.params;
+    // INSERT LOCATIONS
+    if (s.includes("into locations")) {
+      const [id, accId, name, locType, addr1, addr2, city, state, zip] = this.params;
       const parentAcc = db.accounts.find((a: AccountRecord) => a.id === accId);
-      const locId = id || crypto.randomUUID();
       const newLoc: LocationRecord = {
-        id: locId,
-        organizationId: orgId || "techflex",
-        organization_id: orgId || "techflex",
+        id,
+        organizationId: "techflex",
+        organization_id: "techflex",
         accountId: accId,
         account_id: accId,
-        accountName: parentAcc?.name || "Customer Account",
+        accountName: parentAcc?.name || "Account",
         name: name || "New Location",
         locationType: locType || "healthcare_facility",
         location_type: locType || "healthcare_facility",
-        address1: a1 || "",
-        address2: null,
+        address1: addr1 || "",
+        address2: addr2 || null,
         city: city || "",
         state: state || "OH",
         postalCode: zip || "",
-        departmentCount: dept ? 1 : 0,
+        departmentCount: 0,
         assetCount: 0,
         status: "active",
       };
@@ -550,9 +492,24 @@ class D1PreparedStatementShim {
       return { success: true, meta: { changes: 1, last_row_id: 1 } };
     }
 
-    // INSERT INTO CUSTOMERS
-    if (s.includes("insert into customers")) {
-      const [id, orgId, accountId, locationId, extId, name, email, phone, addr1, addr2, city, state, zip, notes] = this.params;
+    // INSERT CUSTOMERS
+    if (s.includes("into customers")) {
+      const [
+        id,
+        orgId,
+        accountId,
+        locationId,
+        externalId,
+        name,
+        email,
+        phone,
+        address1,
+        address2,
+        city,
+        state,
+        postalCode,
+        notes,
+      ] = this.params;
       const parentAcc = db.accounts.find((a: AccountRecord) => a.id === accountId);
       const parentLoc = db.locations.find((l: LocationRecord) => l.id === locationId);
       const newCustomer: CustomerRecord = {
@@ -565,19 +522,19 @@ class D1PreparedStatementShim {
         locationId: locationId || null,
         location_id: locationId || null,
         locationName: parentLoc?.name || null,
-        externalId: extId || null,
-        external_id: extId || null,
+        externalId: externalId || null,
+        external_id: externalId || null,
         name: name || "New Customer",
         email: email || null,
         phone: phone || null,
-        address1: addr1 || null,
-        address_1: addr1 || null,
-        address2: addr2 || null,
-        address_2: addr2 || null,
+        address1: address1 || null,
+        address_1: address1 || null,
+        address2: address2 || null,
+        address_2: address2 || null,
         city: city || null,
         state: state || null,
-        postalCode: zip || null,
-        postal_code: zip || null,
+        postalCode: postalCode || null,
+        postal_code: postalCode || null,
         notes: notes || null,
         status: "active",
         workOrderCount: 0,
@@ -589,9 +546,19 @@ class D1PreparedStatementShim {
       return { success: true, meta: { changes: 1, last_row_id: 1 } };
     }
 
-    // INSERT INTO CONTACTS
-    if (s.includes("insert into contacts")) {
-      const [id, accountId, locationId, name, title, email, phone, contactType, isPrimary] = this.params;
+    // INSERT CONTACTS
+    if (s.includes("into contacts")) {
+      const [
+        id,
+        accountId,
+        locationId,
+        name,
+        title,
+        email,
+        phone,
+        contactType,
+        isPrimary,
+      ] = this.params;
       const parentAcc = db.accounts.find((a: AccountRecord) => a.id === accountId);
       const parentLoc = db.locations.find((l: LocationRecord) => l.id === locationId);
       const newContact: ContactRecord = {
@@ -620,7 +587,6 @@ class D1PreparedStatementShim {
     }
 
     return { success: true, meta: { changes: 1, last_row_id: 1 } };
->>>>>>> 17ebf6d9fa9a65562b293d1018c04545a1e0ef9a
   }
 
   async execute<T = unknown>(): Promise<{ results: T[]; success: boolean; meta: any }> {
@@ -635,19 +601,13 @@ class D1PreparedStatementShim {
 
 export const d1Database = {
   prepare(sql: string) {
-<<<<<<< HEAD
     const active = getActiveDb();
     if (active) return active.prepare(sql);
-    return new D1PreparedStatementSync(sql);
-  },
-  async batch(statements: any[]) {
-    const active = getActiveDb();
-    if (active) return active.batch(statements);
-=======
     return new D1PreparedStatementShim(sql);
   },
-  async batch(stmts: D1PreparedStatementShim[]) {
->>>>>>> 17ebf6d9fa9a65562b293d1018c04545a1e0ef9a
+  async batch(stmts: any[]) {
+    const active = getActiveDb();
+    if (active) return active.batch(stmts);
     const results = [];
     for (const stmt of stmts) {
       results.push(await stmt.execute());
@@ -655,13 +615,8 @@ export const d1Database = {
     return results;
   },
   async exec(sql: string) {
-<<<<<<< HEAD
     const active = getActiveDb();
     if (active) return active.exec(sql);
-    const db = getSqliteDb();
-    if (db) db.exec(sql);
-=======
->>>>>>> 17ebf6d9fa9a65562b293d1018c04545a1e0ef9a
     return { count: 1, duration: 0 };
   },
 };
