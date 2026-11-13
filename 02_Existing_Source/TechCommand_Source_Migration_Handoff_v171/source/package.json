@@ -7,7 +7,8 @@
   },
   "scripts": {
     "install:ci": "bash scripts/install-ci.sh",
-    "dev": "vite",
+    "dev": "next dev",
+    "dev:vite": "vite",
     "build": "bash scripts/build-verified.sh",
     "start": "vinext start",
     "test": "npm run build && node --test --test-concurrency=1 tests/*.test.mjs",
