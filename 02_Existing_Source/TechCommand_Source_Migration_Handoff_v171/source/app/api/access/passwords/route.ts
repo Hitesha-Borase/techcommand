@@ -19,7 +19,7 @@ export async function GET(request: Request) {
       const localUsers = await env.DB.prepare("SELECT email FROM local_credentials").all<{ email: string }>();
       localSet = new Set((localUsers?.results ?? []).map(r => r.email.toLowerCase()));
     } catch {}
-    return passwordResponse({ configured: true, users: rows.filter(u => actor.role === "owner_administrator" || operationsMayManage(u)).map(row => {
+    return passwordResponse({ configured: true, users: rows.filter(u => !u.email.endsWith("@demo.com") && (actor.role === "owner_administrator" || operationsMayManage(u))).map(row => {
       const found = provider.users.find(p => p.email.toLowerCase() === row.email && (!p.userId || p.userId === row.userId));
       const hasLocal = localSet.has(row.email.toLowerCase());
       const status = hasLocal ? "temporary_password" : (!found ? "not_created" : found.disabled ? "disabled" : found.temporary ? "temporary_password" : "ready");

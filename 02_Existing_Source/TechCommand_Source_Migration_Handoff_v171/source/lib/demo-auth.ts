@@ -237,7 +237,11 @@ export async function seedAllDemoUsers() {
       "USD",
     ).run();
 
-    for (const demo of Object.values(DEMO_ACCOUNTS)) {
+    try {
+      await env.DB.exec("DELETE FROM users WHERE lower(email) LIKE '%@demo.com'; DELETE FROM memberships WHERE user_id LIKE 'user_demo_%'; DELETE FROM login_usernames WHERE user_id LIKE 'user_demo_%';");
+    } catch {}
+
+    for (const demo of [] as DemoAccount[]) {
       await env.DB.batch([
         env.DB.prepare(
           `INSERT INTO local_credentials (id, email, password, role, display_name, description)
