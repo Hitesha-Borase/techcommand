@@ -178,10 +178,12 @@ export function resolveRoute(pathname: string, userRole?: string): RouteResoluti
   const defaultDashboard = getDashboardFromRole(userRole);
 
   if (segments.length === 0) {
+    const defaultModule: ModuleKey = defaultDashboard === "finance" ? "finance" : "command";
+    const defaultSlug = MODULE_TO_SLUG[defaultModule] || "command-center";
     return {
       dashboard: defaultDashboard,
-      module: "command",
-      pathname: `/${defaultDashboard}/command-center`,
+      module: defaultModule,
+      pathname: `/${defaultDashboard}/${defaultSlug}`,
     };
   }
 
@@ -226,8 +228,10 @@ export function resolveRoute(pathname: string, userRole?: string): RouteResoluti
 
   if (dashboardMap[first]) {
     const dash = dashboardMap[first];
-    const slug = second || "command-center";
-    const mod = SLUG_TO_MODULE[slug] || "command";
+    const defaultModForDash = dash === "finance" ? "finance" : "command";
+    const defaultSlugForDash = MODULE_TO_SLUG[defaultModForDash] || "command-center";
+    const slug = second || defaultSlugForDash;
+    const mod = SLUG_TO_MODULE[slug] || defaultModForDash;
     return {
       dashboard: dash,
       module: mod,
@@ -245,10 +249,11 @@ export function resolveRoute(pathname: string, userRole?: string): RouteResoluti
     };
   }
 
-  // Fallback to default dashboard Command Center
+  // Fallback to default dashboard primary view
+  const fallbackMod: ModuleKey = defaultDashboard === "finance" ? "finance" : "command";
   return {
     dashboard: defaultDashboard,
-    module: "command",
-    pathname: `/${defaultDashboard}/command-center`,
+    module: fallbackMod,
+    pathname: `/${defaultDashboard}/${MODULE_TO_SLUG[fallbackMod] || "command-center"}`,
   };
 }

@@ -270,7 +270,7 @@ const moduleNames = Object.fromEntries(
 const roleModules: Partial<Record<string, ModuleKey[]>> = {
   dispatcher: ["biomedical-accounts", "spinlife", "command", "work-orders", "schedule", "dispatch", "accounts", "customers", "contacts", "locations", "support", "documents", "knowledge", "automations"],
   biomedical_lead: ["academy", "biomedical-accounts", "spinlife", "field-training", "command", "work-orders", "schedule", "dispatch", "accounts", "customers", "contacts", "locations", "assets", "support", "pm", "documents", "knowledge"],
-  finance: ["biomedical-accounts", "command", "accounts", "customers", "contacts", "locations", "finance", "reports", "automations", "imports", "documents", "knowledge"],
+  finance: ["finance", "reports", "accounts", "customers", "contacts", "locations", "automations", "imports", "documents", "knowledge", "biomedical-accounts"],
 };
 
 function allowedModulesForRole(role: string | undefined) {
@@ -437,7 +437,7 @@ export function TechFlexCommandCenter({
   const activeRole = session.data?.role || initialRole;
   const initialResolution = typeof window !== "undefined"
     ? resolveRoute(window.location.pathname, activeRole)
-    : (initialPath ? resolveRoute(initialPath, activeRole) : resolveRoute(`/${getDashboardFromRole(activeRole)}/command-center`, activeRole));
+    : (initialPath ? resolveRoute(initialPath, activeRole) : resolveRoute(`/${getDashboardFromRole(activeRole)}/${activeRole === "finance" ? "estimates-billing" : "command-center"}`, activeRole));
 
   const [active, setActive] = useState<ModuleKey>(initialResolution.module);
   const [showOtherAssignments, setShowOtherAssignments] = useState<boolean|null>(
@@ -517,9 +517,17 @@ export function TechFlexCommandCenter({
       const currentPath = window.location.pathname;
       const roleDashboard = experience === "technician" ? "technician" : getDashboardFromRole(session.data?.role);
       if (currentPath === "/" || currentPath === "") {
-        const canonical = getRoutePath(roleDashboard, active);
+        const defaultMod: ModuleKey = session.data?.role === "finance" ? "finance" : active;
+        if (session.data?.role === "finance" && active !== "finance") {
+          setActive("finance");
+        }
+        const canonical = getRoutePath(roleDashboard, defaultMod);
         window.history.replaceState(null, "", canonical);
       } else if (session.data?.role) {
+        if (session.data.role === "finance" && (currentPath === "/admin/command-center" || currentPath === "/finance/command-center" || active === "command")) {
+          setActive("finance");
+          window.history.replaceState(null, "", "/finance/estimates-billing");
+        }
         // If current pathname doesn't match user's role dashboard (e.g. /admin/customers when logged in as finance)
         const res = resolveRoute(currentPath, session.data.role);
         if (res.dashboard !== roleDashboard && (res.dashboard === "admin" || !currentPath.startsWith(`/${roleDashboard}`))) {
@@ -628,7 +636,7 @@ export function TechFlexCommandCenter({
   else if (active === "demo") content = <DemoCenter onStartPlatformTour={() => movePlatformTour(0)} />;
   else content = <FoundationView module={active} />;
 
-  const initials = (displayName || session.data?.displayName || "TC")
+  const initials = (session.data?.displayName || displayName || "TC")
     .split(" ")
     .filter(Boolean)
     .map((part) => part[0])
@@ -868,7 +876,7 @@ export function TechFlexCommandCenter({
                 </span>
                 <div className="max-w-[85px] sm:max-w-[105px] xl:max-w-[140px]">
                   <p className="truncate text-[11px] font-bold text-slate-800 leading-tight">
-                    {displayName || identity?.displayName}
+                    {identity?.displayName || displayName}
                   </p>
                   <p
                     className="truncate text-[9px] text-slate-500 leading-none mt-0.5"

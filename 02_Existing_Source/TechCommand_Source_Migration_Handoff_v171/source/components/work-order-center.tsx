@@ -16,12 +16,21 @@ import {
   Inbox,
   ListChecks,
   Paperclip,
+  Pencil,
   Plus,
   Save,
   Sparkles,
   UserRoundCheck,
 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -550,6 +559,49 @@ export function WorkOrderCenter({ initialAssetId, onAssetLoaded, initialTarget, 
   const [recordLoading, setRecordLoading] = useState(false);
   const [recordRetry, setRecordRetry] = useState(0);
   const [focusedOrders, setFocusedOrders] = useState<WorkOrder[] | null>(null);
+  const [editingOrder, setEditingOrder] = useState<WorkOrder | null>(null);
+  const [editReimbursement, setEditReimbursement] = useState<string>("");
+  const [editTechnicianId, setEditTechnicianId] = useState<string>("");
+  const [editScheduledStart, setEditScheduledStart] = useState<string>("");
+
+  function openEditModal(order: WorkOrder) {
+    setEditingOrder(order);
+    setEditReimbursement(order.acceptedPriceCents ? String(order.acceptedPriceCents / 100) : "150");
+    setEditTechnicianId(order.technicianId || "unassigned");
+    setEditScheduledStart(order.scheduledStart ? order.scheduledStart.slice(0, 16) : "");
+  }
+
+  const updateWorkOrder = useMutation({
+    mutationFn: async () => {
+      if (!editingOrder) return;
+      const res = await fetch("/api/work-orders", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editingOrder.id,
+          reimbursement: Number(editReimbursement) || 0,
+          technicianId: editTechnicianId === "unassigned" ? null : editTechnicianId,
+          scheduledStart: editScheduledStart || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to update work order");
+      return data;
+    },
+    onSuccess: async (data) => {
+      toast.success(
+        data?.status === "pricing_review"
+          ? "Work order updated (still in Pricing Review)"
+          : "Work order authorized and updated successfully!"
+      );
+      setEditingOrder(null);
+      await queryClient.invalidateQueries({ queryKey: ["work-orders"] });
+      await queryClient.invalidateQueries({ queryKey: ["dispatch"] });
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : "Update failed");
+    },
+  });
   const [form, setForm] = useState(initialForm);
   const [activeIntakeId, setActiveIntakeId] = useState<string | null>(null);
   const [activeIntakeVersion, setActiveIntakeVersion] = useState<number | undefined>();
@@ -1148,11 +1200,27 @@ export function WorkOrderCenter({ initialAssetId, onAssetLoaded, initialTarget, 
                         )}
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline" className="capitalize">
+                        <button
+                          type="button"
+                          onClick={() => openEditModal(order)}
+                          title="Click to edit work order"
+                          className="cursor-pointer group"
+                        >
+                        <Badge variant="outline" className={`capitalize transition ${order.status === "pricing_review" ? "bg-amber-50 text-amber-800 border-amber-300 group-hover:bg-amber-100" : "group-hover:bg-slate-100"}`}>
+                          <Pencil className="size-2.5 mr-1 inline opacity-70" />
                           {order.status.replaceAll("_", " ")}
-                        </Badge>
+                        </Badge></button>
                       </TableCell>
                       <TableCell>
+                        <div className="flex items-center gap-1.5 justify-end">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => openEditModal(order)}
+                            className="h-7.5 gap-1 border-slate-200 text-xs font-semibold text-blue-700 hover:border-blue-400 hover:bg-blue-50"
+                          >
+                            <Pencil className="size-3" /> Edit
+                          </Button>
                         {["completed","technician_submitted"].includes(order.status) ? (
                           <Button
                             size="sm"
@@ -1162,6 +1230,7 @@ export function WorkOrderCenter({ initialAssetId, onAssetLoaded, initialTarget, 
                             <FileCheck2 /> Review
                           </Button>
                         ) : null}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -1169,6 +1238,121 @@ export function WorkOrderCenter({ initialAssetId, onAssetLoaded, initialTarget, 
               </Table>
             ) : null}
           </article>
+          {editingOrder ? (
+            <Dialog open={Boolean(editingOrder)} onOpenChange={(open) => !open && setEditingOrder(null)}>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <span>Edit Work Order</span>
+                    <Badge variant="outline" className="font-mono text-xs">
+                      {editingOrder.externalId}
+                    </Badge>
+                  </DialogTitle>
+                  <DialogDescription>
+                    Update client reimbursement, assigned technician, or scheduled date to authorize this work order and enable dispatch.
+                  </DialogDescription>
+                </DialogHeader>
+
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    updateWorkOrder.mutate();
+                  }}
+                  className="space-y-4 py-2"
+                >
+                  <div className="rounded-lg border bg-slate-50 p-3 text-xs space-y-1.5">
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Service type:</span>
+                      <span className="font-semibold">{serviceLabels[editingOrder.serviceType] || editingOrder.serviceType}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Account:</span>
+                      <span className="font-semibold">{editingOrder.accountName}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Location:</span>
+                      <span className="font-semibold">{editingOrder.locationName || `${editingOrder.city}, ${editingOrder.state}`}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Current status:</span>
+                      <Badge variant="outline" className="capitalize text-[11px] h-5">
+                        {editingOrder.status.replaceAll("_", " ")}
+                      </Badge>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 mb-1 block">
+                      Client reimbursement ($)
+                    </label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      required
+                      value={editReimbursement}
+                      onChange={(e) => setEditReimbursement(e.target.value)}
+                      placeholder="e.g. 150.00"
+                      className="font-semibold text-slate-900"
+                    />
+                    <p className="mt-1 text-[11px] text-slate-500">
+                      Enter authorized reimbursement amount (e.g. $150 or more). Once covered, status changes to Authorized and enables dispatch.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 mb-1 block">
+                      Assigned technician
+                    </label>
+                    <Select
+                      value={editTechnicianId}
+                      onValueChange={setEditTechnicianId}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="unassigned">Leave unassigned</SelectItem>
+                        {technicians.data?.technicians.map((t) => (
+                          <SelectItem key={t.id} value={t.id}>
+                            {t.name} · {t.technicianCode}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 mb-1 block">
+                      Scheduled start (Date &amp; Time)
+                    </label>
+                    <Input
+                      type="datetime-local"
+                      value={editScheduledStart}
+                      onChange={(e) => setEditScheduledStart(e.target.value)}
+                    />
+                  </div>
+
+                  <DialogFooter className="mt-4 gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setEditingOrder(null)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="submit"
+                      disabled={updateWorkOrder.isPending}
+                      className="bg-blue-600 hover:bg-blue-700 text-white"
+                    >
+                      {updateWorkOrder.isPending ? "Saving…" : "Save & Authorize"}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
+          ) : null}
           {completionResult ? (
             <article className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
               <div>

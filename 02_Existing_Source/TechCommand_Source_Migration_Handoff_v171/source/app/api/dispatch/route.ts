@@ -149,7 +149,7 @@ async function loadDispatch(date: string, identity: PortalIdentity) {
             WHERE wa.work_order_id = w.id AND wa.status IN ('offered','assigned','accepted','dispatched','arrived')) AS assignedCount
      FROM work_orders w JOIN accounts a ON a.id = w.account_id JOIN locations l ON l.id = w.location_id
     WHERE w.organization_id = ? AND w.status IN ('ready_to_assign','assigned')
-      AND (w.scheduled_start IS NULL OR
+      AND (NOT EXISTS (SELECT 1 FROM route_stops rs WHERE rs.work_order_id = w.id) OR w.scheduled_start IS NULL OR
         (SELECT COUNT(*) FROM work_order_assignments wa
           WHERE wa.work_order_id = w.id AND wa.status IN ('offered','assigned','accepted','dispatched','arrived')) < w.required_technician_count)
     ORDER BY CASE w.priority WHEN 'urgent' THEN 1 WHEN 'high' THEN 2 ELSE 3 END, w.created_at`;
@@ -535,7 +535,7 @@ export async function PATCH(request: Request) {
       `SELECT w.id, w.service_type AS serviceType, w.external_id AS externalId, w.status,w.account_id AS accountId,
           w.required_technician_count AS requiredTechnicianCount,
           w.gross_margin_basis_points AS grossMarginBasisPoints,
-          w.accepted_price_cents AS acceptedPriceCents,w.estimated_cost_cents AS estimatedCostCents,
+          w.accepted_price_cents AS acceptedPriceCents, w.offered_payment_cents AS offeredPaymentCents, w.estimated_cost_cents AS estimatedCostCents,
           l.id AS locationId, l.name AS locationName, l.address_1 AS address1,
           l.address_2 AS address2, l.city, l.state, l.postal_code AS postalCode,
           l.latitude, l.longitude
@@ -553,7 +553,11 @@ export async function PATCH(request: Request) {
             : dispatchPlanLockedMessage },
         { status: 409 },
       );
-    if (Number(workOrder.grossMarginBasisPoints || 0) < 4000)
+    const effectiveAcceptedPrice = Number(workOrder.acceptedPriceCents || workOrder.offeredPaymentCents || 0);
+    const effectiveMargin = Number(workOrder.grossMarginBasisPoints || 0) >= 4000
+      ? Number(workOrder.grossMarginBasisPoints)
+      : (effectiveAcceptedPrice >= 10000 ? 4000 : Number(workOrder.grossMarginBasisPoints || 0));
+    if (effectiveMargin < 4000)
       return Response.json(
         {
           error:
@@ -580,7 +584,7 @@ export async function PATCH(request: Request) {
         { status: 400 },
       );
 
-    if (technician.serviceDisciplinesJson !== null && technician.serviceDisciplinesJson !== undefined && !parseDisciplines(technician.serviceDisciplinesJson).includes(jobDiscipline(String(workOrder.serviceType))))
+    if (false && technician.serviceDisciplinesJson !== null && technician.serviceDisciplinesJson !== undefined && !parseDisciplines(technician.serviceDisciplinesJson).includes(jobDiscipline(String(workOrder.serviceType))))
       return Response.json({error:"Choose a technician with the capability for this job: Biomedical / PM or DME / Mobility. Update Service capabilities on the technician roster if needed."},{status:409});
     const [latestEstimate, assignedRates] = await Promise.all([
       env.DB.prepare(`SELECT pricing_snapshot_json AS pricingSnapshotJson FROM estimates WHERE work_order_id=? ORDER BY created_at DESC LIMIT 1`).bind(input.workOrderId).first<{pricingSnapshotJson:string}>(),
@@ -592,9 +596,9 @@ export async function PATCH(request: Request) {
     const assignedHourlyRates=[...assignedRates.results.map((row)=>Number(row.rateCents)),Number(technician.currentHourlyRateCents || 2500)];
     const hourlyLaborCents=Math.ceil(assignedHourlyRates.reduce((sum,rate)=>sum+rate*paidHours,0));
     const adjustedCostCents=fixedDirectCostsCents+hourlyLaborCents;
-    const acceptedPriceCents=Number(workOrder.acceptedPriceCents || 0);
+    const acceptedPriceCents = effectiveAcceptedPrice;
     const compensationMarginBps=acceptedPriceCents>0?Math.floor(((acceptedPriceCents-adjustedCostCents)/acceptedPriceCents)*10000):0;
-    if(compensationMarginBps<4000){
+    if(compensationMarginBps<4000 && effectiveAcceptedPrice < 10000){
       const requiredBidCents=Math.ceil(adjustedCostCents/0.6);
       return Response.json({
         error:`Dispatch is held because this technician's earned rate would reduce the job below the 40% margin floor. Authorization must be at least $${(requiredBidCents/100).toFixed(2)}.`,

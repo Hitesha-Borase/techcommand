@@ -3,6 +3,7 @@ import { z } from "zod";
 import { TECHFLEX_ORG_ID, apiError, requirePortalRole } from "@/lib/portal-auth";
 import { PasswordAuthError, administratorTemporaryPassword, individualTemporaryPassword, assertSameOrigin, authBridge, passwordAuthConfigured, passwordResponse } from "@/lib/password-auth";
 import { loginDirectory, saveLoginUsername, usesPortalUsername, usesTechnicianUsername, type LoginDirectoryRow } from "@/lib/login-usernames";
+import { DEMO_ACCOUNTS } from "@/lib/demo-auth";
 
 type LoginRow = LoginDirectoryRow;
 const operationalLoginRoles = ["technician", "biomedical_lead", "client_administrator", "client_location_user"];
@@ -13,9 +14,16 @@ export async function GET(request: Request) {
     const rows = await loginDirectory();
     if (!passwordAuthConfigured()) return passwordResponse({ configured: false, users: [] });
     const provider = await authBridge("list");
+    let localSet = new Set<string>();
+    try {
+      const localUsers = await env.DB.prepare("SELECT email FROM local_credentials").all<{ email: string }>();
+      localSet = new Set((localUsers?.results ?? []).map(r => r.email.toLowerCase()));
+    } catch {}
     return passwordResponse({ configured: true, users: rows.filter(u => actor.role === "owner_administrator" || operationsMayManage(u)).map(row => {
       const found = provider.users.find(p => p.email.toLowerCase() === row.email && (!p.userId || p.userId === row.userId));
-      return { ...row, username: usesPortalUsername(row) ? row.suggestedUsername : null, login: usesPortalUsername(row) ? row.suggestedUsername : row.email, loginStatus: !found ? "not_created" : found.disabled ? "disabled" : found.temporary ? "temporary_password" : "ready" };
+      const hasLocal = localSet.has(row.email.toLowerCase());
+      const status = hasLocal ? "temporary_password" : (!found ? "not_created" : found.disabled ? "disabled" : found.temporary ? "temporary_password" : "ready");
+      return { ...row, username: usesPortalUsername(row) ? row.suggestedUsername : null, login: usesPortalUsername(row) ? row.suggestedUsername : row.email, loginStatus: status };
     }) });
   } catch (error) { return apiError(error); }
 }
@@ -95,5 +103,8 @@ export async function POST(request: Request) {
         .bind(crypto.randomUUID(), TECHFLEX_ORG_ID, actor.userId, `access.password_${data.action}`, "user", user.userId, JSON.stringify({ requestId: auditId, providerId: result.user.providerId, temporary: data.action !== "disable" })).run();
     } catch { warning = "The login changed successfully. The request is recorded, but its completion audit needs administrator review. Keep these login details; do not repeat the change."; }
     return passwordResponse({ ok: true, email: user.email, login: username || user.suggestedUsername || user.email, username, ...(data.action === "disable" ? {} : { temporaryPassword }), mustChangePassword: data.action !== "disable", warning });
-  } catch (error) { return apiError(error); }
+  } catch (error) {
+    console.error("DEBUG POST /api/access/passwords error:", error);
+    return Response.json({ error: String(error), stack: error instanceof Error ? error.stack : undefined }, { status: 500 });
+  }
 }

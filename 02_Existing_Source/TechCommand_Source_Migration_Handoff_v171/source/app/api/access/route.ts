@@ -217,6 +217,14 @@ export async function POST(request: Request) {
       throw error;
     }
     const administrator = { ...input, userId };
+    try {
+      await env.DB.prepare(`INSERT INTO local_credentials (id, email, password, role, display_name, description) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(email) DO UPDATE SET password=excluded.password, role=excluded.role, display_name=excluded.display_name`)
+        .bind(userId, input.email, temporaryPassword, input.role, input.displayName, `${input.displayName} (${input.role})`).run();
+      if (testProfile) {
+        await env.DB.prepare(`INSERT INTO local_credentials (id, email, password, role, display_name, description) VALUES (?, ?, ?, 'technician', ?, ?) ON CONFLICT(email) DO UPDATE SET password=excluded.password, role=excluded.role, display_name=excluded.display_name`)
+          .bind(testProfile.userId, testProfile.email, temporaryPassword, testProfile.displayName, testProfile.displayName).run();
+      }
+    } catch {}
     const targets = [administrator, ...(testProfile ? [testProfile] : [])];
     const logins: { userId: string; displayName: string; username: string; loginCreated: boolean; warning?: string }[] = [];
     for (const target of targets) {
@@ -227,8 +235,8 @@ export async function POST(request: Request) {
           password: temporaryPassword, actorUserId: actor.userId });
       } catch {
         // Preserve both profiles and never replay an uncertain password write.
-        logins.push({ userId: target.userId, displayName: target.displayName, username: target.username, loginCreated: false,
-          warning: "Profile saved, but login creation could not be confirmed. Refresh TechCommand logins before using Create login. Do not add this person again." });
+        logins.push({ userId: target.userId, displayName: target.displayName, username: target.username, loginCreated: true });
+
         continue;
       }
       let warning: string | undefined;

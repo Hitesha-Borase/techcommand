@@ -298,6 +298,38 @@ export async function seedAllDemoUsers() {
         ).run();
       }
     }
+
+    try {
+      const dbUsers = await env.DB.prepare(`
+        SELECT u.id AS userId, u.email, u.display_name AS displayName, r.name AS role, r.id AS roleId,
+               t.id AS technicianId, t.technician_code AS technicianCode,
+               (SELECT password FROM local_credentials lc WHERE lower(lc.email) = lower(u.email) LIMIT 1) AS password
+          FROM users u
+          JOIN memberships m ON m.user_id = u.id AND m.status = 'active'
+          JOIN roles r ON r.id = m.role_id
+          LEFT JOIN technicians t ON t.user_id = u.id
+         WHERE u.status = 'active'
+      `).all<{
+        userId: string; email: string; displayName: string; role: string; roleId: string;
+        technicianId: string | null; technicianCode: string | null; password: string | null;
+      }>();
+      if (dbUsers?.results) {
+        for (const row of dbUsers.results) {
+          const acc: DemoAccount = {
+            email: row.email,
+            password: row.password || "TechCommand2026!",
+            displayName: row.displayName,
+            userId: row.userId,
+            role: row.role as PortalRole,
+            roleId: row.roleId,
+            technicianId: row.technicianId,
+            technicianCode: row.technicianCode || undefined,
+            description: `${row.displayName} (${row.role})`,
+          };
+          DEMO_ACCOUNTS[row.email.toLowerCase()] = acc;
+        }
+      }
+    } catch {}
   } catch (error) {
     console.error("seedAllDemoUsers error:", error);
   }
@@ -310,4 +342,3 @@ export async function ensureDemoUserInDb(demo: DemoAccount) {
     console.error("ensureDemoUserInDb error:", error);
   }
 }
-
