@@ -21,7 +21,7 @@ type AdministratorRecord = {
 };
 
 const roleCapabilities: Record<
-  "owner_administrator" | "operations_administrator",
+  "owner_administrator" | "operations_administrator" | "finance" | "dispatcher",
   string[]
 > = {
   owner_administrator: [
@@ -35,6 +35,18 @@ const roleCapabilities: Record<
     "Technician onboarding and document workflows",
     "Completion review and customer follow-up",
     "Operational reporting without ownership transfer",
+  ],
+  finance: [
+    "Estimates, invoices, and billing",
+    "Technician payouts and margin reports",
+    "QuickBooks Online sync and reconciliation",
+    "Financial reporting — no work order or CRM write access",
+  ],
+  dispatcher: [
+    "Work orders, scheduling, and dispatch",
+    "SpinLife and partner job queue",
+    "Biomedical accounts and asset view",
+    "No financial or admin access",
   ],
 };
 
@@ -120,7 +132,7 @@ const administratorSchema = z.object({
   displayName: z.string().trim().min(2).max(120),
   email: z.string().trim().email().max(254).transform(value => value.toLowerCase()),
   username: loginUsernameSchema,
-  role: z.literal("operations_administrator"),
+  role: z.enum(["operations_administrator", "finance", "dispatcher"]),
   temporaryPassword: z.string().min(8).max(256).optional(),
   testTechnicianUsername: loginUsernameSchema.optional(),
 }).strict();

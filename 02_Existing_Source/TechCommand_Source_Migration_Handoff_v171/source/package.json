@@ -7,7 +7,7 @@
   },
   "scripts": {
     "install:ci": "bash scripts/install-ci.sh",
-    "dev": "vite",
+    "dev": "next dev",
     "dev:vite": "vite",
     "build": "bash scripts/build-verified.sh",
     "start": "vinext start",

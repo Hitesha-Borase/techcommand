@@ -26,7 +26,7 @@ import { PasswordAccess } from "@/components/password-access";
 type Administrator = {
   email: string;
   displayName: string;
-  role: "owner_administrator" | "operations_administrator";
+  role: "owner_administrator" | "operations_administrator" | "finance" | "dispatcher";
   approved: boolean;
   accountStatus: "active" | "first_sign_in_pending";
   lastSeenAt: string | null;
@@ -35,7 +35,7 @@ type Administrator = {
 type AccessPayload = {
   viewerRole: string;
   approvedAdministrators: Administrator[];
-  roleCapabilities: Record<Administrator["role"], string[]>;
+  roleCapabilities: Record<"owner_administrator" | "operations_administrator" | "finance" | "dispatcher", string[]>;
   authentication: {
     mode: "individual_email_password";
     sharedPasswordEnabled: false;
@@ -48,6 +48,10 @@ type AccessPayload = {
 function roleLabel(role: Administrator["role"]) {
   return role === "owner_administrator"
     ? "Owner administrator"
+    : role === "finance"
+    ? "Finance officer"
+    : role === "dispatcher"
+    ? "Dispatcher"
     : "Operations administrator";
 }
 
@@ -66,6 +70,7 @@ export function AccessCenter() {
   const client = useQueryClient();
   const [reviewer, setReviewer] = useState({ displayName: "", email: "" });
   const [administrator, setAdministrator] = useState({ displayName: "", email: "", username: "" });
+  const [newUserRole, setNewUserRole] = useState<"operations_administrator" | "finance" | "dispatcher">("operations_administrator");
   const [setupPassword, setSetupPassword] = useState("");
   const [createTestTechnician, setCreateTestTechnician] = useState(false);
   const [testTechnicianUsername, setTestTechnicianUsername] = useState("");
@@ -81,14 +86,14 @@ export function AccessCenter() {
   const addAdministrator = useMutation({
     mutationFn: async () => portalJson<NonNullable<typeof administratorResult>>(
       await portalFetch("/api/access", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...administrator, role: "operations_administrator", ...(setupPassword ? { temporaryPassword: setupPassword } : {}),
+        body: JSON.stringify({ ...administrator, role: newUserRole, ...(setupPassword ? { temporaryPassword: setupPassword } : {}),
           ...(createTestTechnician ? { testTechnicianUsername } : {}) }) }),
       "Administrator setup could not be confirmed. Refresh status before trying again.",
     ),
     onSuccess: async result => {
       setAdministratorResult(result);
       setAdministrator({ displayName: "", email: "", username: "" });
-      setSetupPassword(""); setCreateTestTechnician(false); setTestTechnicianUsername("");
+      setSetupPassword(""); setCreateTestTechnician(false); setTestTechnicianUsername(""); setNewUserRole("operations_administrator");
       await Promise.all([client.invalidateQueries({ queryKey: ["access-center"] }), client.invalidateQueries({ queryKey: ["password-access"] })]);
       toast.success((result.logins?.every(row => row.loginCreated) ?? result.loginCreated) ? "Account logins ready" : "Profiles saved — check login status");
     },
@@ -147,12 +152,20 @@ export function AccessCenter() {
   return (
     <div className="space-y-5">
       {query.data.viewerRole === "owner_administrator" ? <section className="rounded-xl border bg-white p-5">
-        <h3 className="flex items-center gap-2 text-lg font-bold"><UserPlus className="size-5 text-blue-700" />Add administrator</h3>
-        <p className="mt-2 text-sm leading-6 text-slate-600">Creates an operations administrator and their individual login. They can manage customers, jobs, scheduling and technicians. Company ownership and owner-level controls are not transferred.</p>
+        <h3 className="flex items-center gap-2 text-lg font-bold"><UserPlus className="size-5 text-blue-700" />Add team member</h3>
+        <p className="mt-2 text-sm leading-6 text-slate-600">Creates a staff login with the selected role. Company ownership and owner-level controls are not transferred.</p>
         <div className="mt-4 grid gap-4 md:grid-cols-3">
-          <div className="space-y-2"><Label htmlFor="administrator-name">Administrator name</Label><Input id="administrator-name" className="min-h-11" value={administrator.displayName} onChange={event => setAdministrator(current => ({ ...current, displayName: event.target.value }))} placeholder="First Last" disabled={addAdministrator.isPending} /></div>
-          <div className="space-y-2"><Label htmlFor="administrator-email">Administrator email</Label><Input id="administrator-email" className="min-h-11" type="email" value={administrator.email} onChange={event => setAdministrator(current => ({ ...current, email: event.target.value }))} placeholder="name@company.com" disabled={addAdministrator.isPending} /></div>
-          <div className="space-y-2"><Label htmlFor="administrator-username">Administrator username</Label><Input id="administrator-username" className="min-h-11" value={administrator.username} onChange={event => setAdministrator(current => ({ ...current, username: event.target.value }))} placeholder="First.Last" autoCapitalize="none" autoCorrect="off" spellCheck={false} disabled={addAdministrator.isPending} /></div>
+          <div className="space-y-2"><Label htmlFor="administrator-name">Full name</Label><Input id="administrator-name" className="min-h-11" value={administrator.displayName} onChange={event => setAdministrator(current => ({ ...current, displayName: event.target.value }))} placeholder="First Last" disabled={addAdministrator.isPending} /></div>
+          <div className="space-y-2"><Label htmlFor="administrator-email">Email</Label><Input id="administrator-email" className="min-h-11" type="email" value={administrator.email} onChange={event => setAdministrator(current => ({ ...current, email: event.target.value }))} placeholder="name@company.com" disabled={addAdministrator.isPending} /></div>
+          <div className="space-y-2"><Label htmlFor="administrator-username">Username</Label><Input id="administrator-username" className="min-h-11" value={administrator.username} onChange={event => setAdministrator(current => ({ ...current, username: event.target.value }))} placeholder="First.Last" autoCapitalize="none" autoCorrect="off" spellCheck={false} disabled={addAdministrator.isPending} /></div>
+        </div>
+        <div className="mt-4 space-y-2">
+          <Label htmlFor="new-user-role">Role</Label>
+          <select id="new-user-role" className="min-h-11 w-full max-w-sm rounded-md border px-3 py-2 text-sm" value={newUserRole} onChange={e => setNewUserRole(e.target.value as typeof newUserRole)} disabled={addAdministrator.isPending}>
+            <option value="operations_administrator">Operations Administrator — CRM, jobs, scheduling, dispatch</option>
+            <option value="finance">Finance Officer — Billing, invoices, QuickBooks, payouts</option>
+            <option value="dispatcher">Dispatcher — Work orders, scheduling, routes, SpinLife queue</option>
+          </select>
         </div>
         <div className="mt-4 space-y-2"><Label htmlFor="administrator-temporary-password">Temporary password for this setup</Label><Input id="administrator-temporary-password" className="min-h-11 max-w-sm" type="password" autoComplete="new-password" minLength={8} maxLength={256} value={setupPassword} onChange={event => setSetupPassword(event.target.value)} placeholder="Leave blank to use the company default" disabled={addAdministrator.isPending} data-private="true" /><p className="text-sm text-slate-600">Used for these new logins only. Each account chooses a personal password at first sign-in.</p></div>
         <div className="mt-4 rounded-lg border p-4"><div className="flex items-center gap-3"><Checkbox id="administrator-test-technician" checked={createTestTechnician} disabled={addAdministrator.isPending} onCheckedChange={value => { setCreateTestTechnician(value === true); if (value === true && !testTechnicianUsername) setTestTechnicianUsername(`${administrator.username.split(".")[0] || "Demo"}.TestTech`); }} /><Label htmlFor="administrator-test-technician">Also create a separate technician test login</Label></div>{createTestTechnician ? <div className="mt-3 space-y-2"><Label htmlFor="test-technician-username">Test technician username</Label><Input id="test-technician-username" className="min-h-11 max-w-sm" value={testTechnicianUsername} onChange={event => setTestTechnicianUsername(event.target.value)} autoCapitalize="none" autoCorrect="off" spellCheck={false} disabled={addAdministrator.isPending} /><p className="text-sm leading-6 text-slate-600">Marked TEST technician, with biomedical and DME workflows, zero pay and no assigned jobs. This account uses the live portal; assign test jobs only. Its internal test email does not receive messages.</p></div> : null}</div>
