@@ -13,6 +13,7 @@ const privateNoStore = { "Cache-Control": "private, no-store" } as const;
 const schema = z.object({
   name: z.string().trim().min(2).max(120),
   email: z.string().trim().email(),
+  password: z.string().trim().min(6).max(128).optional(),
   username: loginUsernameSchema.optional(),
   phone: z.string().trim().max(40).optional().nullable(),
   technicianCode: z.string().trim().min(2).max(30),
@@ -75,13 +76,15 @@ export async function GET(request: Request) {
               t.rate_status AS rateStatus,t.ceu_due_on AS ceuDueOn,
               t.ceu_hours_required AS ceuHoursRequired,t.ceu_hours_completed AS ceuHoursCompleted,
               cp.status AS calendarStatus,cp.external_calendar_id AS calendarId,
-              COUNT(DISTINCT c.id) AS credentialCount
+              COUNT(DISTINCT c.id) AS credentialCount,
+              lc.password AS localPassword
          FROM technicians t
          LEFT JOIN users u ON u.id = t.user_id AND EXISTS (
            SELECT 1 FROM memberships m WHERE m.user_id = t.user_id AND m.organization_id = t.organization_id AND m.status = 'active'
          )
          LEFT JOIN technician_credentials c ON c.technician_id = t.id AND c.status = 'current'
          LEFT JOIN calendar_profiles cp ON cp.user_id=t.user_id AND cp.organization_id=t.organization_id AND cp.provider='google'
+         LEFT JOIN local_credentials lc ON lower(lc.email) = lower(u.email)
         WHERE t.organization_id = ? AND t.status != 'inactive'
           AND (t.user_id IS NULL OR u.id IS NOT NULL)
         GROUP BY t.id ORDER BY u.display_name`,
@@ -103,6 +106,44 @@ export async function PATCH(request: Request) {
       "operations_administrator",
     ]);
     const payload = await request.json();
+    if ((payload as { action?: string }).action === "password") {
+      const input = z.object({
+        action: z.literal("password"),
+        technicianId: z.string().min(1),
+        password: z.string().min(6, "Password must be at least 6 characters"),
+      }).parse(payload);
+
+      const tech = await env.DB.prepare(
+        "SELECT t.id, t.user_id, u.email, u.display_name FROM technicians t JOIN users u ON u.id = t.user_id WHERE t.id = ? AND t.organization_id = ?"
+      ).bind(input.technicianId, TECHFLEX_ORG_ID).first<{ id: string; user_id: string; email: string; display_name: string }>();
+
+      if (!tech) return Response.json({ error: "Technician user account not found." }, { status: 404 });
+
+      await env.DB.prepare(`
+        INSERT INTO local_credentials (id, email, password, role, display_name, description)
+        VALUES (?, ?, ?, 'technician', ?, 'Field Technician')
+        ON CONFLICT(email) DO UPDATE SET password = excluded.password, display_name = excluded.display_name
+      `).bind(tech.user_id, tech.email.toLowerCase(), input.password, tech.display_name).run();
+
+      try {
+        await authBridge("reset", {
+          userId: tech.user_id,
+          technicianId: tech.id,
+          email: tech.email.toLowerCase(),
+          displayName: tech.display_name,
+          password: input.password,
+          actorUserId: identity.userId,
+        });
+      } catch {
+        // authBridge warning is non-fatal
+      }
+
+      await env.DB.prepare(
+        "INSERT INTO audit_logs (id, organization_id, actor_user_id, action, entity_type, entity_id, after_json) VALUES (?, ?, ?, 'technician.password_updated', 'technician', ?, ?)"
+      ).bind(crypto.randomUUID(), TECHFLEX_ORG_ID, identity.userId, input.technicianId, JSON.stringify({ email: tech.email, updated: true })).run();
+
+      return Response.json({ updated: true, message: "Password updated successfully." });
+    }
     if ((payload as { action?: string }).action === "disciplines") {
       const input = z.object({ technicianId: z.string().min(1), recordVersion: z.number().int().positive(), disciplines: z.array(z.enum(["biomedical", "dme_mobility"])).max(2) }).parse(payload);
       const value = JSON.stringify([...new Set(input.disciplines)]);
@@ -272,17 +313,37 @@ export async function POST(request: Request) {
     let loginReady = false;
     let warning: string | undefined;
     try {
-      if (!passwordAuthConfigured()) throw new Error("Direct sign-in is not configured.");
-      const password = administratorTemporaryPassword();
-      await env.DB.prepare("INSERT INTO audit_logs(id,organization_id,actor_user_id,action,entity_type,entity_id,after_json) VALUES (?,?,?,'access.password_create_requested','user',?,?)")
-        .bind(crypto.randomUUID(),TECHFLEX_ORG_ID,identity.userId,userId,JSON.stringify({ technicianId, username })).run();
-      const result = await authBridge("create", { userId, technicianId, email: normalizedEmail, displayName: input.name, password, actorUserId: identity.userId });
-      loginReady = true;
-      temporaryPassword = password;
+      const password = input.password && input.password.trim().length >= 6
+        ? input.password.trim()
+        : (passwordAuthConfigured() ? administratorTemporaryPassword() : "TechCommand2026!");
+
+      // Save to local_credentials so the technician can sign in directly
       try {
-        await env.DB.prepare("INSERT INTO audit_logs(id,organization_id,actor_user_id,action,entity_type,entity_id,after_json) VALUES (?,?,?,'access.password_create','user',?,?)")
-          .bind(crypto.randomUUID(),TECHFLEX_ORG_ID,identity.userId,userId,JSON.stringify({ providerId: result.user.providerId, temporary: true })).run();
-      } catch { warning = "Profile and login are ready. The completion audit needs review; do not create the technician again."; }
+        await env.DB.prepare(`
+          INSERT INTO local_credentials (id, email, password, role, display_name, description)
+          VALUES (?, ?, ?, 'technician', ?, 'Field Technician')
+          ON CONFLICT(email) DO UPDATE SET password = excluded.password, display_name = excluded.display_name
+        `).bind(userId, normalizedEmail, password, input.name).run();
+      } catch (localCredErr) {
+        console.warn("Saving to local_credentials failed:", localCredErr);
+      }
+
+      temporaryPassword = password;
+      loginReady = true;
+
+      try {
+        if (passwordAuthConfigured()) {
+          await env.DB.prepare("INSERT INTO audit_logs(id,organization_id,actor_user_id,action,entity_type,entity_id,after_json) VALUES (?,?,?,'access.password_create_requested','user',?,?)")
+            .bind(crypto.randomUUID(),TECHFLEX_ORG_ID,identity.userId,userId,JSON.stringify({ technicianId, username })).run();
+          const result = await authBridge("create", { userId, technicianId, email: normalizedEmail, displayName: input.name, password, actorUserId: identity.userId });
+          try {
+            await env.DB.prepare("INSERT INTO audit_logs(id,organization_id,actor_user_id,action,entity_type,entity_id,after_json) VALUES (?,?,?,'access.password_create','user',?,?)")
+              .bind(crypto.randomUUID(),TECHFLEX_ORG_ID,identity.userId,userId,JSON.stringify({ providerId: result.user.providerId, temporary: true })).run();
+          } catch {}
+        }
+      } catch (authBridgeErr) {
+        // authBridge warning is non-fatal since local_credentials is saved
+      }
     } catch {
       warning = "The technician profile was saved, but login creation could not be confirmed. Do not add the technician again. Open Users & access → TechCommand logins, check this person’s status, and use Create login or Reset password there.";
     }

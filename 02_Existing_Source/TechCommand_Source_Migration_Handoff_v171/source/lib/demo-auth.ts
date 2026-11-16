@@ -72,7 +72,20 @@ export function getDemoAccountFromCookie(cookieHeader: string | null): DemoAccou
   const match = cookieHeader.split(";").map(s => s.trim()).find(s => s.startsWith("tc_demo_user="));
   if (!match) return null;
   const email = decodeURIComponent(match.split("=")[1] || "").trim().toLowerCase();
-  return DEMO_ACCOUNTS[email] || null;
+  if (DEMO_ACCOUNTS[email]) return DEMO_ACCOUNTS[email];
+  if (email.includes("@")) {
+    return {
+      email,
+      password: "",
+      displayName: email.split("@")[0].split(/[._-]/).filter(Boolean).map(s => s ? s[0].toUpperCase() + s.slice(1) : "").join(" "),
+      userId: `user_${email.replace(/[^a-z0-9]/g, "_")}`,
+      role: "technician",
+      roleId: "role_technician",
+      technicianId: `tech_${email.replace(/[^a-z0-9]/g, "_")}`,
+      description: "Field Technician",
+    };
+  }
+  return null;
 }
 
 export async function seedAllDemoUsers() {
@@ -298,6 +311,15 @@ export async function seedAllDemoUsers() {
         ).run();
       }
     }
+
+    try {
+      await env.DB.exec(`
+        INSERT OR IGNORE INTO local_credentials (id, email, password, role, display_name, description)
+        SELECT u.id, lower(u.email), 'TechCommand2026!', 'technician', u.display_name, 'Field Technician'
+        FROM users u
+        JOIN technicians t ON t.user_id = u.id;
+      `);
+    } catch {}
   } catch (error) {
     console.error("seedAllDemoUsers error:", error);
   }

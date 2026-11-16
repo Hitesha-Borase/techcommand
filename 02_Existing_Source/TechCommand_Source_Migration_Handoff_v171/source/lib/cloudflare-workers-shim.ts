@@ -28,8 +28,114 @@ export class WorkflowEntrypoint<Env = unknown, Params = unknown> {
 
 export class RpcTarget {}
 
+function initLocalDevD1(): any {
+  try {
+    const fs = require("node:fs");
+    const path = require("node:path");
+    const { DatabaseSync } = require("node:sqlite");
+
+    const possiblePaths = [
+      path.resolve(process.cwd(), ".local-dev.sqlite"),
+      path.resolve(process.cwd(), "02_Existing_Source/TechCommand_Source_Migration_Handoff_v171/source/.local-dev.sqlite"),
+      path.resolve(__dirname, "../../.local-dev.sqlite"),
+      path.resolve(__dirname, "../.local-dev.sqlite"),
+    ];
+
+    let foundPath = "";
+    for (const p of possiblePaths) {
+      if (fs.existsSync(p)) {
+        foundPath = p;
+        break;
+      }
+    }
+
+    if (!foundPath) return null;
+
+    const sqliteDb = new DatabaseSync(foundPath);
+
+    function normalizeParams(params: any[]) {
+      return params.map((p) => {
+        if (typeof p === "boolean") return p ? 1 : 0;
+        if (p === undefined) return null;
+        return p;
+      });
+    }
+
+    const d1 = {
+      prepare(query: string) {
+        return {
+          bind(...params: any[]) {
+            const cleanParams = normalizeParams(params);
+            return {
+              async first<T = unknown>(col?: string): Promise<T | null> {
+                const stmt = sqliteDb.prepare(query);
+                const row = stmt.get(...cleanParams);
+                if (!row) return null;
+                if (col) return ((row as any)[col] ?? null) as T;
+                return row as T;
+              },
+              async all<T = unknown>(): Promise<{ results: T[]; success: boolean; meta: any }> {
+                const stmt = sqliteDb.prepare(query);
+                const results = stmt.all(...cleanParams);
+                return { results: results as T[], success: true, meta: { changes: 0 } };
+              },
+              async run(): Promise<{ success: boolean; meta: { changes: number; last_row_id: number } }> {
+                const stmt = sqliteDb.prepare(query);
+                const info = stmt.run(...cleanParams);
+                return {
+                  success: true,
+                  meta: {
+                    changes: Number(info?.changes || 0),
+                    last_row_id: Number(info?.lastInsertRowid || 0),
+                  },
+                };
+              },
+            };
+          },
+          async first<T = unknown>(col?: string): Promise<T | null> {
+            return this.bind().first<T>(col);
+          },
+          async all<T = unknown>(): Promise<{ results: T[]; success: boolean; meta: any }> {
+            return this.bind().all<T>();
+          },
+          async run(): Promise<{ success: boolean; meta: { changes: number; last_row_id: number } }> {
+            return this.bind().run();
+          },
+        };
+      },
+      async batch(stmts: any[]) {
+        const results = [];
+        for (const s of stmts) {
+          if (s && typeof s.run === "function") {
+            results.push(await s.run());
+          } else if (s && typeof s.all === "function") {
+            results.push(await s.all());
+          }
+        }
+        return results;
+      },
+      async exec(sql: string) {
+        sqliteDb.exec(sql);
+        return { count: 1, duration: 0 };
+      },
+    };
+
+    return d1;
+  } catch (e) {
+    return null;
+  }
+}
+
 function getActiveDb(): any {
-  return (globalThis as any).__D1_DB__ || (globalThis as any).__WORKER_ENV__?.DB;
+  const glob = globalThis as any;
+  if (glob.__D1_DB__) return glob.__D1_DB__;
+  if (glob.__WORKER_ENV__?.DB) return glob.__WORKER_ENV__.DB;
+  const localD1 = initLocalDevD1();
+  if (localD1) {
+    glob.__D1_DB__ = localD1;
+    return localD1;
+  }
+  return null;
 }
 
 type AccountRecord = {

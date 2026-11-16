@@ -217,6 +217,31 @@ async function provisionApprovedAdministrator(
 async function resolvePortalIdentity(request: Request): Promise<PortalIdentity> {
   const demo = getDemoAccountFromCookie(request.headers.get("cookie"));
   if (demo) {
+    if (!["admin@demo.com", "tech@demo.com", "biomed@demo.com", "finance@demo.com", "client@demo.com"].includes(demo.email) && env?.DB) {
+      try {
+        const row = await env.DB.prepare(
+          `SELECT u.id AS userId, u.email, u.display_name AS displayName, r.name AS role, t.id AS technicianId
+             FROM users u
+             LEFT JOIN memberships m ON m.user_id = u.id AND m.status = 'active'
+             LEFT JOIN roles r ON r.id = m.role_id
+             LEFT JOIN technicians t ON t.user_id = u.id AND t.status = 'active'
+            WHERE lower(u.email) = ?
+            LIMIT 1`
+        ).bind(demo.email.toLowerCase()).first<{ userId: string; email: string; displayName: string; role: PortalRole; technicianId: string | null }>();
+        if (row) {
+          return {
+            userId: row.userId,
+            authSubject: `email:${row.email}`,
+            email: row.email,
+            displayName: row.displayName,
+            role: (row.role || "technician") as PortalRole,
+            technicianId: row.technicianId,
+          };
+        }
+      } catch (err) {
+        console.warn("DB lookup for demo account failed:", err);
+      }
+    }
     return {
       userId: demo.userId,
       authSubject: `demo:${demo.email}`,

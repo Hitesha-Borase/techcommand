@@ -5,7 +5,7 @@ import { portalFetch, portalJson } from "@/lib/portal-fetch";
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, Copy, GraduationCap, MapPin, Pencil, Plus, ShieldCheck } from "lucide-react";
+import { CalendarDays, Copy, GraduationCap, KeyRound, MapPin, Pencil, Plus, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -78,6 +78,7 @@ type TechnicianRecord = {
   guidedJobsCompleted: number;
   qaPassStreak: number;
   competencyScore: number;
+  localPassword?: string | null;
 };
 
 async function getPay() {
@@ -96,6 +97,7 @@ export function TechnicianAdmin() {
   const [form, setForm] = useState({
     name: "",
     email: "",
+    password: "",
     phone: "",
     technicianCode: "",
     employmentType: "employee",
@@ -199,6 +201,32 @@ export function TechnicianAdmin() {
       await queryClient.invalidateQueries({ queryKey: ["technicians"] });
       setDispatchTech(null);
       toast.success("Dispatch origin updated");
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+  const [passwordTech, setPasswordTech] = useState<TechnicianRecord | null>(null);
+  const [newPassword, setNewPassword] = useState("");
+  const updatePasswordMutation = useMutation({
+    mutationFn: async () => {
+      if (!passwordTech) throw new Error("Choose a technician.");
+      const response = await portalFetch("/api/technicians", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "password",
+          technicianId: passwordTech.id,
+          password: newPassword,
+        }),
+      });
+      await portalJson<{ updated: boolean }>(response, "Password could not be saved.");
+    },
+    onSuccess: async () => {
+      toast.success(`Password updated for ${passwordTech?.name}`);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["technicians"] }),
+        queryClient.invalidateQueries({ queryKey: ["password-access"] }),
+      ]);
+      setPasswordTech(null);
     },
     onError: (error: Error) => toast.error(error.message),
   });
@@ -372,17 +400,30 @@ export function TechnicianAdmin() {
                     />
                   </label>
                 </div>
-                <label className="space-y-1.5 text-sm font-semibold">
-                  Work email
-                  <Input
-                    type="email"
-                    required
-                    value={form.email}
-                    onChange={(event) =>
-                      setForm({ ...form, email: event.target.value })
-                    }
-                  />
-                </label>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <label className="space-y-1.5 text-sm font-semibold">
+                    Work email
+                    <Input
+                      type="email"
+                      required
+                      value={form.email}
+                      onChange={(event) =>
+                        setForm({ ...form, email: event.target.value })
+                      }
+                    />
+                  </label>
+                  <label className="space-y-1.5 text-sm font-semibold">
+                    Set login password
+                    <Input
+                      type="text"
+                      value={form.password}
+                      placeholder="Leave empty for TechCommand2026!"
+                      onChange={(event) =>
+                        setForm({ ...form, password: event.target.value })
+                      }
+                    />
+                  </label>
+                </div>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <label className="space-y-1.5 text-sm font-semibold">
                     Phone
@@ -554,7 +595,12 @@ export function TechnicianAdmin() {
                         {tech.employmentType}
                       </p>
                       {canEditEmployment ? <TechnicianDisciplines technician={tech} /> : null}
-                      {canEditEmployment ? <Button className="mt-2 h-7 px-2 text-xs" variant="outline" onClick={() => { updateEmployment.reset(); setEmploymentTech(tech); setEmploymentType(tech.employmentType); setPayRate(tech.employmentType === "contractor" ? tech.payoutRate * 100 : tech.currentHourlyRateCents / 100); }}><Pencil className="mr-1 size-3" />Edit employment &amp; pay</Button> : null}
+                      {canEditEmployment ? (
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <Button className="h-7 px-2 text-xs" variant="outline" onClick={() => { updateEmployment.reset(); setEmploymentTech(tech); setEmploymentType(tech.employmentType); setPayRate(tech.employmentType === "contractor" ? tech.payoutRate * 100 : tech.currentHourlyRateCents / 100); }}><Pencil className="mr-1 size-3" />Edit employment &amp; pay</Button>
+                          <Button className="h-7 px-2 text-xs border-blue-200 text-blue-700 hover:bg-blue-50" variant="outline" onClick={() => { setPasswordTech(tech); setNewPassword(tech.localPassword || "TechCommand2026!"); }}><KeyRound className="mr-1 size-3" />Login &amp; Password</Button>
+                        </div>
+                      ) : null}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
@@ -635,6 +681,98 @@ export function TechnicianAdmin() {
             <div className="rounded-xl border border-cyan-200 bg-cyan-50 p-4 text-xs leading-5 text-cyan-900">The bid calculator will use this saved origin after the technician is selected. AI may recommend a different origin from source paperwork, but it cannot replace this profile silently.</div>
             <Button className="w-full" type="submit" disabled={updateDispatch.isPending}>{updateDispatch.isPending ? "Saving…" : "Save dispatch origin"}</Button>
           </form>
+        </SheetContent>
+      </Sheet>
+      <Sheet open={Boolean(passwordTech)} onOpenChange={(next) => { if (!next) setPasswordTech(null); }}>
+        <SheetContent className="overflow-y-auto sm:max-w-md">
+          <SheetHeader className="border-b px-6 pb-5 pt-6">
+            <SheetTitle className="flex items-center gap-2">
+              <KeyRound className="size-5 text-blue-600" />
+              Technician Login &amp; Password
+            </SheetTitle>
+            <SheetDescription>
+              View or set direct login credentials for {passwordTech?.name}. The technician can sign in directly with these details without waiting for an email.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="space-y-5 p-6">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">Technician Email / Login</label>
+              <div className="flex items-center gap-2">
+                <Input readOnly value={passwordTech?.email || ""} className="bg-slate-50 font-mono text-xs" />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    navigator.clipboard.writeText(passwordTech?.email || "");
+                    toast.success("Email copied");
+                  }}
+                >
+                  <Copy className="size-3.5" />
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold uppercase tracking-wider text-slate-700">Account Password</label>
+                <button
+                  type="button"
+                  className="text-xs text-blue-600 hover:underline cursor-pointer font-medium"
+                  onClick={() => setNewPassword("TechCommand2026!")}
+                >
+                  Set default TechCommand2026!
+                </button>
+              </div>
+              <Input
+                type="text"
+                required
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Enter password (min 6 characters)"
+                className="font-mono text-sm"
+              />
+              <p className="text-xs text-slate-500">View current password or set a new one. (Min 6 characters)</p>
+            </div>
+
+            <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-3.5 text-xs text-blue-950 space-y-1">
+              <p className="font-bold flex items-center gap-1.5">
+                <ShieldCheck className="size-4 text-blue-600" />
+                Direct Sign-In (Zero Email Dependency):
+              </p>
+              <p className="text-slate-600">
+                You can copy these credentials and give them directly to {passwordTech?.name} via SMS, WhatsApp, or phone. The technician signs in directly at the login portal.
+              </p>
+            </div>
+
+            <div className="space-y-2 pt-2">
+              <Button
+                className="w-full bg-blue-600 hover:bg-blue-700 font-bold"
+                disabled={updatePasswordMutation.isPending || !newPassword || newPassword.length < 6}
+                onClick={() => updatePasswordMutation.mutate()}
+              >
+                {updatePasswordMutation.isPending ? "Saving…" : "Save & Update Password"}
+              </Button>
+
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full border-blue-200 text-blue-800"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(
+                      `TechCommand Technician Login:\nPortal: https://techcommand-app.borsehitesha.workers.dev/login\nEmail: ${passwordTech?.email}\nPassword: ${newPassword}`
+                    );
+                    toast.success("Login details copied to clipboard!");
+                  } catch {
+                    toast.error("Copy failed. Please copy manually.");
+                  }
+                }}
+              >
+                <Copy className="mr-1.5 size-3.5" /> Copy Login Details
+              </Button>
+            </div>
+          </div>
         </SheetContent>
       </Sheet>
     </div>
