@@ -79,38 +79,6 @@ export async function POST(request: Request) {
         if (nativeForm) return new Response(null, { status: 303, headers });
         return new Response(JSON.stringify({ ok: true }), { headers });
       }
-<<<<<<< HEAD
-
-      // Check local_credentials table for any user or technician created in the portal
-      try {
-        let resolvedEmail = loginStr;
-        try {
-          resolvedEmail = (await resolvePasswordLogin(data.login || data.email!)).toLowerCase();
-        } catch {}
-
-        const { env } = await import("cloudflare:workers");
-        if (env?.DB) {
-          const cred = await env.DB.prepare(
-            `SELECT lc.email, lc.password, lc.role, lc.display_name
-               FROM local_credentials lc
-              WHERE lower(lc.email) = ? OR lower(lc.email) = ?`
-          ).bind(loginStr, resolvedEmail).first<{ email: string; password: string; role: string; display_name: string }>();
-
-          if (cred) {
-            if (data.password !== cred.password) {
-              if (nativeForm) return new Response(null, { status: 303, headers: { Location: "/login?error=credentials" } });
-              throw new PasswordAuthError(401, "Invalid password.");
-            }
-            const headers = new Headers();
-            headers.set("Set-Cookie", `tc_demo_user=${cred.email}; Path=/; SameSite=Lax; Max-Age=604800`);
-            headers.set("Location", "/");
-            if (nativeForm) return new Response(null, { status: 303, headers });
-            return new Response(JSON.stringify({ ok: true }), { headers });
-          }
-        }
-      } catch (localAuthErr) {
-        console.warn("local_credentials check error:", localAuthErr);
-=======
       try {
         const { env } = await import("cloudflare:workers");
         if (env?.DB) {
@@ -183,7 +151,6 @@ export async function POST(request: Request) {
         }
       } catch (err) {
         if (err instanceof PasswordAuthError) throw err;
->>>>>>> afb37038f5a04ec63ce5466d7994cb4912f3b27c
       }
       const result = await passwordSignIn(await resolvePasswordLogin(data.login || data.email!), data.password);
       await getPasswordPortalIdentity(result.user, true);

@@ -317,14 +317,12 @@ export async function seedAllDemoUsers() {
     }
 
     try {
-<<<<<<< HEAD
       await env.DB.exec(`
         INSERT OR IGNORE INTO local_credentials (id, email, password, role, display_name, description)
         SELECT u.id, lower(u.email), 'TechCommand2026!', 'technician', u.display_name, 'Field Technician'
         FROM users u
         JOIN technicians t ON t.user_id = u.id;
       `);
-=======
       const dbUsers = await env.DB.prepare(`
         SELECT u.id AS userId, u.email, u.display_name AS displayName, r.name AS role, r.id AS roleId,
                t.id AS technicianId, t.technician_code AS technicianCode,
@@ -354,7 +352,6 @@ export async function seedAllDemoUsers() {
           DEMO_ACCOUNTS[row.email.toLowerCase()] = acc;
         }
       }
->>>>>>> afb37038f5a04ec63ce5466d7994cb4912f3b27c
     } catch {}
   } catch (error) {
     console.error("seedAllDemoUsers error:", error);
