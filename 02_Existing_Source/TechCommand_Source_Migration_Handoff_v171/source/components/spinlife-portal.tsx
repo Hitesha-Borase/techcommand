@@ -206,7 +206,16 @@ export function SpinLifePortal({userId,technician=false,onOtherWork,onCareer,ini
   function showError(e:unknown){setError((e as Error).message);setExistingTarget(e instanceof PortalResponseError?orderTargetFromValue((e.details as {target?:unknown})?.target):null);}
   function protect(next:SpinLifeJob,nextPay=payRef.current){setDraftPending(true);deviceWriter.schedule({baseJob:baseRef.current||next,job:next,pay:nextPay});}
   function edit(next:SpinLifeJob){draftRef.current=next;setJob(next);setDirty(true);setNotice("");mutation.current=null;protect(next);}
-  function data(key:keyof SpinLifeData,value:string){if(!job)return;const changed=["manufacturer","model","serviceType"].includes(key)&&job.data[key]!==value&&job.visit.manufacturerGuide;edit({...job,data:{...job.data,[key]:value},visit:changed?{...job.visit,previousGuidance:[job.visit.previousGuidance,"Previous equipment guidance — retained history, not the current procedure:\n"+procedureText(job.visit.manufacturerGuide,job.visit.manufacturerAnswers)].filter(Boolean).join("\n\n"),manufacturerGuide:null,manufacturerAnswers:[]}:job.visit});}
+  function data(key:keyof SpinLifeData,value:string){
+    if(!job)return;
+    const changed=["manufacturer","model","serviceType"].includes(key)&&job.data[key]!==value&&job.visit.manufacturerGuide;
+    const extra = key === "customerComplaint" ? { summary: value } : key === "summary" ? { customerComplaint: value } : {};
+    edit({
+      ...job,
+      data:{...job.data,[key]:value,...extra},
+      visit:changed?{...job.visit,previousGuidance:[job.visit.previousGuidance,"Previous equipment guidance — retained history, not the current procedure:\n"+procedureText(job.visit.manufacturerGuide,job.visit.manufacturerAnswers)].filter(Boolean).join("\n\n"),manufacturerGuide:null,manufacturerAnswers:[]}:job.visit
+    });
+  }
   function visit(key:keyof SpinLifeVisit,value:unknown){if(job)edit({...job,visit:{...job.visit,[key]:value}});}
   function acceptSaved(sent:SpinLifeJob,saved:SpinLifeJob,sentPay:string) {
     const current=draftRef.current;
@@ -525,7 +534,27 @@ export function SpinLifePortal({userId,technician=false,onOtherWork,onCareer,ini
         <Button disabled={busy} onClick={()=>void (technician&&!j.startedAt?startCard(j):open(j))}>{technician&&!j.startedAt?<><Play/>Start Work Order</>:technician?"Open Work Order":"Open / assign"}</Button></article>)}
       {shown.length>visibleCount?<Button variant="outline" onClick={()=>setVisibleCount(n=>n+30)}>Show more work orders</Button>:null}
     </>:<>
-      <Button variant="ghost" onClick={()=>void perform("back")} disabled={busy}><ArrowLeft/>Save & back to work orders</Button>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Button variant="ghost" onClick={()=>void perform("back")} disabled={busy}><ArrowLeft/>Save & back to work orders</Button>
+        <Button
+          type="button"
+          variant="ghost"
+          className="text-slate-500 hover:text-red-600"
+          onClick={()=>{
+            try{
+              clearSpinLifeDraft(localStorage,userId,job.id);
+              clearSpinLifeDraft(localStorage,userId);
+            }catch{}
+            setJob(null);
+            draftRef.current=null;
+            setFiles([]);
+            setDirty(false);
+            setNotice("");
+          }}
+        >
+          {job.version===0 ? "Discard unsaved draft" : "Close without saving"}
+        </Button>
+      </div>
       {technician ? (
         <div className="space-y-5">
           {(() => {
@@ -854,8 +883,70 @@ export function SpinLifePortal({userId,technician=false,onOtherWork,onCareer,ini
         {<div className="rounded-xl border bg-white p-5"><h2 className="mb-3 text-lg font-bold">Drop or paste the work order</h2>
           <div role="button" tabIndex={0} className="cursor-pointer rounded-xl border-2 border-dashed border-cyan-500 bg-cyan-50 p-7 text-center" onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();if(!busy)void upload(Array.from(e.dataTransfer.files),"client_work_order");}} onClick={()=>sourceInput.current?.click()} onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();sourceInput.current?.click();}}}><Upload className="mx-auto mb-2"/>Drop the work order here, or choose files<p className="text-xs text-slate-600">PDF, JPG or PNG · up to 20 MB per file</p></div>
           <input ref={sourceInput} type="file" multiple accept="application/pdf,image/jpeg,image/png" className="hidden" onChange={e=>{const files=Array.from(e.target.files||[]);e.target.value="";void upload(files,"client_work_order");}}/>
-          <label className="mt-4 block">Or paste the work order<textarea className={control} rows={4} value={job.data.rawText} onChange={e=>data("rawText",e.target.value)} onPaste={e=>{const pasted=e.clipboardData.getData("text");if(pasted.trim())void extract([],pasted,job.id);}}/></label>
-          <Button variant="outline" className="mt-2" disabled={aiBusy||!job.data.rawText.trim()} onClick={()=>void extract([],job.data.rawText,job.id)}>Read pasted work order</Button>
+          <label className="mt-4 block">Or paste the work order<textarea className={control} rows={4} value={job.data.rawText} onChange={e=>{
+            const val=e.target.value;
+            if(!val.trim()){
+              edit({
+                ...job,
+                data:{
+                  ...job.data,
+                  rawText:"",
+                  externalId:"",
+                  customerName:"",
+                  customerPhone:"",
+                  serviceAddress:"",
+                  equipmentType:"",
+                  manufacturer:"",
+                  model:"",
+                  serialNumber:"",
+                  customerComplaint:"",
+                  summary:"",
+                  extraChecks:"",
+                  dmeFamilyId:"",
+                }
+              });
+              setAiMessage("");
+            } else {
+              data("rawText",val);
+            }
+          }} onPaste={e=>{const pasted=e.clipboardData.getData("text");if(pasted.trim())void extract([],pasted,job.id);}}/></label>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <Button variant="outline" disabled={aiBusy||!job.data.rawText.trim()} onClick={()=>void extract([],job.data.rawText,job.id)}>Read pasted work order</Button>
+            <Button
+              type="button"
+              variant="ghost"
+              className="text-slate-500 hover:text-red-600"
+              onClick={()=>{
+                try{
+                  clearSpinLifeDraft(localStorage,userId,job.id);
+                  clearSpinLifeDraft(localStorage,userId);
+                }catch{}
+                edit({
+                  ...job,
+                  data:{
+                    ...job.data,
+                    rawText:"",
+                    externalId:"",
+                    customerName:"",
+                    customerPhone:"",
+                    serviceAddress:"",
+                    equipmentType:"",
+                    manufacturer:"",
+                    model:"",
+                    serialNumber:"",
+                    customerComplaint:"",
+                    summary:"",
+                    extraChecks:"",
+                    dmeFamilyId:"",
+                  }
+                });
+                setNotice("Work order form cleared.");
+                setAiMessage("");
+              }}
+            >
+              Clear form
+            </Button>
+          </div>
           {aiMessage?<p role="status" className="mt-3 text-sm text-slate-700">{aiMessage}</p>:null}
         </div>}
         {files.some(f=>f.category==="client_work_order")?<div className="rounded-xl border bg-white p-4"><h2 className="font-semibold">Original work order</h2>{files.filter(f=>f.category==="client_work_order").map(f=><a key={f.id} className="mt-2 block text-blue-700 underline" href={`/api/attachments?attachmentId=${encodeURIComponent(f.id)}`} target="_blank" rel="noreferrer">{f.fileName}</a>)}</div>:null}
@@ -865,7 +956,7 @@ export function SpinLifePortal({userId,technician=false,onOtherWork,onCareer,ini
           <label>Job type<select className={control} value={job.data.serviceType} onChange={e=>data("serviceType",e.target.value)}>{Object.entries(spinlifeServiceLabels).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label>
           {sourceFields.map(([key,label])=><label key={key}>{label}<input className={control} value={job.data[key]} onChange={e=>data(key,e.target.value)} placeholder="Add now or later"/></label>)}
           <label>Equipment family for career experience (optional)<select className={control} value={job.data.dmeFamilyId} onChange={e=>data("dmeFamilyId",e.target.value)}><option value="">Unclassified — choose later</option>{dmeFamilies.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}</select></label>
-          <label className="sm:col-span-2">Requested work / problem<textarea className={control} rows={3} value={job.data.customerComplaint || job.data.summary} onChange={e=>data("customerComplaint",e.target.value)}/></label>
+          <label className="sm:col-span-2">Requested work / problem<textarea className={control} rows={3} value={job.data.customerComplaint || job.data.summary || ""} onChange={e=>data("customerComplaint",e.target.value)}/></label>
 
           {canAssign?<label className="sm:col-span-2">Additional work-order checks (one per line)<textarea className={control} rows={3} value={job.data.extraChecks} onChange={e=>data("extraChecks",e.target.value)}/></label>:null}
         </div></details>

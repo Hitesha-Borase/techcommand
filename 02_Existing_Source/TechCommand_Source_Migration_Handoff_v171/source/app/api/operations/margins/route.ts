@@ -51,15 +51,22 @@ export async function GET(request: Request) {
     const month = url.searchParams.get("month") || "oct-2026";
     const threshold = parseFloat(url.searchParams.get("threshold") || "40.0");
 
-    // 1. Fetch Account Margin Records
-    const marginRows = await env.DB.prepare(`
+    // 1. Fetch Account Margin Records (filtered by month/period if specified)
+    let marginQuery = `
       SELECT id, work_order_id, month_year, client_account, billed_revenue,
              direct_labor_cost, direct_parts_cost, travel_cost, total_direct_cost,
              gross_margin_dollars, gross_margin_percent, meets_guardrail, override_reason
       FROM operations_margin_records
       WHERE organization_id = ?
-      ORDER BY gross_margin_percent ASC
-    `).bind(TECHFLEX_ORG_ID).all<Record<string, unknown>>();
+    `;
+    const params: unknown[] = [TECHFLEX_ORG_ID];
+    if (month && month !== "all" && month !== "ytd-2026") {
+      marginQuery += ` AND (month_year = ? OR month_year GLOB ?)`;
+      params.push(month, `${month}*`);
+    }
+    marginQuery += ` ORDER BY gross_margin_percent ASC`;
+
+    const marginRows = await env.DB.prepare(marginQuery).bind(...params).all<Record<string, unknown>>();
 
     const accounts = (marginRows.results || []).map((row) => {
       const revenue = Number(row.billed_revenue ?? 0);
@@ -114,7 +121,9 @@ export async function GET(request: Request) {
 
     const totalRev = accounts.reduce((acc, a) => acc + a.revenue, 0);
     const totalCost = accounts.reduce((acc, a) => acc + a.totalCost, 0);
-    const overallMargin = totalRev > 0 ? Number((((totalRev - totalCost) / totalRev) * 100).toFixed(1)) : 40.0;
+    const totalLaborCost = accounts.reduce((acc, a) => acc + a.laborCost, 0);
+    const totalPartsCost = accounts.reduce((acc, a) => acc + a.partsCost, 0);
+    const overallMargin = totalRev > 0 ? Number((((totalRev - totalCost) / totalRev) * 100).toFixed(1)) : 0;
     const flaggedAccountsCount = accounts.filter((a) => a.grossMargin < threshold).length;
 
     return Response.json(
@@ -123,19 +132,15 @@ export async function GET(request: Request) {
         summary: {
           totalRevenue: totalRev,
           totalCost: totalCost,
+          totalLaborCost,
+          totalPartsCost,
           overallMargin,
           marginThreshold: threshold,
           flaggedCount: flaggedAccountsCount,
           activeAccountsCount: accounts.length,
+          hasActivity: totalRev > 0 || accounts.length > 0,
         },
-        monthlyTrend: monthlyTrend.length > 0 ? monthlyTrend : [
-          { month: "May", revenue: 112000, directCost: 61500, margin: 45.1 },
-          { month: "Jun", revenue: 124500, directCost: 69200, margin: 44.4 },
-          { month: "Jul", revenue: 138000, directCost: 75800, margin: 45.0 },
-          { month: "Aug", revenue: 142000, directCost: 81500, margin: 42.6 },
-          { month: "Sep", revenue: 149500, directCost: 83200, margin: 44.3 },
-          { month: "Oct", revenue: 154280, directCost: 85470, margin: 44.6 },
-        ],
+        monthlyTrend,
         accountMargins: accounts,
       },
       { headers: privateNoStore },

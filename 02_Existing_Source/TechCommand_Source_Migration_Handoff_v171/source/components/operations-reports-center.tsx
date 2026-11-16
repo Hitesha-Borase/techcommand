@@ -56,6 +56,8 @@ export function OperationsReportsCenter() {
   const [slaData, setSlaData] = useState<Array<{ metric: string; target: string; actual: string; status: string; delta: string }>>([]);
   const [totalRev, setTotalRev] = useState(0);
   const [totalCost, setTotalCost] = useState(0);
+  const [totalLaborCost, setTotalLaborCost] = useState(0);
+  const [totalPartsCost, setTotalPartsCost] = useState(0);
   const [overallMargin, setOverallMargin] = useState("0.0");
   const [loading, setLoading] = useState(true);
 
@@ -69,7 +71,14 @@ export function OperationsReportsCenter() {
         if (!res.ok) return;
         const data = (await res.json()) as {
           success?: boolean;
-          summary?: { totalRevenue: number; totalCost: number; overallMargin: number; flaggedCount: number };
+          summary?: {
+            totalRevenue: number;
+            totalCost: number;
+            totalLaborCost?: number;
+            totalPartsCost?: number;
+            overallMargin: number;
+            flaggedCount: number;
+          };
           monthlyTrend?: Array<{ month: string; revenue: number; directCost: number; margin: number }>;
           accountMargins?: Array<{ account: string; revenue: number; laborCost: number; partsCost: number; grossMargin: number; status: string }>;
         };
@@ -79,6 +88,8 @@ export function OperationsReportsCenter() {
           if (data?.summary) {
             setTotalRev(data.summary.totalRevenue || 0);
             setTotalCost(data.summary.totalCost || 0);
+            setTotalLaborCost(data.summary.totalLaborCost || 0);
+            setTotalPartsCost(data.summary.totalPartsCost || 0);
             setOverallMargin((data.summary.overallMargin || 0).toFixed(1));
           }
         }
@@ -101,7 +112,13 @@ export function OperationsReportsCenter() {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-bold tracking-tight text-slate-900">Operations & Financial Reports</h1>
-            <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold">Active Period</Badge>
+            {totalRev > 0 ? (
+              <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold">Active Period</Badge>
+            ) : (
+              <Badge variant="outline" className="border-slate-300 bg-slate-100 text-slate-600 font-semibold">
+                No activity during selected period
+              </Badge>
+            )}
           </div>
           <p className="text-sm text-slate-500 mt-0.5">
             40% gross margin guardrail auditing, technician utilization, revenue breakdown, and SLA compliance.
@@ -149,27 +166,48 @@ export function OperationsReportsCenter() {
         <Card className="border-slate-200 bg-white shadow-2xs">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-xs font-semibold text-slate-500 uppercase">Gross Margin Guardrail</CardTitle>
-            <div className="p-2 rounded-lg bg-emerald-50 text-emerald-600"><TrendingUp className="size-4" /></div>
+            <div className={`p-2 rounded-lg ${totalRev > 0 && parseFloat(overallMargin) >= 40 ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-500"}`}>
+              <TrendingUp className="size-4" />
+            </div>
           </CardHeader>
           <CardContent>
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-extrabold text-emerald-700">{overallMargin}%</span>
+              <span className={`text-2xl font-extrabold ${totalRev > 0 && parseFloat(overallMargin) >= 40 ? "text-emerald-700" : totalRev > 0 ? "text-amber-700" : "text-slate-400"}`}>
+                {overallMargin}%
+              </span>
               <span className="text-xs font-bold text-slate-400">Target: ≥40.0%</span>
             </div>
-            <p className="text-xs text-emerald-600 font-medium mt-1 flex items-center gap-1">
-              <ArrowUpRight className="size-3.5" /> +4.6% Above contractual floor
-            </p>
+            {totalRev > 0 ? (
+              <p className={`text-xs font-medium mt-1 flex items-center gap-1 ${parseFloat(overallMargin) >= 40 ? "text-emerald-600" : "text-amber-600"}`}>
+                <ArrowUpRight className="size-3.5" />
+                {parseFloat(overallMargin) >= 40
+                  ? `+${(parseFloat(overallMargin) - 40).toFixed(1)}% Above contractual floor`
+                  : `${(parseFloat(overallMargin) - 40).toFixed(1)}% Below contractual floor`}
+              </p>
+            ) : (
+              <p className="text-xs text-slate-400 font-medium mt-1">
+                No activity during selected period
+              </p>
+            )}
           </CardContent>
         </Card>
 
         <Card className="border-slate-200 bg-white shadow-2xs">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-xs font-semibold text-slate-500 uppercase">Total Revenue (Month)</CardTitle>
-            <div className="p-2 rounded-lg bg-blue-50 text-blue-600"><DollarSign className="size-4" /></div>
+            <div className={`p-2 rounded-lg ${totalRev > 0 ? "bg-blue-50 text-blue-600" : "bg-slate-100 text-slate-500"}`}>
+              <DollarSign className="size-4" />
+            </div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-extrabold text-slate-900">${totalRev.toLocaleString()}</div>
-            <p className="text-xs text-blue-600 font-medium mt-1">+8.2% vs previous month</p>
+            {totalRev > 0 ? (
+              <p className="text-xs text-blue-600 font-medium mt-1">Revenue for selected period</p>
+            ) : (
+              <p className="text-xs text-slate-400 font-medium mt-1">
+                No activity during selected period
+              </p>
+            )}
           </CardContent>
         </Card>
 
@@ -180,18 +218,36 @@ export function OperationsReportsCenter() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-extrabold text-slate-900">${totalCost.toLocaleString()}</div>
-            <p className="text-xs text-slate-500 mt-1">Labor $52,140 · Parts $33,330</p>
+            {totalCost > 0 ? (
+              <p className="text-xs text-slate-500 mt-1">
+                Labor ${totalLaborCost.toLocaleString()} · Parts ${totalPartsCost.toLocaleString()}
+              </p>
+            ) : (
+              <p className="text-xs text-slate-400 font-medium mt-1">
+                No direct costs in this period
+              </p>
+            )}
           </CardContent>
         </Card>
 
         <Card className="border-slate-200 bg-white shadow-2xs">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-xs font-semibold text-slate-500 uppercase">Margin Alerts (&lt; 40%)</CardTitle>
-            <div className="p-2 rounded-lg bg-amber-50 text-amber-600"><AlertCircle className="size-4" /></div>
+            <div className={`p-2 rounded-lg ${flaggedAccountsCount > 0 ? "bg-amber-50 text-amber-600" : "bg-slate-100 text-slate-500"}`}>
+              <AlertCircle className="size-4" />
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-extrabold text-amber-700">{flaggedAccountsCount} Accounts</div>
-            <p className="text-xs text-amber-600 font-medium mt-1">Rate adjustment recommended</p>
+            <div className="text-2xl font-extrabold text-slate-900">{flaggedAccountsCount} Accounts</div>
+            {accountData.length > 0 ? (
+              <p className={`text-xs font-medium mt-1 ${flaggedAccountsCount > 0 ? "text-amber-600" : "text-emerald-600"}`}>
+                {flaggedAccountsCount > 0 ? "Rate adjustment recommended" : "All accounts meeting threshold"}
+              </p>
+            ) : (
+              <p className="text-xs text-slate-400 font-medium mt-1">
+                No activity during selected period
+              </p>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -254,6 +310,7 @@ export function OperationsReportsCenter() {
                             <Building className="size-8 mx-auto mb-2 text-slate-400 opacity-60" />
                             <div className="font-semibold text-slate-700 text-sm">No account margin records in this period</div>
                             <div className="text-xs text-slate-400 mt-0.5">Account gross margins and 40% margin guardrail alerts will populate here as jobs are completed.</div>
+                            <Badge variant="outline" className="mt-2 border-slate-200 bg-slate-50 text-slate-500 font-medium text-[11px]">No activity during selected period</Badge>
                           </td>
                         </tr>
                       ) : (
@@ -309,28 +366,54 @@ export function OperationsReportsCenter() {
                   </p>
                 </div>
 
-                <div className="space-y-2">
-                  <div className="flex justify-between text-xs font-semibold text-slate-700">
-                    <span>Portfolio Margin Target</span>
-                    <span className="text-emerald-700 font-bold">44.6% / 40.0%</span>
-                  </div>
-                  <Progress value={85} className="h-2 bg-slate-100" />
-                  <p className="text-[11px] text-slate-500">Current portfolio is operating 4.6% above baseline threshold.</p>
-                </div>
+                {totalRev > 0 ? (
+                  <>
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-xs font-semibold text-slate-700">
+                        <span>Portfolio Margin Target</span>
+                        <span className={`font-bold ${parseFloat(overallMargin) >= 40 ? "text-emerald-700" : "text-amber-700"}`}>
+                          {overallMargin}% / 40.0%
+                        </span>
+                      </div>
+                      <Progress value={Math.min(100, Math.max(0, (parseFloat(overallMargin) / 50) * 100))} className="h-2 bg-slate-100" />
+                      <p className="text-[11px] text-slate-500">
+                        {parseFloat(overallMargin) >= 40
+                          ? `Current portfolio is operating ${(parseFloat(overallMargin) - 40).toFixed(1)}% above baseline threshold.`
+                          : `Current portfolio is ${(40 - parseFloat(overallMargin)).toFixed(1)}% below the 40% contractual floor.`}
+                      </p>
+                    </div>
 
-                <div className="pt-2 border-t space-y-2">
-                  <h4 className="text-xs font-bold text-slate-900">Recommended Operational Actions:</h4>
-                  <ul className="text-xs space-y-1.5 text-slate-600">
-                    <li className="flex items-start gap-1.5">
-                      <span className="text-amber-600 font-bold">•</span>
-                      <span>Adjust SpinLife round-trip travel fee from $45 to $65 for Columbus outer-ring jobs.</span>
-                    </li>
-                    <li className="flex items-start gap-1.5">
-                      <span className="text-amber-600 font-bold">•</span>
-                      <span>Review CareSource OEM parts markup (currently at 22%, recommend 35%).</span>
-                    </li>
-                  </ul>
-                </div>
+                    {flaggedAccountsCount > 0 ? (
+                      <div className="pt-2 border-t space-y-2">
+                        <h4 className="text-xs font-bold text-slate-900">Recommended Operational Actions:</h4>
+                        <ul className="text-xs space-y-1.5 text-slate-600">
+                          {accountData
+                            .filter((a) => a.grossMargin < parseFloat(marginThreshold))
+                            .slice(0, 3)
+                            .map((a) => (
+                              <li key={a.account} className="flex items-start gap-1.5">
+                                <span className="text-amber-600 font-bold">•</span>
+                                <span>Review rate card and travel fees for {a.account} (current margin: {a.grossMargin.toFixed(1)}%).</span>
+                              </li>
+                            ))}
+                        </ul>
+                      </div>
+                    ) : (
+                      <div className="pt-2 border-t text-xs text-emerald-700">
+                        All active accounts meet or exceed the 40% margin guardrail.
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="py-4 text-center space-y-2">
+                    <span className="text-xs font-semibold text-slate-500 block">Portfolio Margin Target: 0.0% / 40.0%</span>
+                    <Progress value={0} className="h-2 bg-slate-100" />
+                    <p className="text-xs text-slate-500 font-medium">No activity during selected period</p>
+                    <p className="text-[11px] text-slate-400">
+                      No revenue or direct cost records exist for this period. Margin performance calculations and account recommendations will generate when jobs are completed.
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -347,9 +430,15 @@ export function OperationsReportsCenter() {
                     Monthly billing revenue compared to technician payroll and spare parts direct cost.
                   </CardDescription>
                 </div>
-                <Badge variant="outline" className="border-emerald-300 bg-emerald-50 text-emerald-800">
-                  Consistently &gt; 42% Margin
-                </Badge>
+                {monthlyData.length > 0 && totalRev > 0 ? (
+                  <Badge variant="outline" className="border-emerald-300 bg-emerald-50 text-emerald-800">
+                    {parseFloat(overallMargin) >= 40 ? `Margin: ${overallMargin}%` : `Below Target: ${overallMargin}%`}
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="border-slate-300 bg-slate-50 text-slate-500">
+                    No activity during selected period
+                  </Badge>
+                )}
               </div>
             </CardHeader>
             <CardContent className="p-4">
