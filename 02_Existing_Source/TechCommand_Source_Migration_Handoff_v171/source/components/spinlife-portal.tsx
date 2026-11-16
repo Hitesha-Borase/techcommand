@@ -287,7 +287,14 @@ export function SpinLifePortal({userId,technician=false,onOtherWork,onCareer,ini
       if(token!==aiRequest.current || draftRef.current?.id!==targetId)return;
       const current=draftRef.current;
       const updated={...current.data};
-      for(const key of Object.keys(spinlifeDataSchema.shape) as Array<keyof SpinLifeData>){const value=result.fields[key];if(!updated[key] && typeof value==="string"){if(key==="serviceType" && !spinlifeDataSchema.shape.serviceType.safeParse(value).success)continue;Object.assign(updated,{[key]:value});}}
+      for(const key of Object.keys(spinlifeDataSchema.shape) as Array<keyof SpinLifeData>){
+        if(key === "rawText") continue;
+        const value=result.fields[key];
+        if(typeof value==="string" && value.trim()){
+          if(key==="serviceType" && !spinlifeDataSchema.shape.serviceType.safeParse(value).success)continue;
+          Object.assign(updated,{[key]:value.trim()});
+        }
+      }
       if(!updated.extraChecks && Array.isArray(result.fields.checklistItems)){const checks=result.fields.checklistItems.filter((x):x is string=>typeof x==="string").join("\n");if(checks.length>5000)throw new Error("The original is saved, but its additional checks exceed this form’s capacity. Existing answers are preserved; review the original requirements before completion.");updated.extraChecks=checks;}
       edit({...current,data:updated});setAiMessage("Available details filled in. Please check them against the original before assigning. Technician pay is entered by the administrator.");if(technician)setTechStage("essentials");
     }catch(e){if(token===aiRequest.current)setAiMessage((e as Error).message);}finally{if(token===aiRequest.current)setAiBusy(false);}

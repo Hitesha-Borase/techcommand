@@ -265,66 +265,121 @@ async function callOpenAiStructured<T>(
 function fallbackBidFields(content: Array<Record<string, unknown>>) {
   let text = "";
   for (const c of content) {
-    if (typeof c.text === "string") text += c.text + "\n";
+    if (typeof c.text === "string") {
+      let t = c.text;
+      const marker = "Pasted source:\n";
+      const idx = t.indexOf(marker);
+      if (idx !== -1) {
+        t = t.slice(idx + marker.length);
+      }
+      text += t + "\n";
+    }
     if (typeof (c as any).filename === "string") text += (c as any).filename + "\n";
   }
 
-  // Work order number / ID
-  const woMatch = text.match(/(?:WO|Work\s*Order|Order|Job|SpinLife|Intake)[\s#:\-]*([A-Za-z0-9\-]+)/i);
-  const numMatch = text.match(/\b(173\d{5,8}|WO[- ]?\d{3,8})\b/i);
-  const externalId = woMatch ? woMatch[1] : (numMatch ? numMatch[1] : null);
+  // 1. Work order reference / ID (Preserve full external reference and suffix, never truncate to partial words like 'rk')
+  let externalId: string | null = null;
+  const explicitWoMatch = text.match(
+    /(?:Work\s*Order(?:\s*(?:Number|No\.?|ID|#))?|\bWO\b(?:\s*(?:Number|No\.?|ID|#))?|\bOrder\s*(?:Number|No\.?|ID|#|Ref(?:erence)?)?|\bJob\s*(?:Number|No\.?|ID|#)?|\bSpinLife\s*(?:WO|Order)?|\bIntake\s*(?:Number|ID)?)\s*[:#=\-]?\s*([A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)*)/i
+  );
+  if (explicitWoMatch && explicitWoMatch[1]) {
+    const candidate = explicitWoMatch[1].trim();
+    if (!/^(work|order|number|none|null|undefined|na|n\/a)$/i.test(candidate)) {
+      externalId = candidate;
+    }
+  }
+  if (!externalId) {
+    const auditMatch = text.match(/\b(AUDIT-[A-Za-z0-9\-]+|WO[- ]?[0-9A-Za-z\-]+)\b/i);
+    if (auditMatch) externalId = auditMatch[1].trim();
+  }
+  if (!externalId) {
+    const numMatch = text.match(/\b(173\d{5,8})\b/);
+    if (numMatch) externalId = numMatch[1];
+  }
 
-  // Customer Name
-  const nameMatch = text.match(/(?:Customer(?:\s*Name)?|Client|Patient|Ship\s*To|Bill\s*To)[\s#:]*([A-Za-z\s\.\,\'\-]+?)(?:\r?\n|$|Phone|Address|Tel)/i);
-  const customerName = nameMatch && nameMatch[1].trim().length > 2 && !/^(address|phone|email)/i.test(nameMatch[1].trim())
-    ? nameMatch[1].trim().slice(0, 100)
-    : null;
+  // 2. Customer Phone (ONLY read from an explicitly labeled phone/contact field; leave unresolved/null otherwise)
+  let customerPhone: string | null = null;
+  const phoneLineMatch = text.match(
+    /(?:Phone|Tel(?:ephone)?|Cell(?:ular)?|Mobile|Contact(?:\s*(?:Phone|Number|#))?)\s*[:#=\-]?\s*([+]?1?[\s.\-]?(?:\(\d{3}\)|\d{3})[\s.\-]?\d{3}[\s.\-]?\d{4})/i
+  );
+  if (phoneLineMatch && phoneLineMatch[1]) {
+    customerPhone = phoneLineMatch[1].trim();
+  }
 
-  // Phone
-  const phoneMatch = text.match(/(?:(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})/);
-  const customerPhone = phoneMatch ? phoneMatch[0] : null;
+  // 3. Customer Complaint / Requested Work
+  let customerComplaint: string | null = null;
+  const compMatch = text.match(
+    /(?:Description\s*of\s*(?:issue|problem|repair(?:\s*needed)?)|Requested\s*work(?:\s*[\/\-]\s*problem)?|Customer\s*Complaint|Reason(?:\s*for\s*(?:call|service|repair))?|Complaint|Problem|Issue|Notes|Service\s*Request)\s*[:#=\-]?\s*([^\r\n]+)/i
+  );
+  if (compMatch && compMatch[1]) {
+    const c = compMatch[1].trim();
+    if (c && !/^(none|null|undefined|na|n\/a)$/i.test(c)) {
+      customerComplaint = c;
+    }
+  }
 
-  // Email
+  // 4. Customer Name
+  let customerName: string | null = null;
+  const nameMatch = text.match(
+    /(?:Customer(?:\s*Name)?|Client(?:\s*Name)?|Patient(?:\s*Name)?|Service\s*Recipient)\s*[:#=\-]?\s*([^\r\n]+)/i
+  );
+  if (nameMatch && nameMatch[1]) {
+    const n = nameMatch[1].trim();
+    if (n.length > 2 && !/^(address|phone|email|golden|pride|invacare|make|model)/i.test(n)) {
+      customerName = n.slice(0, 100);
+    }
+  }
+
+  // 5. Email
   const emailMatch = text.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
   const customerEmail = emailMatch ? emailMatch[1] : null;
 
-  // Service Address
-  const addrMatch = text.match(/(?:Address|Service\s*Address|Ship\s*To|Location)[\s:]*([0-9]+[^\n\r]+)/i);
-  const serviceAddress = addrMatch ? addrMatch[1].trim().slice(0, 200) : null;
+  // 6. Service Address
+  let serviceAddress: string | null = null;
+  const addrMatch = text.match(
+    /(?:Service\s*Address|Customer\s*Address|Address|Location|Ship\s*To)\s*[:#=\-]?\s*([^\r\n]+)/i
+  );
+  if (addrMatch && addrMatch[1]) {
+    serviceAddress = addrMatch[1].trim().slice(0, 200);
+  }
 
-  // Equipment & Manufacturer
+  // 7. Equipment & Manufacturer
   let manufacturer: string | null = null;
-  if (/golden/i.test(text)) manufacturer = "Golden Technologies";
+  const mfgMatch = text.match(/(?:Make|Manufacturer|Brand)\s*[:#=\-]?\s*([^\r\n]+)/i);
+  if (mfgMatch && mfgMatch[1]) {
+    manufacturer = mfgMatch[1].trim().slice(0, 100);
+  } else if (/golden/i.test(text)) manufacturer = "Golden Technologies";
   else if (/pride/i.test(text)) manufacturer = "Pride Mobility";
   else if (/invacare/i.test(text)) manufacturer = "Invacare";
   else if (/permobil/i.test(text)) manufacturer = "Permobil";
   else if (/drive/i.test(text)) manufacturer = "Drive DeVilbiss";
 
-  // Model
+  // 8. Model
   let model: string | null = null;
-  if (/PR[- ]?447/i.test(text)) model = "PR-447";
+  const modelMatch = text.match(/(?:Model(?:\s*(?:Number|No\.?|#))?|Type\s*[\/\-]\s*model)\s*[:#=\-]?\s*([^\r\n]+)/i);
+  if (modelMatch && modelMatch[1]) {
+    model = modelMatch[1].trim().slice(0, 100);
+  } else if (/PR[- ]?535/i.test(text)) model = "PR535";
+  else if (/PR[- ]?447/i.test(text)) model = "PR-447";
   else if (/Jazzy\s*Air\s*2/i.test(text)) model = "Jazzy Air 2";
   else if (/Buzzaround/i.test(text)) model = "Buzzaround EX";
   else if (/LiteRider/i.test(text)) model = "LiteRider";
-  else {
-    const mm = text.match(/(?:Model|Item)[\s#:]*([A-Za-z0-9\-\s]+?)(?:\r?\n|Serial|SN|$)/i);
-    if (mm) model = mm[1].trim().slice(0, 100);
+
+  // 9. Serial Number
+  let serialNumber: string | null = null;
+  const snMatch = text.match(/(?:Serial(?:\s*(?:Number|No\.?|#))?|SN|S\/N)\s*[:#=\-]?\s*([A-Za-z0-9\-]+)/i);
+  if (snMatch && snMatch[1]) {
+    serialNumber = snMatch[1].trim().slice(0, 100);
   }
 
-  // Serial Number
-  const snMatch = text.match(/(?:Serial(?:\s*(?:#|Number|No))?|SN|S\/N)[\s#:]*([A-Za-z0-9\-]+)/i);
-  const serialNumber = snMatch ? snMatch[1].trim().slice(0, 100) : null;
-
-  // Service Type
+  // 10. Service Type
   let serviceType: any = "repair_single";
   if (/\b(?:pm|preventive|maintenance)\b/i.test(text)) serviceType = "biomed_pm_a";
   else if (/\b(?:delivery|setup|drop\s*off)\b/i.test(text)) serviceType = "bed_delivery";
   else if (/\b(?:install|installation)\b/i.test(text)) serviceType = "consumer_install";
   else if (/\b(?:eval|evaluation)\b/i.test(text)) serviceType = "evaluation";
 
-  // Customer Complaint
-  const compMatch = text.match(/(?:Complaint|Issue|Reason(?:\s*for\s*call)?|Problem|Notes)[\s:]*([^\n\r]+)/i);
-  const customerComplaint = compMatch ? compMatch[1].trim().slice(0, 500) : null;
+  const summary = customerComplaint || (externalId ? `Work order ${externalId}` : "Work order details extracted");
 
   return {
     externalSource: "spinlife",
@@ -335,7 +390,7 @@ function fallbackBidFields(content: Array<Record<string, unknown>>) {
     customerEmail,
     serviceAddress,
     serviceType,
-    summary: customerComplaint || (externalId ? `Work order ${externalId}` : "Work order details extracted"),
+    summary,
     customerComplaint,
     equipmentType: /chair|recliner/i.test(text) ? "Lift Chair" : /scooter/i.test(text) ? "Mobility Scooter" : "Power Wheelchair",
     manufacturer,
