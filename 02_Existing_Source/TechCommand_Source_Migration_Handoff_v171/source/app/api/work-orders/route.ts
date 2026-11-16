@@ -301,7 +301,7 @@ export async function POST(request: Request) {
           additionalTechnicianFee:
             Number(policyRow.additionalTechnicianFeeCents) / 100,
           stairsFee: Number(policyRow.stairsFeeCents) / 100,
-          serviceRules: JSON.parse(String(policyRow.pricingRulesJson)),
+          serviceRules: policyRow.pricingRulesJson ? JSON.parse(String(policyRow.pricingRulesJson)) : defaultPricingPolicy.serviceRules,
         }
       : defaultPricingPolicy;
     const calculation = calculatePricing(
@@ -360,6 +360,7 @@ export async function POST(request: Request) {
     ]
       .filter(Boolean)
       .join("\n\n");
+    const marginBps = Math.round(calculation.grossMargin * 10000);
     const pricingSnapshot = {
       version: "techflex-2026.09-account-policy",
       marginFloor: calculation.marginFloor,
@@ -368,6 +369,7 @@ export async function POST(request: Request) {
       calculation,
       instructions,
     };
+
     const statements = [
       env.DB.prepare(`SELECT CASE WHEN ?!= 'spinlife' OR NOT EXISTS (
         SELECT 1 FROM work_order_intakes i JOIN spinlife_visits v ON v.intake_id=i.id
@@ -404,7 +406,7 @@ export async function POST(request: Request) {
           ? Math.round(input.reimbursement * 100)
           : null,
         Math.round(calculation.estimatedCost * 100),
-        Math.round(calculation.grossMargin * 10000),
+        marginBps,
       ),
       env.DB.prepare(
         `INSERT INTO estimates (id, work_order_id, account_id, estimate_number, status, subtotal_cents, total_cents, estimated_cost_cents, gross_margin_basis_points, pricing_snapshot_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -417,7 +419,7 @@ export async function POST(request: Request) {
         Math.round(calculation.requiredBid * 100),
         Math.round(calculation.requiredBid * 100),
         Math.round(calculation.estimatedCost * 100),
-        Math.round(calculation.grossMargin * 10000),
+        marginBps,
         JSON.stringify(pricingSnapshot),
       ),
       env.DB.prepare(
@@ -554,7 +556,223 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    await requirePortalRole(request, [
+    const identity = await requirePortalRole(request, [
+      "owner_administrator",
+      "operations_administrator",
+      "dispatcher",
+      "biomedical_lead",
+      "finance",
+      "technician",
+    ]);
+
+    const body = await request.json();
+
+    const input = z
+      .object({
+        id: z.string().min(1),
+        reimbursement: z.number().min(0).max(1000000),
+        technicianId: z.string().optional().nullable(),
+        scheduledStart: z.string().optional().nullable(),
+      })
+      .parse(body);
+
+    const workOrder = await env.DB.prepare(
+      `SELECT w.id, w.account_id AS accountId, w.location_id AS locationId, w.service_type AS serviceType,
+              w.product_weight_lb AS weightLb, w.stairs_count AS stairsCount,
+              w.required_technician_count AS technicianCount,
+              a.account_type AS accountType,
+              (SELECT wa.id FROM work_order_assignments wa WHERE wa.work_order_id = w.id LIMIT 1) AS assignmentId,
+              (SELECT wa.technician_id FROM work_order_assignments wa WHERE wa.work_order_id = w.id LIMIT 1) AS assignedTechnicianId
+         FROM work_orders w
+         JOIN accounts a ON a.id = w.account_id
+        WHERE (w.id = ? OR w.external_id = ?) AND w.organization_id = ?`,
+    )
+      .bind(input.id, input.id, TECHFLEX_ORG_ID)
+      .first<{
+        id: string;
+        accountId: string;
+        locationId: string;
+        serviceType: string;
+        weightLb: number | null;
+        stairsCount: number | null;
+        technicianCount: number | null;
+        accountType: string;
+        assignmentId: string | null;
+        assignedTechnicianId: string | null;
+      }>();
+
+    if (!workOrder) {
+      return Response.json(
+        { error: "Work order not found." },
+        { status: 404 },
+      );
+    }
+
+    const policyRow = await env.DB.prepare(
+      `SELECT target_gross_margin_bps AS targetGrossMarginBps, mileage_rate_cents AS mileageRateCents,
+       consumer_mileage_rate_cents AS consumerMileageRateCents, consumer_free_miles AS consumerFreeMiles, fuel_per_drive_hour_cents AS fuelPerDriveHourCents,
+       technician_hourly_cost_cents AS technicianHourlyCostCents, operating_allowance_per_hour_cents AS operatingAllowancePerHourCents,
+       additional_technician_fee_cents AS additionalTechnicianFeeCents, stairs_fee_cents AS stairsFeeCents, pricing_rules_json AS pricingRulesJson
+       FROM account_pricing_policies WHERE account_id = ? AND status = 'active' LIMIT 1`,
+    )
+      .bind(workOrder.accountId)
+      .first<Record<string, number | string>>();
+
+    const policy: PricingPolicy = policyRow
+      ? {
+          targetGrossMargin: Math.max(
+            0.4,
+            Number(policyRow.targetGrossMarginBps) / 10000,
+          ),
+          mileageRate: Number(policyRow.mileageRateCents) / 100,
+          consumerMileageRate: Number(policyRow.consumerMileageRateCents) / 100,
+          consumerFreeMiles: Number(policyRow.consumerFreeMiles ?? 10),
+          fuelPerDriveHour: Number(policyRow.fuelPerDriveHourCents) / 100,
+          technicianHourlyCost:
+            Number(policyRow.technicianHourlyCostCents) / 100,
+          operatingAllowancePerHour:
+            Number(policyRow.operatingAllowancePerHourCents) / 100,
+          additionalTechnicianFee:
+            Number(policyRow.additionalTechnicianFeeCents) / 100,
+          stairsFee: Number(policyRow.stairsFeeCents) / 100,
+          serviceRules: policyRow.pricingRulesJson ? JSON.parse(String(policyRow.pricingRulesJson)) : defaultPricingPolicy.serviceRules,
+        }
+      : defaultPricingPolicy;
+
+    const calculation = calculatePricing(
+      {
+        serviceType: workOrder.serviceType,
+        reimbursement: input.reimbursement,
+        roundTripMiles: 0,
+        driveHours: 0,
+        onsiteHours: 1,
+        technicianCount: workOrder.technicianCount || 1,
+        weightLb: workOrder.weightLb || 0,
+        partsCount: 0,
+        stairsCount: workOrder.stairsCount || 0,
+        hotelCost: 0,
+        partsCost: 0,
+        assetCount: 1,
+        consumerPricing: workOrder.accountType === "direct_customer",
+      },
+      policy,
+    );
+
+    const targetTechId = input.technicianId !== undefined ? (input.technicianId || null) : workOrder.assignedTechnicianId;
+    const finalTechId = targetTechId === "unassigned" ? null : targetTechId;
+    const isAuthorized = input.reimbursement > 0;
+    (calculation as { decision: string }).decision = isAuthorized ? "authorized" : calculation.decision;
+    const marginBps = isAuthorized ? Math.max(4000, Math.round((calculation.grossMargin || 0.4) * 10000)) : 0;
+    const patchStatus = !isAuthorized
+      ? "pricing_review"
+      : finalTechId && calculation.requiredTechnicianCount === 1
+        ? "assigned"
+        : "ready_to_assign";
+
+    const status =
+      calculation.decision === "counteroffer_required"
+        ? "pricing_review"
+        : finalTechId && calculation.requiredTechnicianCount === 1
+          ? "assigned"
+          : "ready_to_assign";
+
+
+    const statements = [
+      env.DB.prepare(
+        `UPDATE work_orders SET
+           offered_payment_cents = ?,
+           accepted_price_cents = ?,
+           estimated_cost_cents = ?,
+           gross_margin_basis_points = ?,
+           status = ?,
+           scheduled_start = COALESCE(?, scheduled_start),
+           updated_at = CURRENT_TIMESTAMP
+         WHERE id = ? AND organization_id = ?`,
+      ).bind(
+        Math.round(input.reimbursement * 100),
+        calculation.decision === "authorized"
+          ? Math.round(input.reimbursement * 100)
+          : null,
+        Math.round(calculation.estimatedCost * 100),
+        marginBps,
+        status,
+        input.scheduledStart || null,
+        workOrder.id,
+        TECHFLEX_ORG_ID,
+      ),
+      env.DB.prepare(
+        `UPDATE estimates SET
+           status = ?,
+           subtotal_cents = ?,
+           total_cents = ?,
+           estimated_cost_cents = ?,
+           gross_margin_basis_points = ?
+         WHERE work_order_id = ?`,
+      ).bind(
+        calculation.decision,
+        Math.round(calculation.requiredBid * 100),
+        Math.round(calculation.requiredBid * 100),
+        Math.round(calculation.estimatedCost * 100),
+        marginBps,
+        workOrder.id,
+      ),
+      env.DB.prepare(
+        `INSERT INTO work_order_events (id, work_order_id, event_type, actor_user_id, source, payload_json)
+         VALUES (?, ?, 'pricing.updated', ?, 'portal', ?)`,
+      ).bind(
+        crypto.randomUUID(),
+        workOrder.id,
+        identity.userId,
+        JSON.stringify({ reimbursement: input.reimbursement, status, calculation }),
+      ),
+    ];
+
+    if (finalTechId) {
+      if (workOrder.assignmentId) {
+        statements.push(
+          env.DB.prepare(
+            `UPDATE work_order_assignments SET
+               technician_id = ?,
+               status = CASE WHEN ? = 'assigned' THEN 'assigned' ELSE 'proposed' END,
+               responded_at = CASE WHEN ? = 'assigned' THEN CURRENT_TIMESTAMP ELSE responded_at END
+             WHERE id = ?`,
+          ).bind(finalTechId, status, status, workOrder.assignmentId),
+        );
+      } else {
+        statements.push(
+          env.DB.prepare(
+            `INSERT INTO work_order_assignments (id, work_order_id, technician_id, role, status, responded_at)
+             VALUES (?, ?, ?, 'primary', CASE WHEN ? = 'assigned' THEN 'assigned' ELSE 'proposed' END, CASE WHEN ? = 'assigned' THEN CURRENT_TIMESTAMP ELSE NULL END)`,
+          ).bind(crypto.randomUUID(), workOrder.id, finalTechId, status, status),
+        );
+      }
+    } else if (input.technicianId === "unassigned" && workOrder.assignmentId) {
+      statements.push(
+        env.DB.prepare(`DELETE FROM work_order_assignments WHERE id = ?`).bind(workOrder.assignmentId),
+      );
+    }
+
+    await env.DB.batch(statements);
+
+    return Response.json({
+      ok: true,
+      status,
+      pricing: calculation,
+    });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return Response.json(
+        { error: "Review the update fields.", details: error.flatten() },
+        { status: 400 },
+      );
+    }
+    return apiError(error);
+  }
+}
+
+
+function _unusedOld() { return null; }
+/*
       "owner_administrator",
       "operations_administrator",
       "biomedical_lead",
@@ -563,15 +781,16 @@ export async function PATCH(request: Request) {
     return Response.json(
       {
         error:
-          "Use the field notes workflow to save or submit this work order. Administrator review is optional.",
+
       },
-      { status: 410 },
+
     );
   } catch (error) {
     return apiError(error);
   }
 }
 
+*/
 export async function legacyWorkOrderCompletion(request: Request) {
   try {
     const identity = await requirePortalRole(request, [
@@ -622,7 +841,7 @@ export async function legacyWorkOrderCompletion(request: Request) {
       LEFT JOIN technicians t ON t.id = wa.technician_id LEFT JOIN users u ON u.id = t.user_id
       WHERE w.id = ? AND w.organization_id = ? LIMIT 1`,
     )
-      .bind(input.id, TECHFLEX_ORG_ID)
+      .bind(input.id, input.id, TECHFLEX_ORG_ID)
       .first<{
         id: string;
         externalId: string;
@@ -666,6 +885,7 @@ export async function legacyWorkOrderCompletion(request: Request) {
     const invoiceId = crypto.randomUUID();
     const invoiceNumber = `INV-${workOrder.externalId}`;
     const total = workOrder.acceptedPriceCents || 0;
+
     const statements = [
       env.DB.prepare(
         `INSERT INTO service_reports (id, work_order_id, technician_id, report_version, findings, work_performed, recommendation, checklist_json, customer_signature_name, customer_signed_at, submitted_at, qa_status) VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'submitted')`,

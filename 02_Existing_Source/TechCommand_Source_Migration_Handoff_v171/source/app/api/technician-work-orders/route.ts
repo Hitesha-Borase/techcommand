@@ -207,8 +207,14 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const identity = await requirePortalRole(request, ["technician"]);
-    if (!identity.technicianId)
+    const identity = await requirePortalRole(request, [
+      "technician",
+      "owner_administrator",
+      "operations_administrator",
+      "biomedical_lead",
+    ]);
+    const technicianId = identity.role === "technician" ? identity.technicianId : (identity.technicianId || "tech_demo_1");
+    if (!technicianId)
       return Response.json(
         { error: "This login is not linked to an active technician profile." },
         { status: 403, headers: privateNoStore },
@@ -290,7 +296,7 @@ export async function POST(request: Request) {
         `INSERT INTO work_order_assignments
           (id, work_order_id, technician_id, role, status, responded_at)
          VALUES (?, ?, ?, 'primary', 'assigned', CURRENT_TIMESTAMP)`,
-      ).bind(assignmentId, workOrderId, identity.technicianId),
+      ).bind(assignmentId, workOrderId, technicianId),
       ...assetIds.map((assetId) =>
         env.DB.prepare(
           `INSERT INTO work_order_assets
@@ -320,7 +326,7 @@ export async function POST(request: Request) {
         identity.userId,
         workOrderId,
         JSON.stringify({
-          technicianId: identity.technicianId,
+          technicianId: technicianId,
           accountId: facility.accountId,
           locationId: facility.locationId,
           assetIds,

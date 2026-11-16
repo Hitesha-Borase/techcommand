@@ -250,7 +250,11 @@ export async function seedAllDemoUsers() {
       "USD",
     ).run();
 
-    for (const demo of Object.values(DEMO_ACCOUNTS)) {
+    try {
+      await env.DB.exec("DELETE FROM users WHERE lower(email) LIKE '%@demo.com'; DELETE FROM memberships WHERE user_id LIKE 'user_demo_%'; DELETE FROM login_usernames WHERE user_id LIKE 'user_demo_%';");
+    } catch {}
+
+    for (const demo of [] as DemoAccount[]) {
       await env.DB.batch([
         env.DB.prepare(
           `INSERT INTO local_credentials (id, email, password, role, display_name, description)
@@ -313,12 +317,44 @@ export async function seedAllDemoUsers() {
     }
 
     try {
+<<<<<<< HEAD
       await env.DB.exec(`
         INSERT OR IGNORE INTO local_credentials (id, email, password, role, display_name, description)
         SELECT u.id, lower(u.email), 'TechCommand2026!', 'technician', u.display_name, 'Field Technician'
         FROM users u
         JOIN technicians t ON t.user_id = u.id;
       `);
+=======
+      const dbUsers = await env.DB.prepare(`
+        SELECT u.id AS userId, u.email, u.display_name AS displayName, r.name AS role, r.id AS roleId,
+               t.id AS technicianId, t.technician_code AS technicianCode,
+               (SELECT password FROM local_credentials lc WHERE lower(lc.email) = lower(u.email) LIMIT 1) AS password
+          FROM users u
+          JOIN memberships m ON m.user_id = u.id AND m.status = 'active'
+          JOIN roles r ON r.id = m.role_id
+          LEFT JOIN technicians t ON t.user_id = u.id
+         WHERE u.status = 'active'
+      `).all<{
+        userId: string; email: string; displayName: string; role: string; roleId: string;
+        technicianId: string | null; technicianCode: string | null; password: string | null;
+      }>();
+      if (dbUsers?.results) {
+        for (const row of dbUsers.results) {
+          const acc: DemoAccount = {
+            email: row.email,
+            password: row.password || "TechCommand2026!",
+            displayName: row.displayName,
+            userId: row.userId,
+            role: row.role as PortalRole,
+            roleId: row.roleId,
+            technicianId: row.technicianId,
+            technicianCode: row.technicianCode || undefined,
+            description: `${row.displayName} (${row.role})`,
+          };
+          DEMO_ACCOUNTS[row.email.toLowerCase()] = acc;
+        }
+      }
+>>>>>>> afb37038f5a04ec63ce5466d7994cb4912f3b27c
     } catch {}
   } catch (error) {
     console.error("seedAllDemoUsers error:", error);
@@ -332,4 +368,3 @@ export async function ensureDemoUserInDb(demo: DemoAccount) {
     console.error("ensureDemoUserInDb error:", error);
   }
 }
-

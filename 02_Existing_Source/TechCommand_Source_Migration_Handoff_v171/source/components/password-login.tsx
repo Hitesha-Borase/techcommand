@@ -124,12 +124,24 @@ export function PasswordLogin({
               >
                 Open My Dashboard
               </a>
+
               <a
                 className="flex h-9 items-center justify-center rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-all"
                 href="/login?change=1"
               >
                 Change My Password
               </a>
+              <form action="/api/auth" method="post" className="w-full pt-1">
+                <input type="hidden" name="action" value="logout" />
+                <button
+                  type="submit"
+                  className="flex h-9 w-full items-center justify-center rounded-xl border border-red-200 hover:bg-red-50 text-red-600 text-xs font-semibold transition-all cursor-pointer"
+                >
+                  <LogOut className="size-3 mr-1" /> Sign Out / Switch Account
+                </button>
+              </form>
+
+
             </div>
           ) : (
             <form className="space-y-2.5" action="/api/auth" method="post">
@@ -227,6 +239,7 @@ export function PasswordLogin({
                   <a href="/" className="text-xs text-slate-500 hover:text-slate-800 hover:underline">
                     ← Cancel & Return to Dashboard
                   </a>
+    
                 </div>
               ) : null}
 
@@ -304,6 +317,7 @@ export function PasswordLogin({
               <a href="mailto:support@techflexmobility.com" className="text-blue-600 hover:underline font-semibold">
                 TechFlex Support
               </a>
+
             </p>
           </div>
         </div>

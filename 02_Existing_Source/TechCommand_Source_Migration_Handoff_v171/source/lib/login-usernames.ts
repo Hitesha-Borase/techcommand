@@ -34,7 +34,7 @@ export async function loginDirectory(): Promise<LoginDirectoryRow[]> {
     JOIN roles r ON r.id=m.role_id AND r.organization_id=m.organization_id
     LEFT JOIN technicians t ON t.user_id=u.id AND t.organization_id=m.organization_id AND t.status='active'
     LEFT JOIN login_usernames lu ON lu.user_id=u.id
-    WHERE u.status='active' AND m.organization_id=?
+    WHERE u.status='active' AND m.organization_id=? AND lower(u.email) NOT LIKE '%@demo.com'
     ORDER BY u.display_name, CASE r.name WHEN 'owner_administrator' THEN 1 WHEN 'operations_administrator' THEN 2 WHEN 'biomedical_lead' THEN 9 WHEN 'technician' THEN 10 ELSE 3 END`)
     .bind(TECHFLEX_ORG_ID).all<LoginDirectoryRow>();
   const unique = new Map<string, LoginDirectoryRow>();

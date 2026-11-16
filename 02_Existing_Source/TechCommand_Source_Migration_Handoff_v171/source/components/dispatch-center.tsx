@@ -407,7 +407,7 @@ export function DispatchCenter({ mode }: { mode: "schedule" | "routes" }) {
       data?.technicians[0]?.id ||
       "";
     setForm({
-      workOrderId: job?.id || scheduled?.id || "",
+      workOrderId: job?.id || scheduled?.id || schedulingChoices[0]?.id || "",
       technicianId: firstTechnician,
       assignmentRole: scheduled?.assignmentRole || "primary",
       scheduledStart: localInput(scheduled?.scheduledStart, date),
