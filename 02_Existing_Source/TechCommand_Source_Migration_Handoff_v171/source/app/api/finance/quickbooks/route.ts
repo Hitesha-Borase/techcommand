@@ -39,28 +39,61 @@ export async function GET(request: Request) {
   try {
     await getAuthenticatedUser(request);
 
-    // 1. Connection record
-    let connection = await env.DB.prepare(`
-      SELECT id, organization_id, realm_id, company_name, is_connected,
-             token_expires_at, last_sync_at, auto_sync_enabled
-      FROM quickbooks_connections
-      WHERE organization_id = ?
-      LIMIT 1
-    `).bind(TECHFLEX_ORG_ID).first<Record<string, unknown>>();
+    // Live runtime environment credentials check
+    const current = env as unknown as {
+      DB: D1Database;
+      QUICKBOOKS_WEBHOOK_VERIFIER_TOKEN?: string;
+      QUICKBOOKS_CLIENT_ID?: string;
+      QUICKBOOKS_CLIENT_SECRET?: string;
+      QUICKBOOKS_REALM_ID?: string;
+    };
 
-    if (!connection) {
-      // Seed default active connection
-      await env.DB.prepare(`
-        INSERT INTO quickbooks_connections (
-          id, organization_id, realm_id, company_name, is_connected, last_sync_at, auto_sync_enabled
-        ) VALUES (
-          'qbc-techflex-primary', ?, '934145209382', 'TechFlex Mobility Solutions LLC', 1, datetime('now'), 1
-        )
-      `).bind(TECHFLEX_ORG_ID).run();
+    const credentialValues = [
+      ["QUICKBOOKS_WEBHOOK_VERIFIER_TOKEN", current.QUICKBOOKS_WEBHOOK_VERIFIER_TOKEN],
+      ["QUICKBOOKS_CLIENT_ID", current.QUICKBOOKS_CLIENT_ID],
+      ["QUICKBOOKS_CLIENT_SECRET", current.QUICKBOOKS_CLIENT_SECRET],
+      ["QUICKBOOKS_REALM_ID", current.QUICKBOOKS_REALM_ID],
+    ];
+    const missing = credentialValues.filter(([, value]) => !value).map(([name]) => name!);
+    const runtimeReady = missing.length === 0;
 
-      connection = await env.DB.prepare(`
-        SELECT * FROM quickbooks_connections WHERE organization_id = ? LIMIT 1
-      `).bind(TECHFLEX_ORG_ID).first<Record<string, unknown>>();
+    // 1. Connection record & integration settings check
+    const [connection, integrationConn] = await Promise.all([
+      env.DB.prepare(`
+        SELECT id, organization_id, realm_id, company_name, is_connected,
+               token_expires_at, last_sync_at, auto_sync_enabled
+        FROM quickbooks_connections
+        WHERE organization_id = ?
+        LIMIT 1
+      `).bind(TECHFLEX_ORG_ID).first<Record<string, unknown>>(),
+      env.DB.prepare(`
+        SELECT status, config_json, last_sync_at, last_error
+        FROM integration_connections
+        WHERE organization_id = ? AND integration_key = 'quickbooks'
+        LIMIT 1
+      `).bind(TECHFLEX_ORG_ID).first<Record<string, unknown>>(),
+    ]);
+
+    const isConfigured = Boolean(integrationConn);
+    const isConnected = runtimeReady && Boolean(connection?.is_connected);
+
+    let status: "not_set_up" | "setup_incomplete" | "credentials_ready" | "connected" = "not_set_up";
+    let statusLabel = "Not set up";
+
+    if (!runtimeReady) {
+      if (isConfigured) {
+        status = "setup_incomplete";
+        statusLabel = "Setup incomplete";
+      } else {
+        status = "not_set_up";
+        statusLabel = "Not set up";
+      }
+    } else if (!isConnected) {
+      status = "credentials_ready";
+      statusLabel = "Credentials ready";
+    } else {
+      status = "connected";
+      statusLabel = "Intuit Connected";
     }
 
     // 2. Fetch invoice sync ledger entries
@@ -112,12 +145,20 @@ export async function GET(request: Request) {
       {
         success: true,
         connection: {
-          id: connection?.id ?? "qbc-1",
-          companyName: String(connection?.company_name || "TechFlex Mobility Solutions"),
-          realmId: String(connection?.realm_id || "934145209382"),
-          isConnected: Boolean(connection?.is_connected ?? 1),
-          lastSyncAt: String(connection?.last_sync_at || "Just now"),
-          autoSyncEnabled: Boolean(connection?.auto_sync_enabled ?? 1),
+          id: connection?.id ? String(connection.id) : null,
+          companyName: isConnected && connection?.company_name
+            ? String(connection.company_name)
+            : "TechFlex Mobility Solutions LLC",
+          realmId: isConnected && connection?.realm_id
+            ? String(connection.realm_id)
+            : (current.QUICKBOOKS_REALM_ID || null),
+          isConnected,
+          runtimeReady,
+          status,
+          statusLabel,
+          missing,
+          lastSyncAt: isConnected && connection?.last_sync_at ? String(connection.last_sync_at) : null,
+          autoSyncEnabled: isConnected ? Boolean(connection?.auto_sync_enabled) : false,
         },
         invoices,
         stats: {
@@ -154,6 +195,78 @@ export async function POST(request: Request) {
     }
 
     const { action, invoiceId } = parsed.data;
+
+    // Runtime credentials check
+    const current = env as unknown as {
+      DB: D1Database;
+      QUICKBOOKS_WEBHOOK_VERIFIER_TOKEN?: string;
+      QUICKBOOKS_CLIENT_ID?: string;
+      QUICKBOOKS_CLIENT_SECRET?: string;
+      QUICKBOOKS_REALM_ID?: string;
+    };
+
+    const credentialValues = [
+      ["QUICKBOOKS_WEBHOOK_VERIFIER_TOKEN", current.QUICKBOOKS_WEBHOOK_VERIFIER_TOKEN],
+      ["QUICKBOOKS_CLIENT_ID", current.QUICKBOOKS_CLIENT_ID],
+      ["QUICKBOOKS_CLIENT_SECRET", current.QUICKBOOKS_CLIENT_SECRET],
+      ["QUICKBOOKS_REALM_ID", current.QUICKBOOKS_REALM_ID],
+    ];
+    const missing = credentialValues.filter(([, value]) => !value).map(([name]) => name!);
+    const runtimeReady = missing.length === 0;
+
+    if (action === "toggle_connection") {
+      if (!runtimeReady) {
+        return Response.json(
+          {
+            error: "QuickBooks Online cannot be connected without configuring required credentials (Client ID, Client Secret, Realm ID) in Settings > Connections.",
+          },
+          { status: 400, headers: privateNoStore },
+        );
+      }
+
+      await env.DB.prepare(`
+        UPDATE quickbooks_connections
+        SET is_connected = CASE WHEN is_connected = 1 THEN 0 ELSE 1 END,
+            updated_at = datetime('now')
+        WHERE organization_id = ?
+      `).bind(TECHFLEX_ORG_ID).run();
+
+      const updatedConn = await env.DB.prepare(`
+        SELECT is_connected FROM quickbooks_connections WHERE organization_id = ? LIMIT 1
+      `).bind(TECHFLEX_ORG_ID).first<Record<string, unknown>>();
+
+      return Response.json(
+        {
+          success: true,
+          isConnected: Boolean(updatedConn?.is_connected),
+          message: `QuickBooks connection toggled.`,
+        },
+        { headers: privateNoStore },
+      );
+    }
+
+    // For sync operations, verify credentials and active connection
+    if (!runtimeReady) {
+      return Response.json(
+        {
+          error: "QuickBooks Online integration is not set up. Please configure Intuit credentials in Settings > Connections before attempting to sync invoices.",
+        },
+        { status: 400, headers: privateNoStore },
+      );
+    }
+
+    const connectionRow = await env.DB.prepare(`
+      SELECT is_connected FROM quickbooks_connections WHERE organization_id = ? LIMIT 1
+    `).bind(TECHFLEX_ORG_ID).first<Record<string, unknown>>();
+
+    if (!connectionRow?.is_connected) {
+      return Response.json(
+        {
+          error: "QuickBooks connection is inactive. Please connect your QuickBooks company before syncing.",
+        },
+        { status: 400, headers: privateNoStore },
+      );
+    }
 
     if (action === "sync_all") {
       // Find all pending / error rows

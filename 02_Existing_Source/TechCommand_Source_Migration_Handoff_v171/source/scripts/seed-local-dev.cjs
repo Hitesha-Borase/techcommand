@@ -9,8 +9,8 @@ db.exec(`
   VALUES ('techflex', 'Astute Restorations LLC', 'TechFlex Mobility Solutions', 'America/New_York', 'USD');
 
   INSERT OR IGNORE INTO quickbooks_connections (id, organization_id, realm_id, company_name, is_connected, last_sync_at, auto_sync_enabled)
-  VALUES ('qbc-techflex-primary', 'techflex', '9341453429831630', 'TechFlex Mobility Solutions', 1, CURRENT_TIMESTAMP, 1);
+  VALUES ('qbc-techflex-primary', 'techflex', '', 'TechFlex Mobility Solutions', 0, NULL, 0);
+  UPDATE quickbooks_connections SET is_connected = 0, realm_id = '', last_sync_at = NULL WHERE organization_id = 'techflex';
 `);
 
 console.log("Seeded .local-dev.sqlite successfully!");
-

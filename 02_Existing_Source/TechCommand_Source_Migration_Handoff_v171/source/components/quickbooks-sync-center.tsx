@@ -49,11 +49,26 @@ type QuickBooksInvoice = {
 
 export function QuickBooksSyncCenter() {
   const [invoices, setInvoices] = useState<QuickBooksInvoice[]>([]);
-  const [connectionInfo, setConnectionInfo] = useState({
-    companyName: "TechFlex Mobility Solutions",
-    realmId: "934145209382",
-    isConnected: true,
-    lastSyncAt: "Today",
+  const [connectionInfo, setConnectionInfo] = useState<{
+    companyName: string;
+    realmId: string | null;
+    isConnected: boolean;
+    runtimeReady: boolean;
+    status: string;
+    statusLabel: string;
+    missing: string[];
+    lastSyncAt: string | null;
+    autoSyncEnabled: boolean;
+  }>({
+    companyName: "TechFlex Mobility Solutions LLC",
+    realmId: null,
+    isConnected: false,
+    runtimeReady: false,
+    status: "not_set_up",
+    statusLabel: "Not set up",
+    missing: [],
+    lastSyncAt: null,
+    autoSyncEnabled: false,
   });
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState<string>("all");
@@ -71,9 +86,14 @@ export function QuickBooksSyncCenter() {
         success?: boolean;
         connection?: {
           companyName: string;
-          realmId: string;
+          realmId: string | null;
           isConnected: boolean;
-          lastSyncAt: string;
+          runtimeReady: boolean;
+          status: string;
+          statusLabel: string;
+          missing: string[];
+          lastSyncAt: string | null;
+          autoSyncEnabled: boolean;
         };
         invoices?: QuickBooksInvoice[];
       };
@@ -112,6 +132,13 @@ export function QuickBooksSyncCenter() {
     .reduce((sum, i) => sum + i.amount, 0);
 
   const handleSyncAll = async () => {
+    if (!connectionInfo.isConnected) {
+      toast.error("QuickBooks Online is not set up", {
+        description: "Please configure Intuit API credentials in Integrations & Automation before attempting to sync.",
+      });
+      return;
+    }
+
     try {
       setIsSyncingAll(true);
       toast.info("Connecting to Intuit QuickBooks API...", {
@@ -143,6 +170,13 @@ export function QuickBooksSyncCenter() {
   };
 
   const handleSyncSingle = async (id: string) => {
+    if (!connectionInfo.isConnected) {
+      toast.error("QuickBooks Online is not set up", {
+        description: "Please configure Intuit API credentials in Integrations & Automation before attempting to sync.",
+      });
+      return;
+    }
+
     try {
       setSyncingId(id);
       const res = await fetch("/api/finance/quickbooks", {
@@ -174,26 +208,55 @@ export function QuickBooksSyncCenter() {
         <div>
           <div className="flex items-center gap-2">
             <h2 className="text-xl font-bold tracking-tight text-slate-900">QuickBooks Accounting Sync</h2>
-            <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold">
-              <Zap className="mr-1 size-3" /> Intuit Connected
-            </Badge>
+            {connectionInfo.status === "connected" ? (
+              <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold">
+                <Zap className="mr-1 size-3" /> Intuit Connected
+              </Badge>
+            ) : connectionInfo.status === "credentials_ready" ? (
+              <Badge variant="outline" className="border-blue-300 bg-blue-50 text-blue-700 font-semibold">
+                <CheckCircle2 className="mr-1 size-3" /> Credentials Ready
+              </Badge>
+            ) : connectionInfo.status === "setup_incomplete" ? (
+              <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-800 font-semibold">
+                <AlertCircle className="mr-1 size-3" /> Setup Incomplete
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="border-slate-300 bg-slate-100 text-slate-700 font-semibold">
+                <AlertCircle className="mr-1 size-3 text-amber-500" /> Not set up
+              </Badge>
+            )}
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
-            Automated invoice transfer, general ledger mapping, and payment reconciliation with QuickBooks Online.
+            {connectionInfo.isConnected
+              ? "Automated invoice transfer, general ledger mapping, and payment reconciliation with QuickBooks Online."
+              : "QuickBooks Online integration is not configured. Add credentials in Integrations & Automation to enable accounting sync."}
           </p>
         </div>
         <div className="flex items-center gap-2">
           <Button
             size="sm"
             onClick={handleSyncAll}
-            disabled={isSyncingAll || (pendingCount === 0 && errorCount === 0)}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs cursor-pointer h-8"
+            disabled={isSyncingAll || !connectionInfo.isConnected || (pendingCount === 0 && errorCount === 0)}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs cursor-pointer h-8 disabled:opacity-50"
           >
             <RefreshCw className={`mr-1.5 size-3.5 ${isSyncingAll ? "animate-spin" : ""}`} />
-            {isSyncingAll ? "Syncing..." : `Sync All Pending (${pendingCount + errorCount})`}
+            {isSyncingAll ? "Syncing..." : !connectionInfo.isConnected ? "Setup Required" : `Sync All Pending (${pendingCount + errorCount})`}
           </Button>
         </div>
       </div>
+
+      {/* Informative notice when QuickBooks is not set up */}
+      {!connectionInfo.isConnected && (
+        <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50/70 p-4 text-xs text-amber-900">
+          <AlertCircle className="size-4 shrink-0 mt-0.5 text-amber-600" />
+          <div className="space-y-1">
+            <p className="font-semibold text-amber-950">QuickBooks Online: Not set up</p>
+            <p className="text-amber-800 leading-relaxed">
+              Live invoice synchronization requires QuickBooks Online OAuth credentials (Client ID, Client Secret, Realm ID) configured under <strong>Integrations &amp; Automation &gt; Connections</strong>. No live records or transactions are pushed without verified authentication.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* KPI Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -233,11 +296,15 @@ export function QuickBooksSyncCenter() {
         <Card className="border-slate-200 bg-white shadow-2xs">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-xs font-semibold text-slate-500 uppercase">Connection Status</CardTitle>
-            <div className="p-2 rounded-lg bg-blue-50 text-blue-600"><Building2 className="size-4" /></div>
+            <div className={`p-2 rounded-lg ${connectionInfo.isConnected ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-500"}`}>
+              <Building2 className="size-4" />
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="text-sm font-extrabold text-slate-900">{connectionInfo.companyName}</div>
-            <p className="text-[11px] text-slate-500 mt-1 font-mono">Realm: {connectionInfo.realmId}</p>
+            <div className="text-sm font-extrabold text-slate-900">{connectionInfo.statusLabel}</div>
+            <p className="text-[11px] text-slate-500 mt-1 font-mono">
+              {connectionInfo.realmId ? `Realm: ${connectionInfo.realmId}` : "No company connected"}
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -356,8 +423,9 @@ export function QuickBooksSyncCenter() {
                       ) : (
                         <Button
                           size="sm"
-                          className="h-7 text-[11px] bg-blue-600 hover:bg-blue-700 text-white font-semibold"
-                          disabled={syncingId === inv.id}
+                          className="h-7 text-[11px] bg-blue-600 hover:bg-blue-700 text-white font-semibold disabled:opacity-50"
+                          disabled={!connectionInfo.isConnected || syncingId === inv.id}
+                          title={!connectionInfo.isConnected ? "QuickBooks is not set up" : undefined}
                           onClick={() => handleSyncSingle(inv.id)}
                         >
                           <RotateCw className={`mr-1 size-3 ${syncingId === inv.id ? "animate-spin" : ""}`} />
