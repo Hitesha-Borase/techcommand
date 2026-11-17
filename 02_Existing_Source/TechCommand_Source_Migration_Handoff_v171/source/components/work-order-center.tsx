@@ -584,7 +584,7 @@ export function WorkOrderCenter({ initialAssetId, onAssetLoaded, initialTarget, 
           scheduledStart: editScheduledStart || null,
         }),
       });
-      const data = await res.json();
+      const data = (await res.json()) as { error?: string; status?: string };
       if (!res.ok) throw new Error(data.error || "Failed to update work order");
       return data;
     },

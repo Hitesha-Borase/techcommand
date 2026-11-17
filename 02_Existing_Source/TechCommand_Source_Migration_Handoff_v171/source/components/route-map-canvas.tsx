@@ -12,6 +12,7 @@ import {
   Locate,
   MapPin,
   Maximize2,
+  Minimize2,
   Navigation,
   RefreshCw,
   RotateCcw,
@@ -31,21 +32,55 @@ export function RouteMapCanvas({
   route,
   selectedStopId,
   onSelectStop,
+  isFullMap = false,
 }: {
   route: DispatchRoute | undefined;
   selectedStopId?: string;
   onSelectStop?: (stopId: string) => void;
+  isFullMap?: boolean;
 }) {
+  const outerContainerRef = useRef<HTMLDivElement | null>(null);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<any>(null);
   const markersLayerRef = useRef<any>(null);
   const polylineLayerRef = useRef<any>(null);
   const userMarkerRef = useRef<any>(null);
 
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [leafletLoaded, setLeafletLoaded] = useState(false);
   const [mapReady, setMapReady] = useState(false);
   const [locatingUser, setLocatingUser] = useState(false);
   const [userCoords, setUserCoords] = useState<[number, number] | null>(null);
+
+  const toggleFullscreen = useCallback(() => {
+    if (!outerContainerRef.current) return;
+    if (!document.fullscreenElement) {
+      outerContainerRef.current.requestFullscreen().catch(() => {});
+      setIsFullscreen(true);
+    } else {
+      document.exitFullscreen().catch(() => {});
+      setIsFullscreen(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const handler = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+      setTimeout(() => {
+        mapInstanceRef.current?.invalidateSize();
+      }, 150);
+    };
+    document.addEventListener("fullscreenchange", handler);
+    return () => document.removeEventListener("fullscreenchange", handler);
+  }, []);
+
+  useEffect(() => {
+    if (mapInstanceRef.current) {
+      setTimeout(() => {
+        mapInstanceRef.current?.invalidateSize();
+      }, 100);
+    }
+  }, [isFullMap]);
 
   const [activeStop, setActiveStop] = useState<ScheduledJob | null>(
     route?.stops?.[0] || null,
@@ -575,7 +610,16 @@ export function RouteMapCanvas({
   };
 
   return (
-    <div className="relative flex flex-col rounded-xl border border-slate-200 bg-slate-950 overflow-hidden shadow-inner min-h-[480px] sm:min-h-[540px]">
+    <div
+      ref={outerContainerRef}
+      className={`relative flex flex-col rounded-xl border border-slate-200 bg-slate-950 overflow-hidden shadow-inner transition-all duration-300 ${
+        isFullscreen
+          ? "fixed inset-0 z-[9999] h-screen w-screen rounded-none border-none"
+          : isFullMap
+            ? "min-h-[680px] sm:min-h-[760px] h-[760px]"
+            : "min-h-[480px] sm:min-h-[540px] h-[540px]"
+      }`}
+    >
       {/* Top Map Header & Controls */}
       <div className="absolute top-3 left-3 right-3 z-[400] flex flex-wrap items-center justify-between gap-2 pointer-events-none">
         {/* Left Technician Status Card */}
@@ -618,6 +662,19 @@ export function RouteMapCanvas({
           >
             <RotateCcw className="size-3.5" />
           </Button>
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            className="size-7 text-slate-300 hover:text-white hover:bg-slate-800"
+            onClick={toggleFullscreen}
+            title={isFullscreen ? "Exit Fullscreen" : "Fullscreen Map"}
+          >
+            {isFullscreen ? (
+              <Minimize2 className="size-3.5" />
+            ) : (
+              <Maximize2 className="size-3.5" />
+            )}
+          </Button>
 
           <div className="h-4 w-px bg-slate-700 mx-0.5" />
 
@@ -652,7 +709,13 @@ export function RouteMapCanvas({
       {/* Leaflet Interactive Map Canvas Container */}
       <div
         ref={mapContainerRef}
-        className="w-full flex-1 h-[480px] sm:h-[540px] z-[1] select-none outline-none"
+        className={`w-full flex-1 z-[1] select-none outline-none transition-all duration-300 ${
+          isFullscreen
+            ? "h-full min-h-full"
+            : isFullMap
+              ? "h-[680px] sm:h-[760px]"
+              : "h-[480px] sm:h-[540px]"
+        }`}
         style={{ background: "#0b1329" }}
       />
 

@@ -715,87 +715,119 @@ export function DispatchCenter({ mode }: { mode: "schedule" | "routes" }) {
           </section>
         </div>
       ) : (
-        <div className="grid gap-5 xl:grid-cols-[330px_1fr]">
-          <article className="rounded-xl border bg-white p-5">
-            <h2 className="font-bold text-slate-900">
-              Choose technician route
-            </h2>
-            <p className="mt-1 text-xs leading-5 text-slate-500">
-              Route records are created automatically when the first appointment
-              is assigned.
-            </p>
-            <div className="mt-4">
-              <Select
-                value={routeTechnicianId}
-                onValueChange={setSelectedTechnician}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select technician" />
-                </SelectTrigger>
-                <SelectContent>
-                  {data?.technicians.map((technician) => (
-                    <SelectItem key={technician.id} value={technician.id}>
-                      {technician.name} · {parseDisciplines(technician.serviceDisciplinesJson).map(value=>disciplineLabels[value]).join(" + ") || "Capability pending"}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {activeRoute ? (
-              <div className="mt-5 space-y-3 border-t pt-5 text-sm">
-                <div className="flex justify-between gap-3">
-                  <span className="text-slate-500">Stops</span>
-                  <span className="font-bold">{activeRoute.stops.length}</span>
-                </div>
-                <div className="flex justify-between gap-3">
-                  <span className="text-slate-500">Road miles</span>
-                  <span className="font-bold">
-                    {activeRoute.totalMiles ?? "Not calculated"}
-                  </span>
-                </div>
-                <div className="flex justify-between gap-3">
-                  <span className="text-slate-500">
-                    Drive estimate{activeRoute.planning?.includeReturn ? " · includes return" : ""}
-                  </span>
-                  <span className="font-bold">
-                    {activeRoute.totalDriveMinutes !== null
-                      ? `${activeRoute.totalDriveMinutes} min`
-                      : "Incomplete"}
-                  </span>
-                </div>
-                <div className="flex justify-between gap-3">
-                  <span className="text-slate-500">Road-data gaps</span>
-                  <span
-                    className={`font-bold ${activeRoute.missingTravelCount ? "text-amber-700" : "text-emerald-700"}`}
-                  >
-                    {activeRoute.missingTravelCount}
-                  </span>
-                </div>
-                {routeUrl(activeRoute.stops) ? (
-                  <Button asChild className="mt-2 w-full">
-                    <a
-                      href={routeUrl(activeRoute.stops)!}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      <Navigation /> Open full route <ExternalLink />
-                    </a>
-                  </Button>
-                ) : null}
-              </div>
-            ) : (
-              <p className="mt-5 rounded-lg bg-slate-50 p-4 text-sm text-slate-500">
-                This technician has no route for the selected date.
+        <div className={`grid gap-5 ${routeViewMode === "map" ? "grid-cols-1" : "xl:grid-cols-[330px_1fr]"}`}>
+          {routeViewMode !== "map" ? (
+            <article className="rounded-xl border bg-white p-5">
+              <h2 className="font-bold text-slate-900">
+                Choose technician route
+              </h2>
+              <p className="mt-1 text-xs leading-5 text-slate-500">
+                Route records are created automatically when the first appointment
+                is assigned.
               </p>
-            )}
-          </article>
+              <div className="mt-4">
+                <Select
+                  value={routeTechnicianId}
+                  onValueChange={setSelectedTechnician}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select technician" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {data?.technicians.map((technician) => (
+                      <SelectItem key={technician.id} value={technician.id}>
+                        {technician.name} · {parseDisciplines(technician.serviceDisciplinesJson).map(value=>disciplineLabels[value]).join(" + ") || "Capability pending"}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {activeRoute ? (
+                <div className="mt-5 space-y-3 border-t pt-5 text-sm">
+                  <div className="flex justify-between gap-3">
+                    <span className="text-slate-500">Stops</span>
+                    <span className="font-bold">{activeRoute.stops.length}</span>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <span className="text-slate-500">Road miles</span>
+                    <span className="font-bold">
+                      {activeRoute.totalMiles ?? "Not calculated"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <span className="text-slate-500">
+                      Drive estimate{activeRoute.planning?.includeReturn ? " · includes return" : ""}
+                    </span>
+                    <span className="font-bold">
+                      {activeRoute.totalDriveMinutes !== null
+                        ? `${activeRoute.totalDriveMinutes} min`
+                        : "Incomplete"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <span className="text-slate-500">Road-data gaps</span>
+                    <span
+                      className={`font-bold ${activeRoute.missingTravelCount ? "text-amber-700" : "text-emerald-700"}`}
+                    >
+                      {activeRoute.missingTravelCount}
+                    </span>
+                  </div>
+                  {routeUrl(activeRoute.stops) ? (
+                    <Button asChild className="mt-2 w-full">
+                      <a
+                        href={routeUrl(activeRoute.stops)!}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        <Navigation /> Open full route <ExternalLink />
+                      </a>
+                    </Button>
+                  ) : null}
+                </div>
+              ) : (
+                <p className="mt-5 rounded-lg bg-slate-50 p-4 text-sm text-slate-500">
+                  This technician has no route for the selected date.
+                </p>
+              )}
+            </article>
+          ) : null}
 
           <article className="overflow-hidden rounded-xl border bg-white">
             <div className="flex flex-wrap items-start justify-between gap-3 border-b p-5">
               <div>
-                <h2 className="font-bold text-slate-900">
-                  {activeRoute?.technicianName || "Daily route"}
-                </h2>
+                <div className="flex flex-wrap items-center gap-3">
+                  <h2 className="font-bold text-slate-900">
+                    {activeRoute?.technicianName || "Daily route"}
+                  </h2>
+                  {routeViewMode === "map" ? (
+                    <div className="w-64">
+                      <Select
+                        value={routeTechnicianId}
+                        onValueChange={setSelectedTechnician}
+                      >
+                        <SelectTrigger className="h-8 text-xs bg-slate-50">
+                          <SelectValue placeholder="Select technician" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {data?.technicians.map((technician) => (
+                            <SelectItem key={technician.id} value={technician.id}>
+                              {technician.name} · {parseDisciplines(technician.serviceDisciplinesJson).map(value=>disciplineLabels[value]).join(" + ") || "Capability pending"}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ) : null}
+                  {routeViewMode === "map" && activeRoute ? (
+                    <div className="flex items-center gap-2 text-xs text-slate-600 bg-slate-100 px-2.5 py-1 rounded-md font-semibold">
+                      <span>{activeRoute.stops.length} stops</span>
+                      <span>·</span>
+                      <span>{activeRoute.totalMiles ?? 0} mi</span>
+                      <span>·</span>
+                      <span>{activeRoute.totalDriveMinutes ?? 0} min</span>
+                    </div>
+                  ) : null}
+                </div>
                 <p className="mt-1 text-xs text-slate-500">
                   Use the arrows to preserve the exact field sequence. OpenStreetMap supplies live interactive routing and waypoint tracking.
                 </p>
@@ -842,7 +874,7 @@ export function DispatchCenter({ mode }: { mode: "schedule" | "routes" }) {
 
             {routeViewMode === "map" ? (
               <div className="p-4">
-                <RouteMapCanvas route={activeRoute} />
+                <RouteMapCanvas route={activeRoute} isFullMap />
               </div>
             ) : (
               <div className="space-y-4 p-4">

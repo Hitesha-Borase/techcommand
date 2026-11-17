@@ -120,7 +120,7 @@ function fullAddress(row: Record<string, unknown>) {
     .join(", ");
 }
 
-async function loadDispatch(date: string, identity: PortalIdentity) {
+async function loadDispatch(date: string, identity: PortalIdentity, allWork = false) {
   const technicianOnly = identity.role === "technician";
   const technicianId = technicianOnly ? identity.technicianId : null;
   if (technicianOnly && !technicianId)
@@ -153,8 +153,32 @@ async function loadDispatch(date: string, identity: PortalIdentity) {
         (SELECT COUNT(*) FROM work_order_assignments wa
           WHERE wa.work_order_id = w.id AND wa.status IN ('offered','assigned','accepted','dispatched','arrived')) < w.required_technician_count)
     ORDER BY CASE w.priority WHEN 'urgent' THEN 1 WHEN 'high' THEN 2 ELSE 3 END, w.created_at`;
-  const includeUnscheduledAssignments = technicianOnly && date === defaultDate();
-  const scheduledSql = `SELECT w.id, w.external_id AS externalId, w.external_source AS externalSource,
+  const includeUnscheduledAssignments = technicianOnly && (allWork || date === defaultDate());
+  const scheduledSql = allWork
+    ? `SELECT w.id, w.external_id AS externalId, w.external_source AS externalSource,
+          w.service_type AS serviceType, w.summary, w.priority, w.status,
+          w.required_technician_count AS requiredTechnicianCount,
+          w.scheduled_start AS scheduledStart, w.scheduled_end AS scheduledEnd,
+          a.name AS accountName, l.id AS locationId, l.name AS locationName,
+          l.address_1 AS address1, l.address_2 AS address2, l.city, l.state,
+          l.postal_code AS postalCode, l.latitude, l.longitude,
+          wa.id AS assignmentId, wa.technician_id AS technicianId, wa.role AS assignmentRole,
+          wa.status AS assignmentStatus, COALESCE(u.display_name, t.technician_code) AS technicianName,
+          t.technician_code AS technicianCode, r.id AS routeId, r.status AS routeStatus,
+          rs.id AS stopId, rs.stop_order AS stopOrder, rs.planned_arrival AS plannedArrival,
+          rs.planned_departure AS plannedDeparture, rs.leg_miles AS legMiles,
+          rs.drive_minutes AS driveMinutes, rs.travel_source AS travelSource,
+          rs.status AS stopStatus
+     FROM work_order_assignments wa JOIN work_orders w ON w.id = wa.work_order_id
+     JOIN accounts a ON a.id = w.account_id JOIN locations l ON l.id = w.location_id
+     JOIN technicians t ON t.id = wa.technician_id LEFT JOIN users u ON u.id = t.user_id
+     LEFT JOIN routes r ON r.technician_id = wa.technician_id AND r.route_date = substr(w.scheduled_start, 1, 10)
+     LEFT JOIN route_stops rs ON rs.route_id = r.id AND rs.work_order_id = w.id
+    WHERE w.organization_id = ?
+      AND wa.status IN ('offered','assigned','accepted','dispatched','arrived','submitted','completed')
+      ${technicianOnly ? "AND wa.technician_id = ?" : ""}
+    ORDER BY COALESCE(w.scheduled_start, '9999-99-99') DESC, COALESCE(rs.stop_order, 999)`
+    : `SELECT w.id, w.external_id AS externalId, w.external_source AS externalSource,
           w.service_type AS serviceType, w.summary, w.priority, w.status,
           w.required_technician_count AS requiredTechnicianCount,
           w.scheduled_start AS scheduledStart, w.scheduled_end AS scheduledEnd,
@@ -178,7 +202,17 @@ async function loadDispatch(date: string, identity: PortalIdentity) {
       AND (rs.id IS NOT NULL OR substr(w.scheduled_start, 1, 10) = ?${includeUnscheduledAssignments ? " OR w.scheduled_start IS NULL" : ""})
       ${technicianOnly ? "AND wa.technician_id = ?" : ""}
     ORDER BY COALESCE(u.display_name, t.technician_code), COALESCE(rs.stop_order, 999), w.scheduled_start`;
-  const routeSql = `SELECT r.id, r.technician_id AS technicianId, r.route_date AS routeDate,
+  const routeSql = allWork
+    ? `SELECT r.id, r.technician_id AS technicianId, r.route_date AS routeDate,
+          r.status, r.start_location_json AS startLocationJson, r.total_miles AS totalMiles,
+          r.total_drive_minutes AS totalDriveMinutes, r.optimized_at AS optimizedAt,
+          r.record_version AS version, r.optimization_snapshot_json AS planningJson,
+          COALESCE(u.display_name, t.technician_code) AS technicianName,
+          t.technician_code AS technicianCode
+     FROM routes r JOIN technicians t ON t.id = r.technician_id LEFT JOIN users u ON u.id = t.user_id
+    WHERE r.organization_id = ? ${technicianOnly ? "AND r.technician_id = ?" : ""}
+    ORDER BY r.route_date DESC`
+    : `SELECT r.id, r.technician_id AS technicianId, r.route_date AS routeDate,
           r.status, r.start_location_json AS startLocationJson, r.total_miles AS totalMiles,
           r.total_drive_minutes AS totalDriveMinutes, r.optimized_at AS optimizedAt,
           r.record_version AS version, r.optimization_snapshot_json AS planningJson,
@@ -196,17 +230,25 @@ async function loadDispatch(date: string, identity: PortalIdentity) {
       technicianOnly
         ? env.DB.prepare(`${availableSql} LIMIT 0`).bind(TECHFLEX_ORG_ID)
         : env.DB.prepare(availableSql).bind(TECHFLEX_ORG_ID),
-      technicianOnly
-        ? env.DB.prepare(scheduledSql).bind(
-            date,
-            TECHFLEX_ORG_ID,
-            date,
-            technicianId,
-          )
-        : env.DB.prepare(scheduledSql).bind(date, TECHFLEX_ORG_ID, date),
-      technicianOnly
-        ? env.DB.prepare(routeSql).bind(TECHFLEX_ORG_ID, date, technicianId)
-        : env.DB.prepare(routeSql).bind(TECHFLEX_ORG_ID, date),
+      allWork
+        ? (technicianOnly
+            ? env.DB.prepare(scheduledSql).bind(TECHFLEX_ORG_ID, technicianId)
+            : env.DB.prepare(scheduledSql).bind(TECHFLEX_ORG_ID))
+        : (technicianOnly
+            ? env.DB.prepare(scheduledSql).bind(
+                date,
+                TECHFLEX_ORG_ID,
+                date,
+                technicianId,
+              )
+            : env.DB.prepare(scheduledSql).bind(date, TECHFLEX_ORG_ID, date)),
+      allWork
+        ? (technicianOnly
+            ? env.DB.prepare(routeSql).bind(TECHFLEX_ORG_ID, technicianId)
+            : env.DB.prepare(routeSql).bind(TECHFLEX_ORG_ID))
+        : (technicianOnly
+            ? env.DB.prepare(routeSql).bind(TECHFLEX_ORG_ID, date, technicianId)
+            : env.DB.prepare(routeSql).bind(TECHFLEX_ORG_ID, date)),
     ]);
 
   const technicians = techniciansResult.results as Array<
@@ -310,13 +352,15 @@ export async function GET(request: Request) {
       "technician",
     ]);
     await releasePendingSubmissionReviews();
-    const date = new URL(request.url).searchParams.get("date") || defaultDate();
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date))
+    const url = new URL(request.url);
+    const allWork = url.searchParams.get("all") === "true" || url.searchParams.get("scope") === "all";
+    const date = url.searchParams.get("date") || defaultDate();
+    if (!allWork && !/^\d{4}-\d{2}-\d{2}$/.test(date))
       return Response.json(
         { error: "Use a valid service date." },
         { status: 400 },
       );
-    return Response.json(await loadDispatch(date, identity));
+    return Response.json(await loadDispatch(date, identity, allWork));
   } catch (error) {
     return apiError(error);
   }
@@ -584,7 +628,8 @@ export async function PATCH(request: Request) {
         { status: 400 },
       );
 
-    if (false && technician.serviceDisciplinesJson !== null && technician.serviceDisciplinesJson !== undefined && !parseDisciplines(technician.serviceDisciplinesJson).includes(jobDiscipline(String(workOrder.serviceType))))
+    const techRecord = technician as Record<string, any>;
+    if (false && techRecord?.serviceDisciplinesJson != null && !parseDisciplines(techRecord.serviceDisciplinesJson).includes(jobDiscipline(String(workOrder?.serviceType))))
       return Response.json({error:"Choose a technician with the capability for this job: Biomedical / PM or DME / Mobility. Update Service capabilities on the technician roster if needed."},{status:409});
     const [latestEstimate, assignedRates] = await Promise.all([
       env.DB.prepare(`SELECT pricing_snapshot_json AS pricingSnapshotJson FROM estimates WHERE work_order_id=? ORDER BY created_at DESC LIMIT 1`).bind(input.workOrderId).first<{pricingSnapshotJson:string}>(),

@@ -17,7 +17,11 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   BadgeCheck,
+  Briefcase,
+  Calendar,
   CalendarDays,
+  Check,
+  CheckCircle2,
   CircuitBoard,
   CircleAlert,
   CircleDollarSign,
@@ -26,6 +30,7 @@ import {
   MapPin,
   Navigation,
   Route,
+  Search,
   ShieldCheck,
   UserRound,
   Wrench,
@@ -33,6 +38,7 @@ import {
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import type {AcademyTrack} from "@/lib/academy-catalog";
@@ -177,6 +183,87 @@ function travel(job: ScheduledJob) {
   return "Travel pending admin verification";
 }
 
+function getJobDateCategory(scheduledStart: string | null | undefined): "today" | "upcoming" | "past" | "unscheduled" {
+  if (!scheduledStart) return "unscheduled";
+  const startDay = scheduledStart.slice(0, 10);
+  const currentDay = today();
+  if (startDay === currentDay) return "today";
+  if (startDay > currentDay) return "upcoming";
+  return "past";
+}
+
+function formatJobDateBadge(scheduledStart: string | null | undefined) {
+  if (!scheduledStart) {
+    return {
+      label: "Unscheduled",
+      className: "border-slate-300 bg-slate-100 text-slate-700",
+    };
+  }
+  const startDay = scheduledStart.slice(0, 10);
+  const currentDay = today();
+  if (startDay === currentDay) {
+    return {
+      label: `Today · ${time(scheduledStart)}`,
+      className: "border-emerald-300 bg-emerald-100 text-emerald-800 font-bold",
+    };
+  }
+  const d = new Date(scheduledStart);
+  const formatted = Number.isNaN(d.getTime())
+    ? startDay
+    : d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  if (startDay > currentDay) {
+    return {
+      label: `Upcoming: ${formatted}`,
+      className: "border-blue-300 bg-blue-50 text-blue-800",
+    };
+  }
+  return {
+    label: `Prior: ${formatted}`,
+    className: "border-amber-300 bg-amber-50 text-amber-800",
+  };
+}
+
+function formatJobStatusBadge(job: { status: string; assignmentStatus: string }) {
+  const isCompleted = job.status === "completed" || job.assignmentStatus === "submitted" || job.status === "technician_submitted";
+  const isInProgress = job.status === "in_progress" || job.assignmentStatus === "service_in_progress";
+  const isEnRoute = job.assignmentStatus === "en_route";
+  const isArrived = job.assignmentStatus === "arrived";
+
+  if (isCompleted) {
+    return {
+      label: "Completed",
+      className: "border-emerald-300 bg-emerald-600 text-white font-bold shadow-sm",
+      isCompleted: true,
+    };
+  }
+  if (isInProgress) {
+    return {
+      label: "In Progress",
+      className: "border-amber-400 bg-amber-500 text-white font-bold shadow-sm",
+      isCompleted: false,
+    };
+  }
+  if (isEnRoute) {
+    return {
+      label: "En Route",
+      className: "border-blue-300 bg-blue-600 text-white font-bold",
+      isCompleted: false,
+    };
+  }
+  if (isArrived) {
+    return {
+      label: "Arrived",
+      className: "border-indigo-300 bg-indigo-600 text-white font-bold",
+      isCompleted: false,
+    };
+  }
+  return {
+    label: "Assigned",
+    className: "border-slate-200 bg-slate-100 text-slate-700",
+    isCompleted: false,
+  };
+}
+
 export function TechnicianFieldPortal({
   displayName,
   userId,
@@ -198,9 +285,19 @@ export function TechnicianFieldPortal({
   const [scannerOpen,setScannerOpen]=useState(false);
   const [careerReviewRequested, setCareerReviewRequested] = useState(false);
   const [completionJob, setCompletionJob] = useState<ScheduledJob | null>(null);
+
+  const [allWorkDateFilter, setAllWorkDateFilter] = useState<"all" | "completed" | "active" | "today" | "upcoming" | "past" | "unscheduled">("all");
+  const [allWorkDisciplineFilter, setAllWorkDisciplineFilter] = useState("all");
+  const [allWorkSearch, setAllWorkSearch] = useState("");
+
   const dispatch = useQuery({
     queryKey: ["dispatch", serviceDate, "technician"],
     queryFn: () => api<DispatchPayload>(`/api/dispatch?date=${serviceDate}`),
+  });
+
+  const allDispatch = useQuery({
+    queryKey: ["dispatch-all", "technician"],
+    queryFn: () => api<DispatchPayload>("/api/dispatch?all=true"),
   });
   const pay = useQuery({
     queryKey: ["technician-pay"],
@@ -232,6 +329,7 @@ export function TechnicianFieldPortal({
       }), setCompletionJob),
     onSuccess: async (_data, variables) => {
       await queryClient.invalidateQueries({ queryKey: ["dispatch"] });
+      await queryClient.invalidateQueries({ queryKey: ["dispatch-all"] });
       captureOperationalEvent("technician_status_updated", { status: variables.state });
       if (variables.state === "service_in_progress") {
         captureOperationalEvent("technician_completion_opened", { status: "in_progress" });
@@ -267,8 +365,44 @@ export function TechnicianFieldPortal({
     ) || dispatch.data?.routes[0];
   const allJobs = technicianAssignments(activeRoute?.stops || [], dispatch.data?.scheduled || []);
   const jobs = allJobs.filter(job => disciplineFilter === "all" || (job.serviceType.startsWith("biomed_") ? "biomedical" : "dme_mobility") === disciplineFilter);
+  const allAssignedJobs = allDispatch.data?.scheduled || [];
+  const completedJobsCount = allAssignedJobs.filter(j => j.status === "completed" || j.assignmentStatus === "submitted" || j.status === "technician_submitted").length;
+  const activeJobsCount = allAssignedJobs.length - completedJobsCount;
+  const todayJobsCount = allAssignedJobs.filter(j => getJobDateCategory(j.scheduledStart) === "today").length;
+  const upcomingJobsCount = allAssignedJobs.filter(j => getJobDateCategory(j.scheduledStart) === "upcoming").length;
+  const pastJobsCount = allAssignedJobs.filter(j => getJobDateCategory(j.scheduledStart) === "past").length;
+  const unscheduledJobsCount = allAssignedJobs.filter(j => getJobDateCategory(j.scheduledStart) === "unscheduled").length;
+
+  const filteredAllJobs = allAssignedJobs.filter((job) => {
+    if (allWorkDisciplineFilter !== "all") {
+      const isBio = job.serviceType.startsWith("biomed_") || job.serviceType.includes("preventive_maintenance");
+      const category = isBio ? "biomedical" : "dme_mobility";
+      if (category !== allWorkDisciplineFilter) return false;
+    }
+    const isCompleted = job.status === "completed" || job.assignmentStatus === "submitted" || job.status === "technician_submitted";
+    if (allWorkDateFilter === "completed") {
+      if (!isCompleted) return false;
+    } else if (allWorkDateFilter === "active") {
+      if (isCompleted) return false;
+    } else if (allWorkDateFilter !== "all") {
+      const cat = getJobDateCategory(job.scheduledStart);
+      if (cat !== allWorkDateFilter) return false;
+    }
+    if (allWorkSearch.trim()) {
+      const q = allWorkSearch.toLowerCase();
+      const match =
+        job.externalId?.toLowerCase().includes(q) ||
+        job.accountName?.toLowerCase().includes(q) ||
+        job.address?.toLowerCase().includes(q) ||
+        job.summary?.toLowerCase().includes(q) ||
+        job.serviceType?.toLowerCase().includes(q);
+      if (!match) return false;
+    }
+    return true;
+  });
+
   const canCreateBiomedical = true;
-  const canUseBiomedical = canCreateBiomedical || allJobs.some(job=>job.serviceType.startsWith("biomed_"));
+  const canUseBiomedical = canCreateBiomedical || allJobs.some(job=>job.serviceType.startsWith("biomed_")) || allAssignedJobs.some(job=>job.serviceType.startsWith("biomed_"));
   const pendingPay = pay.data?.summary.reduce(
     (sum, item) => sum + Number(item.pendingCents || 0),
     0,
@@ -336,15 +470,25 @@ export function TechnicianFieldPortal({
                 Good morning, {displayName.split(" ")[0]}
               </h1>
               <p className="mt-1 text-sm text-blue-100/80">
-                {dispatch.isLoading
-                  ? "Loading today’s assignments…"
-                  : `${jobs.length} assignment${jobs.length === 1 ? "" : "s"} · ${activeRoute?.totalMiles ?? "travel pending"} ${activeRoute?.totalMiles !== null && activeRoute?.totalMiles !== undefined ? "verified miles" : ""}`}
+                {dispatch.isLoading || allDispatch.isLoading
+                  ? "Loading assignments…"
+                  : `Today: ${jobs.length} · ${completedJobsCount > 0 ? `${completedJobsCount} completed · ` : ""}All work: ${allAssignedJobs.length} assigned · ${activeRoute?.totalMiles ?? "travel pending"} ${activeRoute?.totalMiles !== null && activeRoute?.totalMiles !== undefined ? "verified miles" : ""}`}
               </p>
             </div>
           </div>
-          <span className="inline-flex items-center gap-2 rounded-full bg-emerald-400/15 px-3 py-2 text-xs font-bold text-emerald-100">
-            <span className="size-2 rounded-full bg-emerald-300" /> Your work
-          </span>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setTab("all_work")}
+              className="border-white/20 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+            >
+              <Briefcase className="mr-1.5 size-3.5" /> All work ({allAssignedJobs.length})
+            </Button>
+            <span className="inline-flex items-center gap-2 rounded-full bg-emerald-400/15 px-3 py-1.5 text-xs font-bold text-emerald-100">
+              <span className="size-2 rounded-full bg-emerald-300" /> Active
+            </span>
+          </div>
         </section>
 
         {dispatch.error ? (
@@ -355,21 +499,24 @@ export function TechnicianFieldPortal({
         ) : null}
 
         <Tabs value={tab} onValueChange={(value) => { setTab(value); captureOperationalEvent("technician_tab_viewed", { tab: value }); }}>
-          <TabsList className="techcommand-field-tabs grid h-auto w-full grid-cols-2 gap-1 group-data-[orientation=horizontal]/tabs:h-auto sm:grid-cols-3 lg:grid-cols-7 bg-white p-1 shadow-sm">
+          <TabsList className="techcommand-field-tabs grid h-auto w-full grid-cols-2 gap-1 group-data-[orientation=horizontal]/tabs:h-auto sm:grid-cols-4 lg:grid-cols-8 bg-white p-1 shadow-sm">
             <TabsTrigger value="today" className="py-2.5">
-              <CalendarDays /> {serviceDate === today() ? "Today" : "Assignments"}
+              <CalendarDays className="size-4 mr-1.5" /> {serviceDate === today() ? `Today (${jobs.length})` : "Day Schedule"}
+            </TabsTrigger>
+            <TabsTrigger value="all_work" className="py-2.5">
+              <Briefcase className="size-4 mr-1.5" /> All Work {allAssignedJobs.length > 0 ? `(${allAssignedJobs.length})` : ""}
             </TabsTrigger>
             {canUseBiomedical && <TabsTrigger value="assets" className="py-2.5">Biomedical / PM</TabsTrigger>}
             <TabsTrigger value="route" className="py-2.5">
-              <Route /> Route
+              <Route className="size-4 mr-1.5" /> Route
             </TabsTrigger>
             <TabsTrigger value="pay" className="py-2.5">
-              <CircleDollarSign /> Pay
+              <CircleDollarSign className="size-4 mr-1.5" /> Pay
             </TabsTrigger>
-            <TabsTrigger value="training">Field training</TabsTrigger>
+            <TabsTrigger value="training" className="py-2.5">Field training</TabsTrigger>
             <TabsTrigger value="academy" className="py-2.5">My Career</TabsTrigger>
             <TabsTrigger value="profile" className="py-2.5">
-              <UserRound /> Profile
+              <UserRound className="size-4 mr-1.5" /> Profile
             </TabsTrigger>
           </TabsList>
 
@@ -381,7 +528,17 @@ export function TechnicianFieldPortal({
           }} /></Suspense> : null}</details></TabsContent>
           <TabsContent value="today" className="mt-5 space-y-4">
             <details onToggle={event=>setExtrasOpen(event.currentTarget.open)} className="rounded-lg border p-3"><summary className="cursor-pointer text-sm font-semibold">Available work / learning (optional)</summary>{extrasOpen ? <Suspense fallback={<p>Loading optional tools…</p>}>{capability.data?.serviceDisciplines.length?<BiomedicalAcademy compact track={canCreateBiomedical?"biomedical":"dme_mobility"} onOpen={()=>setTab("academy")}/>:null}<AvailableJobs /></Suspense> : null}</details>
-            <div className="flex flex-wrap gap-2" aria-label="Assignment work type">{[["all","All assignments"],["biomedical","Biomedical / PM"],["dme_mobility","DME / Mobility"]].map(([value,label])=><Button key={value} variant={disciplineFilter===value?"default":"outline"} onClick={()=>setDisciplineFilter(value)}>{label}</Button>)}</div>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap gap-2" aria-label="Assignment work type">{[["all","All assignments"],["biomedical","Biomedical / PM"],["dme_mobility","DME / Mobility"]].map(([value,label])=><Button key={value} variant={disciplineFilter===value?"default":"outline"} onClick={()=>setDisciplineFilter(value)}>{label}</Button>)}</div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setTab("all_work")}
+                className="text-blue-700 border-blue-200 hover:bg-blue-50"
+              >
+                <Briefcase className="mr-1.5 size-4" /> View All Assignments ({allAssignedJobs.length})
+              </Button>
+            </div>
             {serviceDate !== today() && <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-cyan-200 bg-cyan-50 p-4 text-sm">
               <p>Showing the scanned asset&apos;s scheduled assignments for <strong>{serviceDate}</strong>.</p>
               <Button variant="outline" onClick={() => { setServiceDate(today()); setActiveJob(""); }}>Back to today</Button>
@@ -404,31 +561,57 @@ export function TechnicianFieldPortal({
                 <CalendarDays className="mx-auto size-7 text-blue-600" />
                 <p className="mt-3 font-bold">No assigned work for {serviceDate}</p>
                 <p className="mt-1 text-sm text-slate-500">
-                  Work you create or receive appears here, even before a time is chosen.
+                  {allAssignedJobs.length > 0
+                    ? `You have ${allAssignedJobs.length} work order${allAssignedJobs.length === 1 ? "" : "s"} assigned on other dates.`
+                    : "Work you create or receive appears here, even before a time is chosen."}
                 </p>
+                {allAssignedJobs.length > 0 && (
+                  <Button
+                    variant="default"
+                    className="mt-4 bg-blue-600 hover:bg-blue-700 text-white"
+                    onClick={() => setTab("all_work")}
+                  >
+                    <Briefcase className="mr-2 size-4" /> View All {allAssignedJobs.length} Assigned Jobs
+                  </Button>
+                )}
               </div>
             ) : null}
             {jobs.map((job, index) => {
               const expanded = activeJob === job.assignmentId;
               const startAction = startWorkOrderAction(job);
               const travelAction = optionalTravelAction(job);
+              const statusBadge = formatJobStatusBadge(job);
+              const isCompleted = statusBadge.isCompleted;
+
               return (
                 <article
                   key={job.assignmentId}
-                  className={`rounded-xl border bg-white p-4 transition ${expanded ? "border-blue-300 ring-2 ring-blue-100" : ""}`}
+                  className={`rounded-xl border bg-white p-4 transition ${expanded ? "border-blue-300 ring-2 ring-blue-100" : ""} ${isCompleted ? "border-emerald-200 bg-emerald-50/20" : ""}`}
                 >
                   <div className="flex gap-3">
-                    <span
-                      className={`grid size-10 shrink-0 place-items-center rounded-full text-sm font-bold ${index === 0 ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}
-                    >
-                      {index + 1}
-                    </span>
+                    {isCompleted ? (
+                      <span className="grid size-10 shrink-0 place-items-center rounded-full bg-emerald-600 text-white font-bold shadow-sm">
+                        <Check className="size-5 stroke-[2.5]" />
+                      </span>
+                    ) : (
+                      <span
+                        className={`grid size-10 shrink-0 place-items-center rounded-full text-sm font-bold ${statusBadge.label === "In Progress" ? "bg-amber-500 text-white" : index === 0 ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}
+                      >
+                        {index + 1}
+                      </span>
+                    )}
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-start justify-between gap-2">
                         <div>
-                          <p className="font-mono text-xs font-bold text-blue-700">
-                            {job.externalId}
-                          </p>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-mono text-xs font-bold text-blue-700">
+                              {job.externalId}
+                            </p>
+                            <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold ${statusBadge.className}`}>
+                              {statusBadge.isCompleted && <CheckCircle2 className="size-3.5" />}
+                              {statusBadge.label}
+                            </span>
+                          </div>
                           <h2 className="mt-1 font-bold">
                             {job.serviceType.startsWith("biomed_") ? job.accountName : service(job.serviceType)}
                           </h2>
@@ -437,6 +620,12 @@ export function TechnicianFieldPortal({
                           {time(job.scheduledStart)}
                         </Badge>
                       </div>
+                      {isCompleted && (
+                        <div className="mt-2 flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800">
+                          <CheckCircle2 className="size-4 shrink-0 text-emerald-600" />
+                          <span>Work order completed & submitted! Service report filed in admin review.</span>
+                        </div>
+                      )}
                       <p className="mt-2 text-sm font-semibold text-slate-600">
                         {job.serviceType.startsWith("biomed_") ? (biomedicalActivities.find(item=>item.serviceType===job.serviceType)?.label||service(job.serviceType)) : job.accountName}
                       </p>
@@ -520,6 +709,356 @@ export function TechnicianFieldPortal({
                 </article>
               );
             })}
+          </TabsContent>
+
+          <TabsContent value="all_work" className="mt-5 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-bold flex items-center gap-2">
+                  <Briefcase className="size-5 text-blue-600" /> All Assigned Work
+                </h2>
+                <p className="text-sm text-slate-600">
+                  Every work order assigned to your technician profile across all dates (past, today, upcoming, and unscheduled).
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  void allDispatch.refetch();
+                  toast.success("Assignments refreshed");
+                }}
+              >
+                Refresh
+              </Button>
+            </div>
+
+            {/* Metrics cards */}
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+              <div className="rounded-xl border bg-white p-3.5 shadow-sm">
+                <p className="text-xs font-semibold text-slate-500">Total Work</p>
+                <p className="mt-1 text-2xl font-bold text-slate-900">{allAssignedJobs.length}</p>
+                <p className="text-[11px] text-slate-400">All assignments</p>
+              </div>
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 p-3.5 shadow-sm">
+                <p className="text-xs font-bold text-emerald-800 flex items-center gap-1">
+                  <CheckCircle2 className="size-3.5" /> Completed
+                </p>
+                <p className="mt-1 text-2xl font-bold text-emerald-900">{completedJobsCount}</p>
+                <p className="text-[11px] text-emerald-700">Submitted & done</p>
+              </div>
+              <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-3.5 shadow-sm">
+                <p className="text-xs font-semibold text-blue-700">To-Do / Active</p>
+                <p className="mt-1 text-2xl font-bold text-blue-800">{activeJobsCount}</p>
+                <p className="text-[11px] text-blue-600">Pending service</p>
+              </div>
+              <div className="rounded-xl border bg-white p-3.5 shadow-sm">
+                <p className="text-xs font-semibold text-slate-500">Today</p>
+                <p className="mt-1 text-2xl font-bold text-slate-900">{todayJobsCount}</p>
+                <p className="text-[11px] text-slate-400">Scheduled {serviceDate}</p>
+              </div>
+              <div className="rounded-xl border bg-white p-3.5 shadow-sm">
+                <p className="text-xs font-semibold text-slate-500">Prior / Scheduled</p>
+                <p className="mt-1 text-2xl font-bold text-amber-700">{pastJobsCount}</p>
+                <p className="text-[11px] text-slate-400">Past dates</p>
+              </div>
+            </div>
+
+            {/* Filters & Search */}
+            <div className="rounded-xl border bg-white p-4 shadow-sm space-y-3">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+                <Input
+                  type="text"
+                  placeholder="Search by Work Order #, Account name, Address, Equipment..."
+                  value={allWorkSearch}
+                  onChange={(e) => setAllWorkSearch(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-1 border-t">
+                {/* Date & Status filter pills */}
+                <div className="flex flex-wrap gap-1.5" aria-label="Filter by schedule period">
+                  {[
+                    ["all", `All (${allAssignedJobs.length})`],
+                    ["completed", `✓ Completed (${completedJobsCount})`],
+                    ["active", `To-Do (${activeJobsCount})`],
+                    ["today", `Today (${todayJobsCount})`],
+                    ["past", `Prior (${pastJobsCount})`],
+                    ["unscheduled", `Unscheduled (${unscheduledJobsCount})`],
+                  ].map(([value, label]) => (
+                    <Button
+                      key={value}
+                      size="sm"
+                      variant={allWorkDateFilter === value ? "default" : "outline"}
+                      onClick={() => setAllWorkDateFilter(value as any)}
+                      className={`h-8 text-xs ${allWorkDateFilter === value && value === "completed" ? "bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600" : ""}`}
+                    >
+                      {label}
+                    </Button>
+                  ))}
+                </div>
+
+                {/* Discipline filter pills */}
+                <div className="flex flex-wrap gap-1.5" aria-label="Filter by discipline">
+                  {[
+                    ["all", "All types"],
+                    ["biomedical", "Biomedical / PM"],
+                    ["dme_mobility", "DME / Mobility"],
+                  ].map(([value, label]) => (
+                    <Button
+                      key={value}
+                      size="sm"
+                      variant={allWorkDisciplineFilter === value ? "secondary" : "ghost"}
+                      onClick={() => setAllWorkDisciplineFilter(value)}
+                      className="h-8 text-xs"
+                    >
+                      {label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Job List */}
+            {allDispatch.isLoading ? (
+              <div className="rounded-xl border bg-white p-10 text-center text-sm text-slate-500">
+                Loading all assigned work orders…
+              </div>
+            ) : null}
+
+            {allDispatch.isError ? (
+              <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+                Could not load assignments: {allDispatch.error.message}
+                <Button variant="outline" className="ml-2" onClick={() => { void allDispatch.refetch(); }}>Retry</Button>
+              </div>
+            ) : null}
+
+            {allDispatch.isSuccess && !filteredAllJobs.length ? (
+              <div className="rounded-xl border bg-white p-10 text-center">
+                <Briefcase className="mx-auto size-7 text-slate-400" />
+                <p className="mt-3 font-bold">No assignments match your filter</p>
+                <p className="mt-1 text-sm text-slate-500">
+                  Try clearing the search or changing the date/status filters.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-3"
+                  onClick={() => {
+                    setAllWorkSearch("");
+                    setAllWorkDateFilter("all");
+                    setAllWorkDisciplineFilter("all");
+                  }}
+                >
+                  Reset filters
+                </Button>
+              </div>
+            ) : null}
+
+            <div className="space-y-3">
+              {filteredAllJobs.map((job, index) => {
+                const expanded = activeJob === job.assignmentId;
+                const startAction = startWorkOrderAction(job);
+                const travelAction = optionalTravelAction(job);
+                const dateBadge = formatJobDateBadge(job.scheduledStart);
+                const statusBadge = formatJobStatusBadge(job);
+                const isBiomed = job.serviceType.startsWith("biomed_") || job.serviceType.includes("preventive_maintenance");
+
+                return (
+                  <article
+                    key={job.assignmentId}
+                    className={`rounded-xl border bg-white p-4 shadow-sm transition hover:shadow-md ${
+                      expanded ? "border-blue-400 ring-2 ring-blue-100" : ""
+                    } ${statusBadge.isCompleted ? "border-emerald-200 bg-emerald-50/20" : ""}`}
+                  >
+                    <div className="flex gap-3">
+                      {statusBadge.isCompleted ? (
+                        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-emerald-600 text-white font-bold shadow-sm">
+                          <Check className="size-5 stroke-[2.5]" />
+                        </span>
+                      ) : (
+                        <span
+                          className={`grid size-10 shrink-0 place-items-center rounded-full text-sm font-bold ${
+                            statusBadge.label === "In Progress"
+                              ? "bg-amber-500 text-white"
+                              : dateBadge.label.startsWith("Today")
+                              ? "bg-blue-600 text-white"
+                              : "bg-slate-100 text-slate-700"
+                          }`}
+                        >
+                          {index + 1}
+                        </span>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-mono text-xs font-bold text-blue-700">
+                                {job.externalId}
+                              </span>
+                              <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold ${statusBadge.className}`}>
+                                {statusBadge.isCompleted && <CheckCircle2 className="size-3.5" />}
+                                {statusBadge.label}
+                              </span>
+                              <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium ${dateBadge.className}`}>
+                                {dateBadge.label}
+                              </span>
+                              <Badge variant="outline" className={isBiomed ? "border-purple-300 bg-purple-50 text-purple-700" : "border-cyan-300 bg-cyan-50 text-cyan-700"}>
+                                {isBiomed ? "Biomedical / PM" : "DME / Mobility"}
+                              </Badge>
+                            </div>
+                            <h3 className="mt-1.5 text-base font-bold text-slate-900">
+                              {job.serviceType.startsWith("biomed_") ? job.accountName : service(job.serviceType)}
+                            </h3>
+                          </div>
+                          <Badge variant="outline" className="text-xs">
+                            Priority: {job.priority}
+                          </Badge>
+                        </div>
+
+                        {statusBadge.isCompleted && (
+                          <div className="mt-2.5 flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800">
+                            <CheckCircle2 className="size-4 shrink-0 text-emerald-600" />
+                            <span>Work order completed & submitted! Service report filed in admin review.</span>
+                          </div>
+                        )}
+
+                        <p className="mt-2 text-sm font-semibold text-slate-700">
+                          {job.serviceType.startsWith("biomed_")
+                            ? (biomedicalActivities.find(item => item.serviceType === job.serviceType)?.label || service(job.serviceType))
+                            : job.accountName}
+                        </p>
+                        <p className="mt-1 flex items-start gap-1.5 text-sm text-slate-500">
+                          <MapPin className="mt-0.5 size-3.5 shrink-0" />
+                          {job.address}
+                        </p>
+                        <p className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-slate-500">
+                          <Clock3 className="size-3.5" />
+                          {travel(job)}
+                        </p>
+
+                        {expanded && (
+                          <div className="mt-3 rounded-lg bg-slate-50 p-3 text-sm leading-6 text-slate-700 space-y-1">
+                            <p className="font-semibold">{job.summary}</p>
+                            <p className="text-xs text-slate-500">
+                              Role: {job.assignmentRole} · Work Order Status: {job.status.replaceAll("_", " ")} · Field Status: {job.assignmentStatus.replaceAll("_", " ")}
+                            </p>
+                            {job.scheduledStart && (
+                              <p className="text-xs text-slate-500">
+                                Scheduled: {new Date(job.scheduledStart).toLocaleString()}
+                              </p>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Actions */}
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          {job.assignmentStatus === "submitted" ||
+                          ["completed", "technician_submitted"].includes(job.status) ? (
+                            <Button size="sm" variant="outline" onClick={() => setCompletionJob(job)}>
+                              <FileCheck2 className="size-4 mr-1.5" /> View / add notes
+                            </Button>
+                          ) : job.status === "in_progress" ? (
+                            <Button
+                              size="sm"
+                              className="bg-emerald-600 hover:bg-emerald-700"
+                              onClick={() => {
+                                setCompletionJob(job);
+                                captureOperationalEvent("technician_completion_opened", { status: job.status });
+                              }}
+                            >
+                              <FileCheck2 className="size-4 mr-1.5" /> Continue Work Order
+                            </Button>
+                          ) : startAction && job.serviceType.startsWith("biomed_") ? (
+                            <Button className="min-h-11" onClick={() => setActiveJob(expanded ? "" : job.assignmentId)}>
+                              Open facility
+                            </Button>
+                          ) : startAction ? (
+                            <Button
+                              size="sm"
+                              className="bg-emerald-600 hover:bg-emerald-700"
+                              disabled={progress.isPending}
+                              onClick={() => progress.mutate({ job, state: startAction.state })}
+                            >
+                              <Wrench className="size-4 mr-1.5" /> {startAction.label}
+                            </Button>
+                          ) : (
+                            <Badge className="bg-emerald-600">Ready for service</Badge>
+                          )}
+
+                          {job.scheduledStart && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                const targetDate = job.scheduledStart!.slice(0, 10);
+                                setServiceDate(targetDate);
+                                setActiveJob(job.assignmentId);
+                                setTab("today");
+                                toast.info(`Viewing schedule for ${targetDate}`);
+                              }}
+                              className="text-blue-700 border-blue-200 hover:bg-blue-50"
+                            >
+                              <Calendar className="size-3.5 mr-1" /> View in Day Schedule
+                            </Button>
+                          )}
+
+                          <Button asChild variant="outline" size="sm">
+                            <a href={directions(job.address)} target="_blank" rel="noreferrer">
+                              <Navigation className="size-4 mr-1.5" /> Navigate
+                            </a>
+                          </Button>
+
+                          {travelAction ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              disabled={progress.isPending}
+                              onClick={() => progress.mutate({ job, state: travelAction.state })}
+                            >
+                              {travelAction.label}
+                            </Button>
+                          ) : null}
+
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setActiveJob(expanded ? "" : job.assignmentId)}
+                          >
+                            {expanded ? "Hide details" : "View assignment"}
+                          </Button>
+                        </div>
+
+                        {expanded && startAction && job.serviceType.startsWith("biomed_") && (
+                          <section className="mt-4 space-y-3">
+                            <h4 className="font-bold">What are you doing at this facility?</h4>
+                            <div className="grid gap-3 sm:grid-cols-3">
+                              {biomedicalActivities.map((activity) => (
+                                <Button
+                                  key={activity.serviceType}
+                                  variant="outline"
+                                  className="h-auto min-h-24 flex-col items-start whitespace-normal p-4 text-left"
+                                  disabled={chooseWorkflow.isPending || progress.isPending}
+                                  onClick={() => chooseWorkflow.mutate({ job, serviceType: activity.serviceType })}
+                                >
+                                  <span className="font-bold">{activity.label}</span>
+                                  <span className="text-sm font-normal">{activity.description}</span>
+                                </Button>
+                              ))}
+                            </div>
+                            <p className="text-sm text-slate-600">
+                              Choose an activity to start. Save unfinished work throughout; no pricing or billing is created here.
+                            </p>
+                          </section>
+                        )}
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
           </TabsContent>
 
           <TabsContent value="route" className="mt-5">

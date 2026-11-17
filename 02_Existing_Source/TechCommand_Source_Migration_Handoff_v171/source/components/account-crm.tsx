@@ -3,19 +3,37 @@
 import { portalFetch } from "@/lib/portal-fetch";
 import { crmErrorMessage } from "@/lib/crm-validation";
 
-import { useState, type ReactNode } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  AlertTriangle,
   Building2,
+  Calendar,
+  Check,
   CircleAlert,
+  Copy,
+  Eye,
+  Mail,
   MapPin,
+  Pencil,
   Plus,
   RefreshCw,
   Search,
+  ShieldCheck,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -44,12 +62,15 @@ type Account = {
   id: string;
   name: string;
   accountType: string;
+  externalId?: string | null;
   billingEmail: string | null;
   paymentTermsDays: number;
   serviceLevel: string | null;
   serviceDiscipline: string | null;
   locationCount: number;
   assetCount: number;
+  status?: string;
+  updatedAt?: string;
 };
 
 type Location = {
@@ -209,9 +230,433 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   return <label className="block space-y-1.5 text-sm font-semibold text-slate-700">{label}{children}</label>;
 }
 
+function ViewAccountDialog({
+  account,
+  open,
+  onOpenChange,
+  onEdit,
+}: {
+  account: Account | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onEdit: (account: Account) => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  const locationsQuery = useQuery({
+    queryKey: ["locations", account?.id],
+    queryFn: () => api<{ locations: Location[] }>(`/api/locations?accountId=${account?.id}`),
+    enabled: open && !!account?.id,
+  });
+
+  const locations = locationsQuery.data?.locations || [];
+
+  if (!account) return null;
+
+  const copyId = () => {
+    navigator.clipboard.writeText(account.id);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+    toast.success("Account ID copied to clipboard");
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader className="border-b pb-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 pr-6">
+            <div className="flex items-center gap-3">
+              <span className="grid size-10 place-items-center rounded-xl bg-blue-50 text-blue-700">
+                <Building2 className="size-5" />
+              </span>
+              <div>
+                <DialogTitle className="text-xl font-bold text-slate-900">{account.name}</DialogTitle>
+                <DialogDescription className="text-xs text-slate-500">
+                  Account overview and operational details
+                </DialogDescription>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
+                Active
+              </Badge>
+              <Badge variant="secondary" className="capitalize">
+                {(account.accountType || "facility").replaceAll("_", " ")}
+              </Badge>
+            </div>
+          </div>
+        </DialogHeader>
+
+        <div className="space-y-5 py-4">
+          {/* Key Metric Cards */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="rounded-lg border bg-slate-50 p-3">
+              <p className="text-xs font-medium text-slate-500">Service Sites</p>
+              <p className="mt-1 text-2xl font-bold text-slate-900">{account.locationCount}</p>
+            </div>
+            <div className="rounded-lg border bg-slate-50 p-3">
+              <p className="text-xs font-medium text-slate-500">Connected Assets</p>
+              <p className="mt-1 text-2xl font-bold text-slate-900">{account.assetCount}</p>
+            </div>
+            <div className="rounded-lg border bg-slate-50 p-3">
+              <p className="text-xs font-medium text-slate-500">Payment Terms</p>
+              <p className="mt-1 text-2xl font-bold text-slate-900">{account.paymentTermsDays}d</p>
+            </div>
+            <div className="rounded-lg border bg-slate-50 p-3">
+              <p className="text-xs font-medium text-slate-500">Service Level</p>
+              <p className="mt-1 text-sm font-bold text-slate-900 truncate">{account.serviceLevel || "Standard"}</p>
+            </div>
+          </div>
+
+          {/* Account Specifications Grid */}
+          <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400">Account Specifications</h4>
+            <div className="grid gap-3 sm:grid-cols-2 text-sm">
+              <div>
+                <p className="text-xs text-slate-500">Work Type / Discipline</p>
+                <p className="font-medium text-slate-900 mt-0.5">
+                  {account.serviceDiscipline === "biomedical"
+                    ? "Biomedical / Preventive Maintenance (PM)"
+                    : account.serviceDiscipline === "dme_mobility"
+                    ? "DME / Mobility Restorations"
+                    : "Work type pending"}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500">Billing Email</p>
+                <p className="font-medium text-slate-900 mt-0.5 flex items-center gap-1.5">
+                  <Mail className="size-3.5 text-slate-400 shrink-0" />
+                  {account.billingEmail || <span className="text-slate-400 italic">None provided</span>}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500">Account ID</p>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <code className="text-xs font-mono bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded truncate max-w-[200px]">
+                    {account.id}
+                  </code>
+                  <button onClick={copyId} className="text-slate-400 hover:text-slate-700 p-0.5" title="Copy ID">
+                    {copied ? <Check className="size-3.5 text-emerald-600" /> : <Copy className="size-3.5" />}
+                  </button>
+                </div>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500">External ID</p>
+                <p className="font-medium text-slate-900 mt-0.5 font-mono text-xs">
+                  {account.externalId || <span className="text-slate-400 italic font-sans">None</span>}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Linked Locations Section */}
+          <div className="space-y-2.5">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+              Linked Service Locations ({locations.length})
+            </h4>
+            {locationsQuery.isLoading ? (
+              <p className="text-xs text-slate-400 py-2">Loading locations...</p>
+            ) : locations.length === 0 ? (
+              <p className="text-xs text-slate-400 italic py-2 border rounded-lg p-3 bg-slate-50">
+                No service locations linked yet.
+              </p>
+            ) : (
+              <div className="max-h-48 overflow-y-auto rounded-lg border divide-y">
+                {locations.map((loc) => (
+                  <div key={loc.id} className="p-3 text-sm flex items-center justify-between hover:bg-slate-50">
+                    <div>
+                      <p className="font-semibold text-slate-800">{loc.name}</p>
+                      <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
+                        <MapPin className="size-3 text-slate-400 shrink-0" />
+                        {loc.address1 ? `${loc.address1}, ${loc.city}, ${loc.state} ${loc.postalCode}` : `${loc.city}, ${loc.state}`}
+                      </p>
+                    </div>
+                    <div className="text-right text-xs text-slate-500">
+                      <span className="font-semibold text-slate-700">{loc.assetCount || 0}</span> assets
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <DialogFooter className="border-t pt-3 flex sm:justify-between items-center gap-2">
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Close
+          </Button>
+          <Button
+            onClick={() => {
+              onOpenChange(false);
+              onEdit(account);
+            }}
+            className="gap-1.5"
+          >
+            <Pencil className="size-4" /> Edit Account
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function EditAccountDialog({
+  account,
+  open,
+  onOpenChange,
+}: {
+  account: Account | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const queryClient = useQueryClient();
+  const [name, setName] = useState("");
+  const [accountType, setAccountType] = useState("facility");
+  const [billingEmail, setBillingEmail] = useState("");
+  const [terms, setTerms] = useState("30");
+  const [serviceLevel, setServiceLevel] = useState("");
+  const [serviceDiscipline, setServiceDiscipline] = useState("");
+  const [externalId, setExternalId] = useState("");
+
+  useEffect(() => {
+    if (account) {
+      setName(account.name || "");
+      setAccountType(account.accountType || "facility");
+      setBillingEmail(account.billingEmail || "");
+      setTerms(String(account.paymentTermsDays ?? 30));
+      setServiceLevel(account.serviceLevel || "");
+      setServiceDiscipline(account.serviceDiscipline || "");
+      setExternalId(account.externalId || "");
+    }
+  }, [account, open]);
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      api<{ account?: Account }>(`/api/accounts/${account?.id}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          name,
+          accountType,
+          billingEmail: billingEmail || null,
+          paymentTermsDays: Number(terms) || 30,
+          serviceLevel: serviceLevel || null,
+          serviceDiscipline: serviceDiscipline || null,
+          externalId: externalId || null,
+        }),
+      }),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["accounts"] }),
+        queryClient.invalidateQueries({ queryKey: ["locations"] }),
+        queryClient.refetchQueries({ queryKey: ["accounts"] }),
+      ]);
+      toast.success("Account updated successfully", { description: name });
+      onOpenChange(false);
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  if (!account) return null;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader className="border-b pb-4">
+          <DialogTitle className="flex items-center gap-2 text-xl font-bold text-slate-900">
+            <Pencil className="size-5 text-blue-600" /> Edit Account
+          </DialogTitle>
+          <DialogDescription className="text-xs text-slate-500">
+            Update account configuration, billing details, and service disciplines.
+          </DialogDescription>
+        </DialogHeader>
+
+        <form
+          className="space-y-4 py-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            mutation.mutate();
+          }}
+        >
+          <Field label="Account name">
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Example: SpinLife"
+              minLength={2}
+              maxLength={160}
+              required
+            />
+          </Field>
+          <Field label="Account category">
+            <Select value={accountType} onValueChange={setAccountType}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="manufacturer">Manufacturer</SelectItem>
+                <SelectItem value="retailer">Retailer</SelectItem>
+                <SelectItem value="facility">Healthcare facility</SelectItem>
+                <SelectItem value="direct_customer">Direct customer</SelectItem>
+                <SelectItem value="partner">Partner</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field label="Work type">
+            <select
+              className="min-h-10 w-full rounded-md border px-3 text-sm"
+              value={serviceDiscipline}
+              onChange={(e) => setServiceDiscipline(e.target.value)}
+            >
+              <option value="">Choose later / General</option>
+              <option value="biomedical">Biomedical / PM</option>
+              <option value="dme_mobility">DME / Mobility</option>
+            </select>
+          </Field>
+          <Field label="Billing email">
+            <Input
+              type="email"
+              value={billingEmail}
+              onChange={(e) => setBillingEmail(e.target.value)}
+              placeholder="accounts@company.com"
+            />
+          </Field>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Payment terms (days)">
+              <Input
+                type="number"
+                min={0}
+                max={365}
+                step={1}
+                required
+                value={terms}
+                onChange={(e) => setTerms(e.target.value)}
+              />
+            </Field>
+            <Field label="Service level">
+              <Input
+                value={serviceLevel}
+                onChange={(e) => setServiceLevel(e.target.value)}
+                placeholder="Standard / Preferred"
+              />
+            </Field>
+          </div>
+          <Field label="External ID (optional)">
+            <Input
+              value={externalId}
+              onChange={(e) => setExternalId(e.target.value)}
+              placeholder="External ERP or partner reference ID"
+            />
+          </Field>
+
+          {mutation.error ? (
+            <p role="alert" className="text-sm text-red-700 bg-red-50 p-2.5 rounded-lg border border-red-200">
+              {mutation.error.message}
+            </p>
+          ) : null}
+
+          <DialogFooter className="border-t pt-4">
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={mutation.isPending}>
+              {mutation.isPending ? "Saving changes…" : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DeleteAccountDialog({
+  account,
+  open,
+  onOpenChange,
+}: {
+  account: Account | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const queryClient = useQueryClient();
+  const mutation = useMutation({
+    mutationFn: () =>
+      api<{ ok?: boolean }>(`/api/accounts/${account?.id}`, {
+        method: "DELETE",
+      }),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["accounts"] }),
+        queryClient.invalidateQueries({ queryKey: ["locations"] }),
+        queryClient.refetchQueries({ queryKey: ["accounts"] }),
+      ]);
+      toast.success("Account deleted successfully", { description: account?.name });
+      onOpenChange(false);
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  if (!account) return null;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <div className="mx-auto grid size-12 place-items-center rounded-full bg-red-100 text-red-600 mb-2">
+            <Trash2 className="size-6" />
+          </div>
+          <DialogTitle className="text-center text-lg font-bold text-slate-900">
+            Delete Account?
+          </DialogTitle>
+          <DialogDescription className="text-center text-sm text-slate-500">
+            Are you sure you want to delete <span className="font-semibold text-slate-800">&quot;{account.name}&quot;</span>?
+            This will remove the account from the active directory.
+          </DialogDescription>
+        </DialogHeader>
+
+        {account.locationCount > 0 ? (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 flex items-start gap-2">
+            <AlertTriangle className="size-4 shrink-0 text-amber-600 mt-0.5" />
+            <span>
+              This account has <strong>{account.locationCount} linked service location(s)</strong>.
+              It will be safely archived to protect active job history.
+            </span>
+          </div>
+        ) : null}
+
+        {mutation.error ? (
+          <p role="alert" className="text-sm text-red-700 bg-red-50 p-2.5 rounded-lg border border-red-200">
+            {mutation.error.message}
+          </p>
+        ) : null}
+
+        <DialogFooter className="mt-4 flex sm:justify-end gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={mutation.isPending}
+            onClick={() => onOpenChange(false)}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            disabled={mutation.isPending}
+            onClick={() => mutation.mutate()}
+          >
+            {mutation.isPending ? "Deleting…" : "Yes, Delete Account"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function AccountCrm({ mode }: { mode: "accounts" | "locations" }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [viewingAccount, setViewingAccount] = useState<Account | null>(null);
+  const [editingAccount, setEditingAccount] = useState<Account | null>(null);
+  const [deletingAccount, setDeletingAccount] = useState<Account | null>(null);
   const accountsQuery = useQuery({
     queryKey: ["accounts"],
     queryFn: () => api<{ accounts: Account[] }>("/api/accounts"),
@@ -260,12 +705,94 @@ export function AccountCrm({ mode }: { mode: "accounts" | "locations" }) {
         {!loading && !error && (mode === "accounts" ? accounts : locations).length === 0 ? <EmptyState mode={mode} onOpen={() => setOpen(true)} /> : null}
         {!loading && !error && (mode === "accounts" ? accounts : locations).length > 0 && (mode === "accounts" ? filteredAccounts : filteredLocations).length === 0 ? <div className="space-y-3 px-5 py-10 text-center text-sm text-slate-600"><p>No {mode} match your filter. Your saved records have not been removed.</p><Button variant="outline" onClick={() => setSearch("")}>Clear filter</Button></div> : null}
         {!loading && mode === "accounts" && filteredAccounts.length > 0 ? (
-          <Table><TableHeader><TableRow className="bg-slate-50"><TableHead className="pl-5">ACCOUNT</TableHead><TableHead>TYPE</TableHead><TableHead>LOCATIONS</TableHead><TableHead>BIOMEDICAL ASSETS</TableHead><TableHead>TERMS / SLA</TableHead></TableRow></TableHeader><TableBody>{filteredAccounts.map((account) => <TableRow key={account.id}><TableCell className="pl-5"><p className="font-bold text-slate-900">{account.name}</p><p className="mt-1 text-xs text-slate-500">{account.billingEmail || "No billing email"}</p></TableCell><TableCell className="capitalize text-slate-600">{account.serviceDiscipline === "biomedical" ? "Biomedical / PM" : account.serviceDiscipline === "dme_mobility" ? "DME / Mobility" : "Work type pending"} · {(account.accountType || "facility").replaceAll("_", " ")}</TableCell><TableCell className="font-bold">{account.locationCount}</TableCell><TableCell className="font-bold">{account.serviceDiscipline === "dme_mobility" ? "—" : account.assetCount}</TableCell><TableCell><p className="font-semibold">{account.paymentTermsDays} days</p><p className="mt-1 text-xs text-slate-500">{account.serviceLevel || "Standard"}</p></TableCell></TableRow>)}</TableBody></Table>
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-slate-50">
+                <TableHead className="pl-5">ACCOUNT</TableHead>
+                <TableHead>TYPE</TableHead>
+                <TableHead>LOCATIONS</TableHead>
+                <TableHead>BIOMEDICAL ASSETS</TableHead>
+                <TableHead>TERMS / SLA</TableHead>
+                <TableHead className="text-right pr-6">ACTIONS</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredAccounts.map((account) => (
+                <TableRow key={account.id} className="hover:bg-slate-50/70 transition-colors">
+                  <TableCell className="pl-5">
+                    <p className="font-bold text-slate-900">{account.name}</p>
+                    <p className="mt-1 text-xs text-slate-500">{account.billingEmail || "No billing email"}</p>
+                  </TableCell>
+                  <TableCell className="capitalize text-slate-600">
+                    {account.serviceDiscipline === "biomedical" ? "Biomedical / PM" : account.serviceDiscipline === "dme_mobility" ? "DME / Mobility" : "Work type pending"} · {(account.accountType || "facility").replaceAll("_", " ")}
+                  </TableCell>
+                  <TableCell className="font-bold">{account.locationCount}</TableCell>
+                  <TableCell className="font-bold">{account.serviceDiscipline === "dme_mobility" ? "—" : account.assetCount}</TableCell>
+                  <TableCell>
+                    <p className="font-semibold">{account.paymentTermsDays} days</p>
+                    <p className="mt-1 text-xs text-slate-500">{account.serviceLevel || "Standard"}</p>
+                  </TableCell>
+                  <TableCell className="text-right pr-6">
+                    <div className="flex items-center justify-end gap-1.5">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 px-2.5 text-xs font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900 border-slate-200"
+                        onClick={() => setViewingAccount(account)}
+                        title="View account details"
+                      >
+                        <Eye className="size-3.5 mr-1 text-slate-500" />
+                        View
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 px-2.5 text-xs font-medium text-blue-700 hover:bg-blue-50 hover:text-blue-800 border-blue-200"
+                        onClick={() => setEditingAccount(account)}
+                        title="Edit account"
+                      >
+                        <Pencil className="size-3.5 mr-1 text-blue-600" />
+                        Edit
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 px-2.5 text-xs font-medium text-red-600 hover:bg-red-50 hover:text-red-700 border-red-200"
+                        onClick={() => setDeletingAccount(account)}
+                        title="Delete account"
+                      >
+                        <Trash2 className="size-3.5 mr-1 text-red-500" />
+                        Delete
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         ) : null}
         {!loading && mode === "locations" && filteredLocations.length > 0 ? (
           <Table><TableHeader><TableRow className="bg-slate-50"><TableHead className="pl-5">LOCATION</TableHead><TableHead>ACCOUNT</TableHead><TableHead>ADDRESS</TableHead><TableHead>DEPARTMENTS</TableHead><TableHead>BIOMEDICAL ASSETS</TableHead></TableRow></TableHeader><TableBody>{filteredLocations.map((location) => <TableRow key={location.id}><TableCell className="pl-5"><p className="font-bold text-slate-900">{location.name}</p><p className="mt-1 text-xs capitalize text-slate-500">{location.locationType?.replaceAll("_", " ") || "Service location"}</p></TableCell><TableCell className="font-semibold">{location.accountName}</TableCell><TableCell className="text-slate-600">{location.address1}, {location.city}, {location.state} {location.postalCode}</TableCell><TableCell className="font-bold">{location.departmentCount}</TableCell><TableCell className="font-bold">{location.assetCount}</TableCell></TableRow>)}</TableBody></Table>
         ) : null}
       </article>
+
+      {/* Action Dialogs */}
+      <ViewAccountDialog
+        account={viewingAccount}
+        open={!!viewingAccount}
+        onOpenChange={(isOpen) => !isOpen && setViewingAccount(null)}
+        onEdit={(acc) => setEditingAccount(acc)}
+      />
+      <EditAccountDialog
+        account={editingAccount}
+        open={!!editingAccount}
+        onOpenChange={(isOpen) => !isOpen && setEditingAccount(null)}
+      />
+      <DeleteAccountDialog
+        account={deletingAccount}
+        open={!!deletingAccount}
+        onOpenChange={(isOpen) => !isOpen && setDeletingAccount(null)}
+      />
     </div>
   );
 }
