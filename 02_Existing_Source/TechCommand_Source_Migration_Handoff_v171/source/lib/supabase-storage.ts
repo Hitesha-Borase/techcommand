@@ -1,8 +1,9 @@
 /**
- * Supabase Storage Adapter
+ * Storage Adapter
  *
  * Full drop-in replacement for Cloudflare R2 (env.BUCKET).
- * All file uploads / downloads go to Supabase Storage bucket "techcommand-files".
+ * Persists file uploads / downloads directly in Cloudflare D1 (storage_blobs),
+ * with resilient in-memory caching and local filesystem fallback.
  * Works 100% FREE without any credit or debit card required.
  */
 
@@ -12,6 +13,75 @@ import path from "node:path";
 
 const BUCKET_NAME = "techcommand-files";
 const LOCAL_STORAGE_DIR = path.resolve(process.cwd(), ".local-storage", BUCKET_NAME);
+const D1_CHUNK_SIZE = 16384;
+
+let d1TableInitialized = false;
+async function ensureD1Table(): Promise<void> {
+  if (d1TableInitialized || !env?.DB) return;
+  try {
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS storage_blobs (storage_key TEXT NOT NULL, chunk_index INTEGER NOT NULL, content_type TEXT NOT NULL, size_bytes INTEGER NOT NULL, data TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL, PRIMARY KEY (storage_key, chunk_index))"
+    ).run();
+    d1TableInitialized = true;
+  } catch {}
+}
+
+async function saveD1File(storageKey: string, rawBytes: ArrayBuffer, contentType: string): Promise<void> {
+  try {
+    if (!env?.DB) return;
+    await ensureD1Table();
+    const buffer = Buffer.from(rawBytes);
+    const totalChunks = Math.ceil(buffer.length / D1_CHUNK_SIZE) || 1;
+    await env.DB.prepare("DELETE FROM storage_blobs WHERE storage_key = ?").bind(storageKey).run();
+    for (let i = 0; i < totalChunks; i++) {
+      const slice = buffer.subarray(i * D1_CHUNK_SIZE, Math.min((i + 1) * D1_CHUNK_SIZE, buffer.length));
+      const b64 = slice.toString("base64");
+      await env.DB.prepare(
+        "INSERT INTO storage_blobs (storage_key, chunk_index, content_type, size_bytes, data) VALUES (?, ?, ?, ?, ?)"
+      ).bind(storageKey, i, contentType, buffer.length, b64).run();
+    }
+  } catch (err) {
+    console.warn("[saveD1File warning]:", err);
+  }
+}
+
+async function getD1File(storageKey: string): Promise<{ bytes: ArrayBuffer; contentType: string } | null> {
+  try {
+    if (!env?.DB) return null;
+    await ensureD1Table();
+    const res = await env.DB.prepare(
+      "SELECT chunk_index, content_type, size_bytes, data FROM storage_blobs WHERE storage_key = ? ORDER BY chunk_index ASC"
+    ).bind(storageKey).all<{ chunk_index: number; content_type: string; size_bytes: number; data: string }>();
+    const rows = res.results;
+    if (rows && rows.length > 0) {
+      const totalSize = rows[0].size_bytes;
+      const combined = Buffer.alloc(totalSize);
+      let offset = 0;
+      for (const row of rows) {
+        const chunkBuf = Buffer.from(row.data, "base64");
+        chunkBuf.copy(combined, offset);
+        offset += chunkBuf.length;
+      }
+      const raw = combined.buffer.slice(combined.byteOffset, combined.byteOffset + combined.byteLength) as ArrayBuffer;
+      const item = { bytes: raw, contentType: rows[0].content_type || "application/octet-stream" };
+      localFileCache.set(storageKey, item);
+      return item;
+    }
+  } catch (err) {
+    console.warn("[getD1File warning]:", err);
+  }
+  return null;
+}
+
+async function deleteD1File(storageKey: string): Promise<void> {
+  try {
+    if (!env?.DB) return;
+    await ensureD1Table();
+    await env.DB.prepare("DELETE FROM storage_blobs WHERE storage_key = ?").bind(storageKey).run();
+  } catch (err) {
+    console.warn("[deleteD1File warning]:", err);
+  }
+}
 
 function supabaseUrl(): string {
   return (
@@ -111,7 +181,7 @@ async function getLocalFile(storageKey: string): Promise<{ bytes: ArrayBuffer; c
   return null;
 }
 
-/** Upload bytes or stream to Supabase Storage with local resilient fallback. */
+/** Upload bytes or stream to storage with D1 persistence, in-memory cache, and local fallback. */
 export async function storagePut(
   storageKey: string,
   body: ArrayBuffer | ArrayBufferView | ReadableStream<any> | string,
@@ -132,8 +202,11 @@ export async function storagePut(
   }
 
   const contentType = opts?.contentType || "application/octet-stream";
-  // Always backup to local storage first so offline/local dev is 100% resilient
+  // Always backup to in-memory / local storage first
   await saveLocalFile(storageKey, rawBytes, contentType);
+
+  // Persist directly to Cloudflare D1
+  await saveD1File(storageKey, rawBytes, contentType);
 
   if (!isRemote()) {
     return;
@@ -155,19 +228,25 @@ export async function storagePut(
     });
 
     if (!res.ok) {
-      console.warn(`Supabase Storage upload warning [${res.status}], using local fallback.`);
+      console.warn(`Supabase Storage upload warning [${res.status}], using D1/local storage.`);
     }
   } catch (err) {
-    console.warn("Supabase Storage fetch warning, using local fallback:", err);
+    console.warn("Supabase Storage fetch warning, using D1/local storage:", err);
   }
 }
 
-/** Download bytes from Supabase Storage or local filesystem. Returns ArrayBuffer or null. */
+/** Download bytes from memory, D1 database, local filesystem, or remote storage. Returns ArrayBuffer or null. */
 export async function storageGet(
   storageKey: string,
 ): Promise<{ bytes: ArrayBuffer; contentType: string } | null> {
+  const mem = localFileCache.get(storageKey);
+  if (mem) return mem;
+
   const local = await getLocalFile(storageKey);
   if (local) return local;
+
+  const d1 = await getD1File(storageKey);
+  if (d1) return d1;
 
   if (!isRemote()) {
     return null;
@@ -180,13 +259,14 @@ export async function storageGet(
     const bytes = await res.arrayBuffer();
     const contentType = res.headers.get("content-type") || "application/octet-stream";
     await saveLocalFile(storageKey, bytes, contentType);
+    await saveD1File(storageKey, bytes, contentType);
     return { bytes, contentType };
   } catch {
     return null;
   }
 }
 
-/** Delete a file or files from Supabase Storage or local filesystem. */
+/** Delete a file or files from storage. */
 export async function storageDelete(storageKey: string | string[]): Promise<void> {
   const prefixes = Array.isArray(storageKey) ? storageKey : [storageKey];
   for (const prefix of prefixes) {
@@ -200,6 +280,7 @@ export async function storageDelete(storageKey: string | string[]): Promise<void
         fs.unlinkSync(`${filePath}.meta.json`);
       }
     } catch {}
+    await deleteD1File(prefix);
   }
 
   if (!isRemote()) {

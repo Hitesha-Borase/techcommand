@@ -79,24 +79,73 @@ export async function POST(request: Request) {
     const hierarchy = await env.DB.prepare(hierarchySql).bind(...hierarchyValues).first();
     if (!hierarchy) return Response.json({ error: "Select an active account and its facility. Any department must belong to that facility." }, { status: 400 });
     const id = crypto.randomUUID();
+    let nextPmDueOn = input.nextPmDueOn ? input.nextPmDueOn.trim() : null;
+    if (!nextPmDueOn && input.lastPmOn && input.pmIntervalMonths) {
+      try {
+        const d = new Date(input.lastPmOn);
+        if (!isNaN(d.getTime())) {
+          d.setMonth(d.getMonth() + input.pmIntervalMonths);
+          nextPmDueOn = d.toISOString().slice(0, 10);
+        }
+      } catch {}
+    }
+    const lastPmOn = input.lastPmOn ? input.lastPmOn.trim() : null;
     const results = await env.DB.batch([
       env.DB.prepare(`INSERT INTO assets (id, organization_id, account_id, location_id, department_id, asset_tag, customer_asset_id, manufacturer, model, serial_number, description, risk_class, status, last_pm_on, next_pm_due_on, pm_interval_months, qr_code_value)
         SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'in_service', ?, ?, ?, ?
-        WHERE EXISTS (${hierarchySql})`).bind(id, TECHFLEX_ORG_ID, input.accountId, input.locationId, departmentId, input.assetTag, input.customerAssetId || null, input.manufacturer, input.model, input.serialNumber || null, input.description || null, input.riskClass, input.lastPmOn || null, input.nextPmDueOn || null, input.pmIntervalMonths || null, `techflex:asset:${id}`, ...hierarchyValues),
+        WHERE EXISTS (${hierarchySql})`).bind(id, TECHFLEX_ORG_ID, input.accountId, input.locationId, departmentId, input.assetTag, input.customerAssetId || null, input.manufacturer, input.model, input.serialNumber || null, input.description || null, input.riskClass, lastPmOn, nextPmDueOn, input.pmIntervalMonths || null, `techflex:asset:${id}`, ...hierarchyValues),
       env.DB.prepare(`INSERT INTO audit_logs (id, organization_id, actor_user_id, action, entity_type, entity_id, after_json)
         SELECT ?, ?, ?, 'asset.created', 'asset', ?, ?
         WHERE EXISTS (SELECT 1 FROM assets WHERE id = ? AND organization_id = ?)`)
-        .bind(crypto.randomUUID(), TECHFLEX_ORG_ID, identity.userId, id, JSON.stringify(input), id, TECHFLEX_ORG_ID),
+        .bind(crypto.randomUUID(), TECHFLEX_ORG_ID, identity.userId, id, JSON.stringify({ ...input, lastPmOn, nextPmDueOn }), id, TECHFLEX_ORG_ID),
     ]);
     if (results[0].meta.changes !== 1) {
       return Response.json({ error: "The account, facility or department changed before this asset was saved. Refresh the selections and try again." }, { status: 409 });
     }
-    return Response.json({ asset: { id, ...input, status: "in_service" } }, { status: 201 });
+    return Response.json({ asset: { id, ...input, lastPmOn, nextPmDueOn, status: "in_service" } }, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) return Response.json({ error: "Review the biomedical asset fields.", details: error.flatten() }, { status: 400 });
     if (error instanceof Error && /UNIQUE constraint failed: assets\.organization_id, assets\.asset_tag|asset_label_code_conflict/i.test(error.message)) {
       return Response.json({ error: "This asset label is already assigned, including any retired equipment. Review the existing asset or choose an unused label." }, { status: 409 });
     }
+    return apiError(error);
+  }
+}
+
+const patchSchema = z.object({
+  id: z.string().min(1),
+  nextPmDueOn: z.string().trim().optional().nullable(),
+  lastPmOn: z.string().trim().optional().nullable(),
+  pmIntervalMonths: z.number().int().min(1).max(60).optional().nullable(),
+});
+
+export async function PATCH(request: Request) {
+  try {
+    await requirePortalRole(request, ["owner_administrator", "operations_administrator", "biomedical_lead"]);
+    const input = patchSchema.parse(await request.json());
+    let nextPmDueOn = input.nextPmDueOn ? input.nextPmDueOn.trim() : null;
+    if (!nextPmDueOn && input.lastPmOn && input.pmIntervalMonths) {
+      try {
+        const d = new Date(input.lastPmOn);
+        if (!isNaN(d.getTime())) {
+          d.setMonth(d.getMonth() + input.pmIntervalMonths);
+          nextPmDueOn = d.toISOString().slice(0, 10);
+        }
+      } catch {}
+    }
+    const lastPmOn = input.lastPmOn ? input.lastPmOn.trim() : null;
+    await env.DB.prepare(`
+      UPDATE assets
+      SET next_pm_due_on = ?,
+          last_pm_on = ?,
+          pm_interval_months = COALESCE(?, pm_interval_months),
+          record_version = record_version + 1,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND organization_id = ?
+    `).bind(nextPmDueOn, lastPmOn, input.pmIntervalMonths || null, input.id, TECHFLEX_ORG_ID).run();
+
+    return Response.json({ success: true, nextPmDueOn, lastPmOn, pmIntervalMonths: input.pmIntervalMonths });
+  } catch (error) {
     return apiError(error);
   }
 }

@@ -70,25 +70,50 @@ async function getAuthenticatedUser(request: Request) {
   }
 }
 
+async function ensureSettingsTableAndColumn() {
+  try {
+    await env.DB.prepare("ALTER TABLE system_settings ADD COLUMN custom_config_json TEXT DEFAULT '{}'").run();
+  } catch {
+    // Column already exists or cannot be altered
+  }
+}
+
 // ------------------------------------------------------------------------------
 // 1. GET: Fetch tenant system settings and rate cards
 // ------------------------------------------------------------------------------
 export async function GET(request: Request) {
   try {
     await getAuthenticatedUser(request);
+    await ensureSettingsTableAndColumn();
 
-    let row = await env.DB.prepare(`
-      SELECT id, organization_id, company_name, address, city, state, zip_code, phone, email,
-             hub_latitude, hub_longitude, standard_hourly_rate, overtime_hourly_rate,
-             weekend_hourly_rate, travel_mileage_rate, fixed_trip_fee,
-             emergency_dispatch_surcharge, min_billable_hours, max_daily_route_miles,
-             max_jobs_per_tech, origin_precedence, default_travel_buffer_minutes,
-             require_photo_attestation, enforce_40_percent_margin_floor, auto_sync_quickbooks,
-             custom_config_json, created_at, updated_at
-      FROM system_settings
-      WHERE organization_id = ?
-      LIMIT 1
-    `).bind(TECHFLEX_ORG_ID).first<Record<string, unknown>>();
+    let row: Record<string, unknown> | null = null;
+    try {
+      row = await env.DB.prepare(`
+        SELECT id, organization_id, company_name, address, city, state, zip_code, phone, email,
+               hub_latitude, hub_longitude, standard_hourly_rate, overtime_hourly_rate,
+               weekend_hourly_rate, travel_mileage_rate, fixed_trip_fee,
+               emergency_dispatch_surcharge, min_billable_hours, max_daily_route_miles,
+               max_jobs_per_tech, origin_precedence, default_travel_buffer_minutes,
+               require_photo_attestation, enforce_40_percent_margin_floor, auto_sync_quickbooks,
+               custom_config_json, created_at, updated_at
+        FROM system_settings
+        WHERE organization_id = ?
+        LIMIT 1
+      `).bind(TECHFLEX_ORG_ID).first<Record<string, unknown>>();
+    } catch {
+      row = await env.DB.prepare(`
+        SELECT id, organization_id, company_name, address, city, state, zip_code, phone, email,
+               hub_latitude, hub_longitude, standard_hourly_rate, overtime_hourly_rate,
+               weekend_hourly_rate, travel_mileage_rate, fixed_trip_fee,
+               emergency_dispatch_surcharge, min_billable_hours, max_daily_route_miles,
+               max_jobs_per_tech, origin_precedence, default_travel_buffer_minutes,
+               require_photo_attestation, enforce_40_percent_margin_floor, auto_sync_quickbooks,
+               created_at, updated_at
+        FROM system_settings
+        WHERE organization_id = ?
+        LIMIT 1
+      `).bind(TECHFLEX_ORG_ID).first<Record<string, unknown>>();
+    }
 
     if (!row) {
       // Create initial settings if not present
@@ -187,6 +212,7 @@ export async function GET(request: Request) {
 export async function PATCH(request: Request) {
   try {
     const user = await getAuthenticatedUser(request);
+    await ensureSettingsTableAndColumn();
     const body = (await request.json()) as unknown;
     const parsed = updateSettingsSchema.safeParse(body);
 
@@ -264,51 +290,97 @@ export async function PATCH(request: Request) {
 
     const customConfigJson = JSON.stringify(customConfig);
 
-    await env.DB.prepare(`
-      UPDATE system_settings
-      SET company_name = ?,
-          address = ?,
-          city = ?,
-          state = ?,
-          zip_code = ?,
-          phone = ?,
-          email = ?,
-          standard_hourly_rate = ?,
-          overtime_hourly_rate = ?,
-          weekend_hourly_rate = ?,
-          travel_mileage_rate = ?,
-          fixed_trip_fee = ?,
-          emergency_dispatch_surcharge = ?,
-          min_billable_hours = ?,
-          max_jobs_per_tech = ?,
-          enforce_40_percent_margin_floor = ?,
-          require_photo_attestation = ?,
-          auto_sync_quickbooks = ?,
-          custom_config_json = ?,
-          updated_at = datetime('now')
-      WHERE organization_id = ?
-    `).bind(
-      companyName,
-      address,
-      city,
-      state,
-      zipCode,
-      phone,
-      email,
-      standardHourlyRate,
-      overtimeHourlyRate,
-      weekendHourlyRate,
-      travelMileageRate,
-      fixedTripFee,
-      emergencyDispatchSurcharge,
-      minBillableHours,
-      maxJobsPerTech,
-      enforceMargin,
-      requireAttestation,
-      autoSyncQb,
-      customConfigJson,
-      TECHFLEX_ORG_ID,
-    ).run();
+    try {
+      await env.DB.prepare(`
+        UPDATE system_settings
+        SET company_name = ?,
+            address = ?,
+            city = ?,
+            state = ?,
+            zip_code = ?,
+            phone = ?,
+            email = ?,
+            standard_hourly_rate = ?,
+            overtime_hourly_rate = ?,
+            weekend_hourly_rate = ?,
+            travel_mileage_rate = ?,
+            fixed_trip_fee = ?,
+            emergency_dispatch_surcharge = ?,
+            min_billable_hours = ?,
+            max_jobs_per_tech = ?,
+            enforce_40_percent_margin_floor = ?,
+            require_photo_attestation = ?,
+            auto_sync_quickbooks = ?,
+            custom_config_json = ?,
+            updated_at = datetime('now')
+        WHERE organization_id = ?
+      `).bind(
+        companyName,
+        address,
+        city,
+        state,
+        zipCode,
+        phone,
+        email,
+        standardHourlyRate,
+        overtimeHourlyRate,
+        weekendHourlyRate,
+        travelMileageRate,
+        fixedTripFee,
+        emergencyDispatchSurcharge,
+        minBillableHours,
+        maxJobsPerTech,
+        enforceMargin,
+        requireAttestation,
+        autoSyncQb,
+        customConfigJson,
+        TECHFLEX_ORG_ID,
+      ).run();
+    } catch {
+      await env.DB.prepare(`
+        UPDATE system_settings
+        SET company_name = ?,
+            address = ?,
+            city = ?,
+            state = ?,
+            zip_code = ?,
+            phone = ?,
+            email = ?,
+            standard_hourly_rate = ?,
+            overtime_hourly_rate = ?,
+            weekend_hourly_rate = ?,
+            travel_mileage_rate = ?,
+            fixed_trip_fee = ?,
+            emergency_dispatch_surcharge = ?,
+            min_billable_hours = ?,
+            max_jobs_per_tech = ?,
+            enforce_40_percent_margin_floor = ?,
+            require_photo_attestation = ?,
+            auto_sync_quickbooks = ?,
+            updated_at = datetime('now')
+        WHERE organization_id = ?
+      `).bind(
+        companyName,
+        address,
+        city,
+        state,
+        zipCode,
+        phone,
+        email,
+        standardHourlyRate,
+        overtimeHourlyRate,
+        weekendHourlyRate,
+        travelMileageRate,
+        fixedTripFee,
+        emergencyDispatchSurcharge,
+        minBillableHours,
+        maxJobsPerTech,
+        enforceMargin,
+        requireAttestation,
+        autoSyncQb,
+        TECHFLEX_ORG_ID,
+      ).run();
+    }
 
     return Response.json(
       {

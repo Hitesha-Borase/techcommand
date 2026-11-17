@@ -6,16 +6,21 @@ const db = new DatabaseSync(dbPath);
 
 console.log("Checking and seeding QuickBooks connection & ledger...");
 
-// 1. Seed quickbooks_connections if empty
+// 1. Ensure quickbooks_connections reflects real unconfigured state
 const existingConn = db.prepare("SELECT * FROM quickbooks_connections WHERE organization_id = 'techflex'").get();
 if (!existingConn) {
   db.prepare(`
     INSERT INTO quickbooks_connections (id, organization_id, realm_id, company_name, is_connected, last_sync_at, auto_sync_enabled, created_at, updated_at)
-    VALUES ('qbc-techflex-primary', 'techflex', '934145209382', 'TechFlex Mobility Solutions', 1, datetime('now'), 1, datetime('now'), datetime('now'))
+    VALUES ('qbc-techflex-primary', 'techflex', '', 'TechFlex Mobility Solutions LLC', 0, NULL, 0, datetime('now'), datetime('now'))
   `).run();
-  console.log("Seeded primary QuickBooks connection.");
+  console.log("Seeded unconfigured QuickBooks connection.");
 } else {
-  console.log("QuickBooks connection already exists:", existingConn);
+  db.prepare(`
+    UPDATE quickbooks_connections
+    SET is_connected = 0, realm_id = '', last_sync_at = NULL, updated_at = datetime('now')
+    WHERE organization_id = 'techflex'
+  `).run();
+  console.log("Updated QuickBooks connection to real unconfigured state.");
 }
 
 // 2. Ensure system_settings has custom_config_json column (safe migration)

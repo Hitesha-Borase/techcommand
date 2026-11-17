@@ -84,7 +84,6 @@ export async function POST(request: Request) {
         try {
           resolvedEmail = (await resolvePasswordLogin(data.login || data.email!)).toLowerCase();
         } catch {}
-
         const { env } = await import("cloudflare:workers");
         if (env?.DB) {
           const userRow = await env.DB.prepare(

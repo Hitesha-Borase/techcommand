@@ -228,6 +228,37 @@ async function context(): Promise<PdfContext> {
   } satisfies PdfContext;
 }
 
+function formatCheckStatus(item: FieldCheck, isSpinLife = false): string {
+  const rawNote = (item.reason || item.result || '').trim();
+  const checkPrefix = isSpinLife ? '[ ] ' : '';
+  const donePrefix = isSpinLife ? '[X] ' : '';
+
+  if (item.notApplicable) {
+    if (!rawNote) return isSpinLife ? 'N/A - Not applicable' : 'N/A';
+    return rawNote.toLowerCase().startsWith('n/a') ? rawNote : `N/A - ${rawNote}`;
+  }
+
+  if (item.complete) {
+    if (!rawNote) return isSpinLife ? `${donePrefix}Completed` : 'Documented';
+    return isSpinLife
+      ? `${donePrefix}${rawNote}`
+      : (rawNote.toLowerCase().startsWith('documented') ? rawNote : `Documented - ${rawNote}`);
+  }
+
+  const isIssue = item.outcome === 'not_done' || item.outcome === 'issue';
+  const isDeferred = item.outcome === 'deferred';
+  const statusLabel = isIssue ? 'Issue / not completed' : isDeferred ? 'Deferred' : 'Not completed';
+
+  if (rawNote) {
+    if (new RegExp(`^${statusLabel}`, 'i').test(rawNote)) {
+      return `${checkPrefix}${rawNote}`;
+    }
+    return `${checkPrefix}${statusLabel} - ${rawNote}`;
+  }
+
+  return `${checkPrefix}${statusLabel}`;
+}
+
 export async function generateServiceReportPdf(input: {
   documentStatus?: string;
   actualOnsiteMinutes?: number | null;
@@ -331,9 +362,9 @@ export async function generateServiceReportPdf(input: {
   section(ctx,'Final test results',input.testResults);
   section(ctx,'Parts / next-step recommendation',input.recommendation);
   section(ctx,'Service outcome',`${packetStatus(input.assetDisposition)} - ${input.assetDisposition.replaceAll('_',' ')}`);
-  if(input.checklist.some(x=>!x.key?.startsWith('sl_')&&(x.complete||x.notApplicable||x.result))) {
+  if(input.checklist.some(x=>!x.key?.startsWith('sl_')&&(x.complete||x.notApplicable||x.result||x.reason||x.outcome==='not_done'))) {
     band(ctx,'Completion record');
-    table(ctx,input.checklist.filter(x=>!x.key?.startsWith('sl_')&&(x.complete||x.notApplicable||x.result)).map(item=>[item.label,item.notApplicable?`N/A - ${item.reason}`:item.complete?'Documented':'Not completed']),[320,200]);
+    table(ctx,input.checklist.filter(x=>!x.key?.startsWith('sl_')&&(x.complete||x.notApplicable||x.result||x.reason||x.outcome==='not_done')).map(item=>[item.label,formatCheckStatus(item,false)]),[240,280],['Checklist item','Status / record']);
   }
   section(ctx,'Customer acknowledgement',`${input.customerSignatureName} | ${input.customerSignedAt || 'Date not recorded'}`);
   await signatureImage(ctx,input.signature);
@@ -357,7 +388,7 @@ export async function generateSpinLifeWorkOrderPdf(input: {
   table(ctx,[['Make',input.manufacturer],['Model / serial number',`${input.model} | ${input.serialNumber}`]],[140,380]);
   section(ctx,isDelivery(input.serviceType)?'Work order notes':'Description of issue or repair needed',input.customerComplaint);
   band(ctx,isDelivery(input.serviceType)?'Delivery checklist':'Tests performed');
-  table(ctx,input.checklist.filter(x=>x.key?.startsWith('sl_')&&x.key!=='sl_attestation').map(item=>[item.label,item.notApplicable?`N/A - ${item.reason}`:item.complete?`[X] ${item.result || 'Completed'}`:'[ ] Not completed']),[265,255],['Check','Result / observation']);
+  table(ctx,input.checklist.filter(x=>x.key?.startsWith('sl_')&&x.key!=='sl_attestation').map(item=>[item.label,formatCheckStatus(item,true)]),[265,255],['Check','Result / observation']);
   section(ctx,isDelivery(input.serviceType)?'Additional delivery notes':'Diagnosis / repair summary',`${input.findings}\n${input.workPerformed}\n${input.testResults}`);
   section(ctx,isDelivery(input.serviceType)?'Exceptions / next action':'Parts needed (if any) / resolution request',input.recommendation);
   section(ctx,'Job status',packetStatus(input.assetDisposition));

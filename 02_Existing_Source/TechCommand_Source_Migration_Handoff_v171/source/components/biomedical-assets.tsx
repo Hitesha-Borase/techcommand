@@ -71,6 +71,18 @@ async function api<T>(url: string, init?: RequestInit): Promise<T> {
   return data;
 }
 
+function computeNextPmDue(lastPm: string, months: number): string {
+  if (!lastPm) return "";
+  try {
+    const d = new Date(lastPm);
+    if (!isNaN(d.getTime())) {
+      d.setMonth(d.getMonth() + (months || 12));
+      return d.toISOString().slice(0, 10);
+    }
+  } catch {}
+  return "";
+}
+
 export function BiomedicalAssets({
   onPlanAsset,
   role,
@@ -138,15 +150,30 @@ export function BiomedicalAssets({
         method: "POST",
         body: JSON.stringify({
           ...form,
-          lastPmOn: form.lastPmOn || null,
-          nextPmDueOn: form.nextPmDueOn || null,
+          lastPmOn: form.lastPmOn ? form.lastPmOn.trim() : null,
+          nextPmDueOn: form.nextPmDueOn ? form.nextPmDueOn.trim() : null,
         }),
       }),
     onSuccess: async () => {
       await Promise.all([
         client.invalidateQueries({ queryKey: ["assets"] }),
         client.invalidateQueries({ queryKey: ["accounts"] }),
+        client.invalidateQueries({ queryKey: ["scanner-facilities"] }),
       ]);
+      setForm({
+        accountId: "",
+        locationId: "",
+        assetTag: "",
+        customerAssetId: "",
+        manufacturer: "",
+        model: "",
+        serialNumber: "",
+        description: "",
+        riskClass: "medium",
+        pmIntervalMonths: 12,
+        lastPmOn: "",
+        nextPmDueOn: "",
+      });
       setOpen(false);
       toast.success("Biomedical asset created", { description: form.assetTag });
     },
@@ -410,12 +437,18 @@ export function BiomedicalAssets({
                         min={1}
                         max={60}
                         value={form.pmIntervalMonths}
-                        onChange={(event) =>
-                          setForm({
-                            ...form,
-                            pmIntervalMonths: Number(event.target.value),
-                          })
-                        }
+                        onChange={(event) => {
+                          const months = Number(event.target.value) || 12;
+                          setForm((prev) => {
+                            const prevComputed = computeNextPmDue(prev.lastPmOn, prev.pmIntervalMonths);
+                            const shouldAutoUpdate = !prev.nextPmDueOn || prev.nextPmDueOn === prevComputed;
+                            return {
+                              ...prev,
+                              pmIntervalMonths: months,
+                              nextPmDueOn: shouldAutoUpdate && prev.lastPmOn ? computeNextPmDue(prev.lastPmOn, months) : prev.nextPmDueOn,
+                            };
+                          });
+                        }}
                       />
                     </label>
                   </div>
@@ -425,9 +458,18 @@ export function BiomedicalAssets({
                       <Input
                         type="date"
                         value={form.lastPmOn}
-                        onChange={(event) =>
-                          setForm({ ...form, lastPmOn: event.target.value })
-                        }
+                        onChange={(event) => {
+                          const val = event.target.value;
+                          setForm((prev) => {
+                            const prevComputed = computeNextPmDue(prev.lastPmOn, prev.pmIntervalMonths);
+                            const shouldAutoUpdate = !prev.nextPmDueOn || prev.nextPmDueOn === prevComputed;
+                            return {
+                              ...prev,
+                              lastPmOn: val,
+                              nextPmDueOn: shouldAutoUpdate ? computeNextPmDue(val, prev.pmIntervalMonths) : prev.nextPmDueOn,
+                            };
+                          });
+                        }}
                       />
                     </label>
                     <label className="space-y-1.5 text-sm font-semibold">
@@ -435,9 +477,10 @@ export function BiomedicalAssets({
                       <Input
                         type="date"
                         value={form.nextPmDueOn}
-                        onChange={(event) =>
-                          setForm({ ...form, nextPmDueOn: event.target.value })
-                        }
+                        onChange={(event) => {
+                          const val = event.target.value;
+                          setForm((prev) => ({ ...prev, nextPmDueOn: val }));
+                        }}
                       />
                     </label>
                   </div>
@@ -571,9 +614,93 @@ export function BiomedicalAssets({
             </SheetDescription>
           </SheetHeader>
           <div className="space-y-6 p-6">
+            {activeVisitAsset ? (
+              <div className="rounded-xl border bg-slate-50 p-4">
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Preventive Maintenance Schedule</p>
+                <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3 text-xs">
+                  <div>
+                    <span className="text-slate-500 block">Next PM due:</span>
+                    <span className="font-bold text-slate-900 text-sm">{activeVisitAsset.nextPmDueOn || "Not scheduled"}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block">Last PM date:</span>
+                    <span className="font-semibold text-slate-700 text-sm">{activeVisitAsset.lastPmOn || "Not recorded"}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block">PM interval:</span>
+                    <span className="font-semibold text-slate-700 text-sm">Every {activeVisitAsset.pmIntervalMonths || 12} months</span>
+                  </div>
+                </div>
+              </div>
+            ) : null}
             {canManageAssets && activeVisitAsset && <AssetLabelManager key={activeVisitAsset.id} asset={activeVisitAsset} onChanged={() => toast.success("Asset labels updated")} />}
             {activeVisitAsset ? <AssetPlacementHistory asset={activeVisitAsset} canManage={canManageAssets} /> : null}
             {activeVisitAsset ? <AssetCategoryHistory asset={activeVisitAsset} canManage={canManageAssets} /> : null}
+            {canManageAssets && activeVisitAsset ? (
+              <details className="rounded-xl border p-4 bg-white space-y-3">
+                <summary className="cursor-pointer font-bold text-sm text-slate-800">
+                  Update PM schedule & next due date
+                </summary>
+                <div className="pt-3 grid gap-3 sm:grid-cols-3">
+                  <label className="space-y-1 text-xs font-semibold">
+                    PM interval (months)
+                    <Input
+                      type="number"
+                      min={1}
+                      max={60}
+                      defaultValue={activeVisitAsset.pmIntervalMonths || 12}
+                      id={`edit-pm-interval-${activeVisitAsset.id}`}
+                    />
+                  </label>
+                  <label className="space-y-1 text-xs font-semibold">
+                    Last PM date
+                    <Input
+                      type="date"
+                      defaultValue={activeVisitAsset.lastPmOn || ""}
+                      id={`edit-last-pm-${activeVisitAsset.id}`}
+                    />
+                  </label>
+                  <label className="space-y-1 text-xs font-semibold">
+                    Next PM due
+                    <Input
+                      type="date"
+                      defaultValue={activeVisitAsset.nextPmDueOn || ""}
+                      id={`edit-next-pm-${activeVisitAsset.id}`}
+                    />
+                  </label>
+                </div>
+                <Button
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                  onClick={async () => {
+                    const months = Number((document.getElementById(`edit-pm-interval-${activeVisitAsset.id}`) as HTMLInputElement)?.value) || 12;
+                    const lastPm = (document.getElementById(`edit-last-pm-${activeVisitAsset.id}`) as HTMLInputElement)?.value || null;
+                    const nextPm = (document.getElementById(`edit-next-pm-${activeVisitAsset.id}`) as HTMLInputElement)?.value || null;
+                    try {
+                      await api("/api/assets", {
+                        method: "PATCH",
+                        body: JSON.stringify({
+                          id: activeVisitAsset.id,
+                          pmIntervalMonths: months,
+                          lastPmOn: lastPm,
+                          nextPmDueOn: nextPm,
+                        }),
+                      });
+                      await Promise.all([
+                        client.invalidateQueries({ queryKey: ["assets"] }),
+                        client.invalidateQueries({ queryKey: ["scanner-facilities"] }),
+                      ]);
+                      toast.success("PM schedule updated", { description: activeVisitAsset.assetTag });
+                    } catch (e: any) {
+                      toast.error(e.message || "Failed to update PM schedule");
+                    }
+                  }}
+                >
+                  Save PM schedule
+                </Button>
+              </details>
+            ) : null}
             <div>
               <h3 className="font-bold">Visit timeline</h3>
               <div className="mt-3 space-y-3">

@@ -1,4 +1,4 @@
-﻿import { SupabaseBucket } from "@/lib/supabase-storage";
+import { SupabaseBucket } from "@/lib/supabase-storage";
 import {procedureText,procedureProblems,procedurePhotoEvidence} from "@/lib/asset-ai-procedure";
 import { env } from "cloudflare:workers";
 import { z } from "zod";
@@ -21,7 +21,12 @@ export async function POST(request:Request) {
     const input=z.object({id:z.string().min(1).max(160),expectedVersion:z.number().int().min(1)}).parse(await request.json());
     const job=await spinlifeJob(identity,input.id);
     const existing=await env.DB.prepare("SELECT attachment_id AS attachmentId FROM spinlife_packets WHERE intake_id=? AND source_version=?").bind(input.id,input.expectedVersion).first<{attachmentId:string}>();
-    if(existing) return Response.json(existing,{headers:privateHeaders});
+    if(existing) {
+      const att = await env.DB.prepare("SELECT storage_key AS storageKey FROM attachments WHERE id=?").bind(existing.attachmentId).first<{storageKey:string}>();
+      if(att && await SupabaseBucket.get(att.storageKey)) {
+        return Response.json(existing,{headers:privateHeaders});
+      }
+    }
     if(job.version!==input.expectedVersion) throw new PortalHttpError(409,"The work order changed. Save and review the latest answers before generating its PDF.");
     const files=(await env.DB.prepare(fileSql).bind(TECHFLEX_ORG_ID,input.id).all<FileRow>()).results;
     if(files.reduce((sum,f)=>sum+f.sizeBytes,0)>24*1024*1024) throw new PortalHttpError(413,"The selected photos exceed the report's 24 MB processing limit. Your work is saved; use smaller photo copies before generating the packet.");
@@ -76,7 +81,8 @@ export async function POST(request:Request) {
         .bind(TECHFLEX_ORG_ID,input.id,JSON.stringify(files.map(f=>f.id))),
       env.DB.prepare(`INSERT INTO attachments (id,organization_id,entity_type,entity_id,storage_key,file_name,content_type,size_bytes,category,uploaded_by)
         VALUES (?,?,'work_order_intake',?,?,?,'application/pdf',?,'service_report',?)`).bind(attachmentId,TECHFLEX_ORG_ID,input.id,stagedKey,fileName,bytes.byteLength,identity.userId),
-      env.DB.prepare(`INSERT INTO spinlife_packets (id,intake_id,source_version,attachment_id,snapshot_json,created_by) VALUES (?,?,?,?,?,?)`)
+      env.DB.prepare(`INSERT INTO spinlife_packets (id,intake_id,source_version,attachment_id,snapshot_json,created_by) VALUES (?,?,?,?,?,?)
+        ON CONFLICT(intake_id,source_version) DO UPDATE SET attachment_id=excluded.attachment_id, snapshot_json=excluded.snapshot_json, created_at=CURRENT_TIMESTAMP`)
         .bind(crypto.randomUUID(),input.id,input.expectedVersion,attachmentId,JSON.stringify(snapshot),identity.userId),
       env.DB.prepare("UPDATE spinlife_visits SET documented_at=? WHERE intake_id=?").bind(now,input.id),
       env.DB.prepare("UPDATE work_order_intakes SET status=CASE WHEN status IN ('spinlife_review','spinlife_completed') THEN 'spinlife_completed' ELSE 'spinlife_documented' END,updated_at=? WHERE id=? AND organization_id=?").bind(now,input.id,TECHFLEX_ORG_ID),
