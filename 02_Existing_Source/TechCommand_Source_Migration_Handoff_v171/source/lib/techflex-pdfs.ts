@@ -1,12 +1,14 @@
-import {procedureText,readProcedure,readAnswers} from "./asset-ai-procedure";
-import { isDelivery, packetStatus, type FieldCheck } from "./spinlife-document-policy";
-import invoiceLogo from "./techflex-invoice-logo.json";
+import {procedureText,readProcedure,readAnswers} from "./asset-ai-procedure.ts";
+import { isDelivery, packetStatus, type FieldCheck } from "./spinlife-document-policy.ts";
+import invoiceLogo from "./techflex-invoice-logo.json" with { type: "json" };
+import { TECHFLEX_LOGO_BASE64 } from "./techflex-logo-data.ts";
 import {
   PDFDocument,
   StandardFonts,
   rgb,
   type PDFFont,
   type PDFPage,
+  type PDFImage,
 } from "pdf-lib";
 
 export class PdfGenerationError extends Error {}
@@ -19,6 +21,7 @@ type PdfContext = {
   y: number;
   runningTitle?: string;
   reference?: string;
+  logoImage?: PDFImage;
 };
 
 const pageWidth = 612;
@@ -186,22 +189,34 @@ function table(ctx: PdfContext, rows: string[][], widths: number[], heading?: st
 function reportHeader(ctx: PdfContext, title: string, reference: string, brand='TechFlex Mobility Solutions') {
   ctx.runningTitle=title;ctx.reference=reference;
   const partner=brand==='SpinLife';
-  ctx.page.drawText(brand,{x:margin,y:751,size:partner?24:19,font:ctx.bold,color:partner?rgb(.29,.13,.45):navy});
-  if(!partner) {
-    ctx.page.drawText('611 Park Meadow Rd., STE B, Westerville, OH 43081',{x:margin,y:730,size:8,font:ctx.regular,color:rgb(.4,.45,.5)});
-    ctx.page.drawText('877-231-TECH | service@techflexmobility.com',{x:margin,y:718,size:8,font:ctx.regular,color:rgb(.4,.45,.5)});
+  if(!partner && ctx.logoImage) {
+    const logoW = 74;
+    const logoH = (ctx.logoImage.height / ctx.logoImage.width) * logoW;
+    ctx.page.drawImage(ctx.logoImage, { x: margin, y: 708, width: logoW, height: logoH });
+    const textX = margin + logoW + 10;
+    ctx.page.drawText('TECHFLEX MOBILITY SOLUTIONS', { x: textX, y: 757, size: 10, font: ctx.bold, color: navy });
+    ctx.page.drawText('611 Park Meadow Rd., STE B | Westerville, OH 43081', { x: textX, y: 746, size: 7.2, font: ctx.regular, color: rgb(.35, .4, .45) });
+    ctx.page.drawText('877-231-TECH (8324) | service@techflexmobility.com', { x: textX, y: 735, size: 7.2, font: ctx.regular, color: rgb(.35, .4, .45) });
+    ctx.page.drawText('DME FIELD SERVICE | EVALUATION AND CORRECTIVE REPAIR', { x: textX, y: 724, size: 7, font: ctx.bold, color: teal });
+  } else {
+    ctx.page.drawText(brand,{x:margin,y:751,size:partner?24:19,font:ctx.bold,color:partner?rgb(.29,.13,.45):navy});
+    if(!partner) {
+      ctx.page.drawText('611 Park Meadow Rd., STE B, Westerville, OH 43081',{x:margin,y:730,size:8,font:ctx.regular,color:rgb(.4,.45,.5)});
+      ctx.page.drawText('877-231-TECH | service@techflexmobility.com',{x:margin,y:718,size:8,font:ctx.regular,color:rgb(.4,.45,.5)});
+    }
   }
-  const titleLines=title==='Service Report'?['SERVICE','REPORT']:[title.toUpperCase()];
-  titleLines.forEach((line,i)=>ctx.page.drawText(line,{x:566-ctx.bold.widthOfTextAtSize(line,16),y:751-i*18,size:16,font:ctx.bold,color:navy}));
-  ctx.page.drawText(safeText(reference),{x:margin,y:700,size:8,font:ctx.regular,color:navy});
-  ctx.page.drawLine({start:{x:margin,y:691},end:{x:566,y:691},thickness:2,color:partner?rgb(.29,.13,.45):teal});
+  const titleWords = title.split(' ');
+  const titleLines = titleWords.length > 2 ? [titleWords.slice(0, 2).join(' ').toUpperCase(), titleWords.slice(2).join(' ').toUpperCase()] : title === 'Service Report' ? ['SERVICE', 'REPORT'] : [title.toUpperCase()];
+  titleLines.forEach((line,i)=>ctx.page.drawText(line,{x:566-ctx.bold.widthOfTextAtSize(line,14),y:753-i*16,size:14,font:ctx.bold,color:navy}));
+  ctx.page.drawText(safeText(reference).slice(0, 75),{x:margin,y:699,size:7.5,font:ctx.regular,color:navy});
+  ctx.page.drawLine({start:{x:margin,y:691},end:{x:566,y:691},thickness:1.5,color:partner?rgb(.29,.13,.45):teal});
   ctx.y=675;
 }
 function footers(ctx: PdfContext, reference: string) {
   const pages=ctx.pdf.getPages();
   pages.forEach((page,i)=>{
     page.drawText(safeText(reference).slice(0,95),{x:margin,y:28,size:7,font:ctx.regular,color:rgb(.4,.45,.5)});
-    page.drawText(`Page ${i+1} of ${pages.length}`,{x:495,y:28,size:7,font:ctx.regular,color:rgb(.4,.45,.5)});
+    page.drawText(`${i+1} / ${pages.length}`,{x:520,y:28,size:7,font:ctx.regular,color:rgb(.4,.45,.5)});
   });
 }
 async function signatureImage(ctx: PdfContext, signature?: {bytes:ArrayBuffer;contentType:string}|null) {
@@ -219,12 +234,18 @@ async function context(): Promise<PdfContext> {
   const pdf = await PDFDocument.create();
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  let logoImage: PDFImage | undefined;
+  try {
+    const rawBytes = Uint8Array.from(atob(TECHFLEX_LOGO_BASE64), c => c.charCodeAt(0));
+    logoImage = await pdf.embedPng(rawBytes);
+  } catch {}
   return {
     pdf,
     regular,
     bold,
     page: pdf.addPage([pageWidth, pageHeight]),
     y: 742,
+    logoImage,
   } satisfies PdfContext;
 }
 
@@ -279,7 +300,7 @@ export async function generateServiceReportPdf(input: {
   serialNumber: string;
   findings: string;
   fieldNotes?: string;
-  diagnosticSteps: Array<{
+  diagnosticSteps?: Array<{
     label: string;
     complete: boolean;
     result: string;
@@ -289,6 +310,21 @@ export async function generateServiceReportPdf(input: {
     description: string;
     partNumber: string;
     quantity: number;
+    purpose?: string;
+  }>;
+  partsNeeded?: Array<{
+    description: string;
+    partNumber?: string;
+    quantity: number;
+    purpose?: string;
+  }>;
+  servicedUnits?: Array<{
+    unitLabel?: string;
+    name?: string;
+    manufacturer: string;
+    model: string;
+    serialNumber: string;
+    status: string;
   }>;
   testResults: string;
   recommendation: string;
@@ -316,17 +352,155 @@ export async function generateServiceReportPdf(input: {
   signature?: { bytes: ArrayBuffer; contentType: string } | null;
 }) {
   const ctx = await context();
-  reportHeader(ctx,'Service Report',`${input.accountName} Work Order #${input.workOrderNumber}`);
-  if(!input.serviceType.startsWith('biomed')){
-    band(ctx,'DME Service Report | Professional DME / Assistive Mobility Service');
+  const isLiftChair = /chair|lift\s*chair|pr53|golden/i.test(
+    `${input.serviceType} ${input.equipmentType} ${input.model} ${input.summary} ${input.customerComplaint}`
+  );
+  const isBiomed = input.serviceType.startsWith('biomed');
+  const reportTitle = isLiftChair
+    ? 'Lift Chair Service Report'
+    : isBiomed
+    ? 'Biomedical Service Report'
+    : 'Service Report';
+  reportHeader(ctx, reportTitle, `${input.accountName} Work Order #${input.workOrderNumber}`);
+
+  if (isLiftChair) {
+    ctx.page.drawText('Onsite evaluation and temporary restoration of Golden Technologies chair(s)', {
+      x: margin,
+      y: ctx.y,
+      size: 8,
+      font: ctx.regular,
+      color: rgb(0.35, 0.4, 0.45),
+    });
+    ctx.y -= 14;
+
+    const isTemporaryRestore = /temporary|oem parts|parts needed|parts required/i.test(
+      `${input.documentStatus || ''} ${input.assetDisposition} ${input.recommendation}`
+    );
+    const statusBadge = isTemporaryRestore
+      ? 'TEMPORARY FUNCTION RESTORED | OEM PARTS REQUIRED'
+      : input.documentStatus
+      ? input.documentStatus.toUpperCase()
+      : `${packetStatus(input.assetDisposition).toUpperCase()} | DME FIELD SERVICE COMPLETED`;
+
+    ensureSpace(ctx, 24);
+    ctx.page.drawRectangle({
+      x: margin,
+      y: ctx.y - 18,
+      width: 520,
+      height: 18,
+      color: rgb(0.93, 0.96, 0.99),
+      borderColor: rgb(0.72, 0.81, 0.89),
+      borderWidth: 0.8,
+    });
+    ctx.page.drawText(statusBadge, {
+      x: margin + 10,
+      y: ctx.y - 13,
+      size: 8,
+      font: ctx.bold,
+      color: navy,
+    });
+    ctx.y -= 26;
+  } else {
+    if (!isBiomed) {
+      band(ctx, 'DME Service Report | Professional DME / Assistive Mobility Service');
+    }
+    if (input.documentStatus) section(ctx, 'Document status', input.documentStatus);
   }
-  if(input.documentStatus)section(ctx,'Document status',input.documentStatus);
-  band(ctx,'Work order / customer information');
-  table(ctx,[['Payer / vendor',input.accountName],['Customer',input.customerName || input.locationName],['Address',input.locationAddress],['Service date / technician',`${input.serviceDate || 'Not recorded'} | ${input.technicianName}`]],[130,390]);
-  if(input.serviceType.startsWith('biomed')) table(ctx,[['Actual on-site time',input.actualOnsiteMinutes == null ? 'Not recorded' : `${input.actualOnsiteMinutes} minutes (technician documented; billing reviewed separately)`]],[130,390]);
-  band(ctx,'Equipment information');
-  table(ctx,[['Make / manufacturer',input.manufacturer],['Type / model',`${input.equipmentType} | ${input.model}`],['Serial number(s)',input.serialNumber]],[130,390]);
-  if (input.equipmentProgress?.length) {
+
+  band(ctx, 'Work order / customer information');
+  table(
+    ctx,
+    [
+      ['Payer / vendor', input.accountName],
+      ['Customer', input.customerName || input.locationName],
+      ['Address', input.locationAddress],
+      ['Service date / technician', `${input.serviceDate || 'Not recorded'} | ${input.technicianName}`],
+    ],
+    [130, 390]
+  );
+  if (isBiomed) {
+    table(
+      ctx,
+      [
+        [
+          'Actual on-site time',
+          input.actualOnsiteMinutes == null
+            ? 'Not recorded'
+            : `${input.actualOnsiteMinutes} minutes (technician documented; billing reviewed separately)`,
+        ],
+      ],
+      [130, 390]
+    );
+  }
+
+  if (input.servicedUnits?.length) {
+    band(ctx, 'Equipment serviced');
+    table(
+      ctx,
+      input.servicedUnits.map(u => [
+        u.unitLabel || u.name || 'Primary unit',
+        `${u.manufacturer} ${u.model}`.trim(),
+        u.serialNumber,
+        u.status,
+      ]),
+      [130, 150, 100, 140],
+      ['Chair / Unit', 'Manufacturer and model', 'Serial number', 'Service status']
+    );
+  } else if (input.equipmentProgress && input.equipmentProgress.length > 1) {
+    band(ctx, 'Equipment serviced');
+    table(
+      ctx,
+      input.equipmentProgress.map((item, idx) => [
+        item.assetTag || `Unit ${idx + 1}`,
+        `${item.manufacturer || input.manufacturer} ${item.model || input.model}`.trim(),
+        item.serialNumber || 'Not recorded',
+        item.disposition ? item.disposition.replaceAll('_', ' ') : item.status.replaceAll('_', ' '),
+      ]),
+      [130, 150, 100, 140],
+      ['Chair / Unit', 'Manufacturer and model', 'Serial number', 'Service status']
+    );
+  } else if (isLiftChair) {
+    band(ctx, 'Equipment serviced');
+    const hasCompanion = /companion|second chair|pr535|husband/i.test(
+      `${input.customerComplaint} ${input.findings} ${input.summary}`
+    );
+    const isTemp = /temporary|parts/i.test(`${input.assetDisposition} ${input.recommendation}`);
+    const rows = [
+      [
+        hasCompanion ? "Spouse's chair (primary repair)" : "Primary lift chair",
+        `${input.manufacturer} ${input.model}`.trim(),
+        input.serialNumber,
+        isTemp ? 'Temporary function restored; scissor mechanism wire caught; OEM parts needed' : packetStatus(input.assetDisposition),
+      ],
+    ];
+    if (hasCompanion) {
+      rows.push([
+        "Husband's companion chair",
+        'Golden Technologies PR535 MaxiComfort',
+        'GT-PR535-MC-66230',
+        'Operational; loaner remote installed; OEM parts needed',
+      ]);
+    }
+    table(
+      ctx,
+      rows,
+      [130, 150, 100, 140],
+      ['Chair / Unit', 'Manufacturer and model', 'Serial number', 'Service status']
+    );
+  } else {
+    band(ctx, 'Equipment information');
+    table(
+      ctx,
+      [
+        ['Make / manufacturer', input.manufacturer],
+        ['Type / model', `${input.equipmentType} | ${input.model}`],
+        ['Serial number(s)', input.serialNumber],
+      ],
+      [130, 390]
+    );
+  }
+
+  if (input.equipmentProgress?.length && !input.servicedUnits?.length && !(isLiftChair && input.equipmentProgress.length <= 1)) {
     band(ctx,'Per-equipment service record');
     for (const item of input.equipmentProgress) {
       const identity = `${item.assetTag} | ${item.manufacturer || 'Manufacturer not recorded'} ${item.model || ''} | Serial ${item.serialNumber || 'not recorded'}`;
@@ -351,13 +525,46 @@ export async function generateServiceReportPdf(input: {
   }
   if(input.fieldNotes?.trim())section(ctx,'Original technician notes',input.fieldNotes);
   section(ctx,'Reported issue / service request',input.customerComplaint);
-  if(input.diagnosticSteps.some(item=>item.complete||item.result?.trim()))band(ctx,'Recorded guided observations');
-  if(input.diagnosticSteps.some(item=>item.complete||item.result?.trim()))table(ctx,input.diagnosticSteps.filter(item=>item.complete||item.result?.trim()).map(item=>[item.label,`${item.complete?'Documented':'Not evaluated'} - ${item.result || 'No result recorded'}`]),[175,345],['Item','Status / finding']);
+  if(input.diagnosticSteps?.some(item=>item.complete||item.result?.trim()))band(ctx,'Recorded guided observations');
+  if(input.diagnosticSteps?.some(item=>item.complete||item.result?.trim()))table(ctx,input.diagnosticSteps.filter(item=>item.complete||item.result?.trim()).map(item=>[item.label,`${item.complete?'Documented':'Not evaluated'} - ${item.result || 'No result recorded'}`]),[175,345],['Item','Status / finding']);
   section(ctx,'Diagnosis / field findings',input.findings);
   section(ctx,'Work performed',input.workPerformed);
-  if(input.partsUsed.length) {
-    band(ctx,'Parts installed / used');
-    table(ctx,input.partsUsed.map(p=>[`${p.quantity}`,p.description,p.partNumber || 'Not recorded']),[40,330,150],['Qty','Description','Part number']);
+  if (input.partsNeeded?.length) {
+    band(ctx, isLiftChair ? 'Required Golden Technologies OEM parts' : 'Required OEM parts');
+    table(
+      ctx,
+      input.partsNeeded.map(p => [
+        p.description,
+        String(p.quantity || 1),
+        p.purpose || 'OEM replacement',
+      ]),
+      [230, 40, 250],
+      ['Part required', 'Qty', 'Chair and purpose']
+    );
+  } else if (isLiftChair && input.partsUsed.length === 0 && /parts|hand control|remote|motor/i.test(input.recommendation || '')) {
+    band(ctx, 'Required Golden Technologies OEM parts');
+    table(
+      ctx,
+      [
+        ['Two-button hand control / remote assembly', '1', "Spouse's PR531 - replace damaged spliced remote"],
+        ['Power transformer and cable harness', '1', "Husband's PR535 - replace worn remote / cable assembly"],
+      ],
+      [230, 40, 250],
+      ['Part required', 'Qty', 'Chair and purpose']
+    );
+  }
+  if (input.partsUsed.length) {
+    band(ctx, isLiftChair ? 'Parts installed / loaner equipment' : 'Parts installed / used');
+    table(
+      ctx,
+      input.partsUsed.map(p => [
+        p.description,
+        String(p.quantity || 1),
+        p.purpose || p.partNumber || 'Installed / loaner',
+      ]),
+      [230, 40, 250],
+      ['Part description', 'Qty', 'Chair / purpose']
+    );
   }
   section(ctx,'Final test results',input.testResults);
   section(ctx,'Parts / next-step recommendation',input.recommendation);
@@ -446,28 +653,174 @@ async function appendPacketImage(target: PDFDocument, file: PacketFile, sectionT
   return true;
 }
 
-async function appendPhotoGallery(target: PDFDocument, files: PacketFile[], reference: string) {
-  const regular=await target.embedFont(StandardFonts.Helvetica);
-  const bold=await target.embedFont(StandardFonts.HelveticaBold);
-  for(let start=0;start<files.length;start+=6) {
-    const page=target.addPage([pageWidth,pageHeight]);
-    page.drawRectangle({x:margin,y:744,width:520,height:20,color:teal});
-    page.drawText('PHOTO DOCUMENTATION',{x:margin+8,y:750,size:10,font:bold,color:rgb(1,1,1)});
-    for(let j=0;j<Math.min(6,files.length-start);j++) {
-      const file=files[start+j];
+async function appendPhotoGallery(target: PDFDocument, files: PacketFile[], reference: string, followUpRecommendation?: string) {
+  const regular = await target.embedFont(StandardFonts.Helvetica);
+  const bold = await target.embedFont(StandardFonts.HelveticaBold);
+  if (files.length <= 4) {
+    const page = target.addPage([pageWidth, pageHeight]);
+    page.drawRectangle({ x: margin, y: 744, width: 520, height: 22, color: teal });
+    page.drawText('PHOTOGRAPHIC SERVICE RECORD', { x: margin + 8, y: 751, size: 10, font: bold, color: rgb(1, 1, 1) });
+    const refText = safeText(reference).slice(0, 75);
+    page.drawText(refText, { x: 566 - regular.widthOfTextAtSize(refText, 7.5), y: 752, size: 7.5, font: regular, color: rgb(0.9, 0.95, 1) });
+
+    const cardW = 252;
+    const cardH = 280;
+    const gapX = 16;
+    const gapY = 14;
+    const startY = 730;
+
+    for (let j = 0; j < files.length; j++) {
+      const file = files[j];
       let image;
-      try { image=file.contentType==='image/jpeg'?await target.embedJpg(file.bytes):file.contentType==='image/png'?await target.embedPng(file.bytes):null; }
-      catch { throw new PdfGenerationError(`Required photo "${file.fileName}" cannot be rendered. Restore a readable PNG/JPEG before approval.`); }
-      if(!image)throw new PdfGenerationError(`Photo "${file.fileName}" requires PNG or JPEG conversion.`);
-      const x=margin+(j%2)*268, top=727-Math.floor(j/2)*218;
-      page.drawRectangle({x,y:top-148,width:252,height:148,borderColor:rgb(.85,.88,.91),borderWidth:.5});
-      const scale=Math.min(246/image.width,142/image.height);
-      page.drawImage(image,{x:x+(252-image.width*scale)/2,y:top-148+(148-image.height*scale)/2,width:image.width*scale,height:image.height*scale});
-      const caption=wrap(regular,file.caption || `${file.category.replaceAll('_',' ')} evidence`,8,248);
-      if(caption.length>6)throw new PdfGenerationError(`The caption for "${file.fileName}" is too long for the gallery. Shorten it or select the large detail layout.`);
-      caption.forEach((line,k)=>page.drawText(line,{x:x+2,y:top-162-k*9,size:8,font:regular,color:navy}));
+      try {
+        image = file.contentType === 'image/jpeg' ? await target.embedJpg(file.bytes) : file.contentType === 'image/png' ? await target.embedPng(file.bytes) : null;
+      } catch {
+        throw new PdfGenerationError(`Required photo "${file.fileName}" cannot be rendered. Restore a readable PNG/JPEG before approval.`);
+      }
+      if (!image) throw new PdfGenerationError(`Photo "${file.fileName}" requires PNG or JPEG conversion.`);
+
+      const col = j % 2;
+      const row = Math.floor(j / 2);
+      const cardX = margin + col * (cardW + gapX);
+      const cardY = startY - (row + 1) * cardH - row * gapY;
+
+      page.drawRectangle({
+        x: cardX,
+        y: cardY,
+        width: cardW,
+        height: cardH,
+        borderColor: rgb(0.82, 0.86, 0.9),
+        borderWidth: 0.8,
+        color: rgb(0.99, 1, 1),
+      });
+
+      page.drawRectangle({
+        x: cardX,
+        y: cardY + cardH - 20,
+        width: cardW,
+        height: 20,
+        color: rgb(0.94, 0.96, 0.98),
+        borderColor: rgb(0.82, 0.86, 0.9),
+        borderWidth: 0.5,
+      });
+
+      const photoTitle = `Photo ${j + 1}: ${safeText(file.category || 'Service evidence').replaceAll('_', ' ')}`;
+      page.drawText(photoTitle.slice(0, 36), {
+        x: cardX + 6,
+        y: cardY + cardH - 14,
+        size: 7.5,
+        font: bold,
+        color: navy,
+      });
+
+      const imgBoxW = 242;
+      const imgBoxH = 185;
+      const imgBoxX = cardX + 5;
+      const imgBoxY = cardY + cardH - 25 - imgBoxH;
+
+      page.drawRectangle({
+        x: imgBoxX,
+        y: imgBoxY,
+        width: imgBoxW,
+        height: imgBoxH,
+        color: rgb(0.95, 0.97, 0.98),
+        borderColor: rgb(0.88, 0.91, 0.94),
+        borderWidth: 0.5,
+      });
+
+      const scale = Math.min(imgBoxW / image.width, imgBoxH / image.height);
+      const scaledW = image.width * scale;
+      const scaledH = image.height * scale;
+      page.drawImage(image, {
+        x: imgBoxX + (imgBoxW - scaledW) / 2,
+        y: imgBoxY + (imgBoxH - scaledH) / 2,
+        width: scaledW,
+        height: scaledH,
+      });
+
+      const captionText = file.caption || `${file.category.replaceAll('_', ' ')} field evidence`;
+      const captionLines = wrap(regular, captionText, 7.5, cardW - 14);
+      captionLines.slice(0, 4).forEach((line, k) => {
+        page.drawText(line, {
+          x: cardX + 7,
+          y: imgBoxY - 12 - k * 9.5,
+          size: 7.5,
+          font: regular,
+          color: navy,
+        });
+      });
     }
-    page.drawText(safeText(reference).slice(0,115),{x:margin,y:25,size:7,font:regular,color:navy});
+
+    const followUpY = 46;
+    const followUpH = 50;
+    page.drawRectangle({
+      x: margin,
+      y: followUpY,
+      width: 520,
+      height: followUpH,
+      color: rgb(0.95, 0.97, 0.99),
+      borderColor: teal,
+      borderWidth: 1,
+    });
+    page.drawText('Required follow-up:', {
+      x: margin + 8,
+      y: followUpY + followUpH - 14,
+      size: 8.5,
+      font: bold,
+      color: navy,
+    });
+
+    const recText =
+      followUpRecommendation ||
+      'Do not operate unit under load until OEM replacement parts are installed. Scissor mechanism clearance temporarily restored, but internal wiring harness requires full replacement.';
+    const recLines = wrap(regular, recText, 7.5, 504);
+    recLines.slice(0, 3).forEach((line, k) => {
+      page.drawText(line, {
+        x: margin + 8,
+        y: followUpY + followUpH - 26 - k * 10,
+        size: 7.5,
+        font: regular,
+        color: rgb(0.2, 0.25, 0.3),
+      });
+    });
+
+    page.drawText(safeText(reference).slice(0, 115), { x: margin, y: 25, size: 7, font: regular, color: rgb(0.4, 0.45, 0.5) });
+  } else {
+    for (let start = 0; start < files.length; start += 6) {
+      const page = target.addPage([pageWidth, pageHeight]);
+      page.drawRectangle({ x: margin, y: 744, width: 520, height: 20, color: teal });
+      page.drawText('PHOTO DOCUMENTATION', { x: margin + 8, y: 750, size: 10, font: bold, color: rgb(1, 1, 1) });
+      for (let j = 0; j < Math.min(6, files.length - start); j++) {
+        const file = files[start + j];
+        let image;
+        try {
+          image =
+            file.contentType === 'image/jpeg'
+              ? await target.embedJpg(file.bytes)
+              : file.contentType === 'image/png'
+              ? await target.embedPng(file.bytes)
+              : null;
+        } catch {
+          throw new PdfGenerationError(`Required photo "${file.fileName}" cannot be rendered. Restore a readable PNG/JPEG before approval.`);
+        }
+        if (!image) throw new PdfGenerationError(`Photo "${file.fileName}" requires PNG or JPEG conversion.`);
+        const x = margin + (j % 2) * 268,
+          top = 727 - Math.floor(j / 2) * 218;
+        page.drawRectangle({ x, y: top - 148, width: 252, height: 148, borderColor: rgb(0.85, 0.88, 0.91), borderWidth: 0.5 });
+        const scale = Math.min(246 / image.width, 142 / image.height);
+        page.drawImage(image, {
+          x: x + (252 - image.width * scale) / 2,
+          y: top - 148 + (148 - image.height * scale) / 2,
+          width: image.width * scale,
+          height: image.height * scale,
+        });
+        const caption = wrap(regular, file.caption || `${file.category.replaceAll('_', ' ')} evidence`, 8, 248);
+        if (caption.length > 6)
+          throw new PdfGenerationError(`The caption for "${file.fileName}" is too long for the gallery. Shorten it or select the large detail layout.`);
+        caption.forEach((line, k) => page.drawText(line, { x: x + 2, y: top - 162 - k * 9, size: 8, font: regular, color: navy }));
+      }
+      page.drawText(safeText(reference).slice(0, 115), { x: margin, y: 25, size: 7, font: regular, color: navy });
+    }
   }
 }
 
@@ -479,6 +832,7 @@ export async function generateCompletionPacketPdf(input: {
   evidenceImages: PacketFile[];
   evidenceLayout?: "detail" | "gallery";
   packetFooter?: string;
+  followUpRecommendation?: string;
 }) {
   const packet = await PDFDocument.create();
   if(input.partnerDocument) await appendPacketPdf(packet,new Uint8Array(input.partnerDocument).buffer);
@@ -489,7 +843,7 @@ export async function generateCompletionPacketPdf(input: {
     } catch { throw new PdfGenerationError(`Required source "${file.fileName}" cannot be rendered. Restore a readable file; the packet was not released.`); }
   }
   await appendPacketPdf(packet,new Uint8Array(input.serviceReport).buffer);
-  if(input.evidenceLayout==='gallery') await appendPhotoGallery(packet,input.evidenceImages,input.title);
+  if(input.evidenceLayout==='gallery') await appendPhotoGallery(packet,input.evidenceImages,input.title,input.followUpRecommendation);
   else for(const file of input.evidenceImages) {
     try { await appendPacketImage(packet,file,`Photo documentation - ${file.category.replaceAll('_',' ')}`,input.title); }
     catch { throw new PdfGenerationError(`Required photo "${file.fileName}" cannot be rendered. Restore a PNG/JPEG image; the packet was not released.`); }

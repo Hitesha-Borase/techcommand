@@ -68,7 +68,16 @@ export async function POST(request:Request) {
       diagnosticSteps:[],partsUsed:(visit.parts||[]).filter(p=>p.state==="installed").map(p=>({description:p.description||"Description not recorded",partNumber:p.partNumber,quantity:p.quantity})),customerSignedAt:visit.customerSignedAt,evidenceCounts:{},
       checklist:checks.map(c=>({...c,key:undefined}))});
     const photos=loaded.filter(f=>f.category!=="signature");
-    const bytes=await generateCompletionPacketPdf({title:`SpinLife work order ${reference}`,partnerDocument:partner,serviceReport:service,sourceDocuments:[],evidenceImages:photos,evidenceLayout:"gallery"});
+    const bytes=await generateCompletionPacketPdf({
+      title:`SpinLife work order ${reference}`,
+      partnerDocument:partner,
+      serviceReport:service,
+      sourceDocuments:[],
+      evidenceImages:photos,
+      evidenceLayout:"gallery",
+      packetFooter:`TechFlex Mobility Solutions | SpinLife WO ${reference}`,
+      followUpRecommendation: visit.recommendation || wording?.recommendation || originalVisit.recommendation,
+    });
     const fileName=dmePacketName(job.technicianName,reference,needsReview&&["delivery_completed","returned_to_service"].includes(visit.disposition)?"needs_review":visit.disposition);
     const attachmentId=crypto.randomUUID();
     stagedKey=`techflex/spinlife/${input.id}/packets/${attachmentId}.pdf`;
