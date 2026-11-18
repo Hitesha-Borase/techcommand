@@ -51,7 +51,11 @@ function initLocalDevD1(): any {
 
     if (!foundPath) return null;
 
-    const sqliteDb = new DatabaseSync(foundPath);
+    const glob = globalThis as any;
+    if (!glob.__SQLITE_SYNC_DB__) {
+      glob.__SQLITE_SYNC_DB__ = new DatabaseSync(foundPath);
+    }
+    const sqliteDb = glob.__SQLITE_SYNC_DB__;
 
     function normalizeParams(params: any[]) {
       return params.map((p) => {
@@ -63,6 +67,7 @@ function initLocalDevD1(): any {
 
     const d1 = {
       prepare(query: string) {
+        const isSelect = /^\s*(SELECT|PRAGMA|WITH|EXPLAIN)\b/i.test(query);
         return {
           bind(...params: any[]) {
             const cleanParams = normalizeParams(params);
@@ -76,19 +81,41 @@ function initLocalDevD1(): any {
               },
               async all<T = unknown>(): Promise<{ results: T[]; success: boolean; meta: any }> {
                 const stmt = sqliteDb.prepare(query);
-                const results = stmt.all(...cleanParams);
-                return { results: results as T[], success: true, meta: { changes: 0 } };
+                if (isSelect) {
+                  const results = stmt.all(...cleanParams);
+                  return { results: results as T[], success: true, meta: { changes: 0 } };
+                } else {
+                  const info = stmt.run(...cleanParams);
+                  return {
+                    results: [] as T[],
+                    success: true,
+                    meta: {
+                      changes: Number(info?.changes || 0),
+                      last_row_id: Number(info?.lastInsertRowid || 0),
+                    },
+                  };
+                }
               },
-              async run(): Promise<{ success: boolean; meta: { changes: number; last_row_id: number } }> {
+              async run(): Promise<{ success: boolean; meta: { changes: number; last_row_id: number }; results: any[] }> {
                 const stmt = sqliteDb.prepare(query);
-                const info = stmt.run(...cleanParams);
-                return {
-                  success: true,
-                  meta: {
-                    changes: Number(info?.changes || 0),
-                    last_row_id: Number(info?.lastInsertRowid || 0),
-                  },
-                };
+                if (isSelect) {
+                  const results = stmt.all(...cleanParams);
+                  return {
+                    success: true,
+                    meta: { changes: 0, last_row_id: 0 },
+                    results: results as any[],
+                  };
+                } else {
+                  const info = stmt.run(...cleanParams);
+                  return {
+                    success: true,
+                    meta: {
+                      changes: Number(info?.changes || 0),
+                      last_row_id: Number(info?.lastInsertRowid || 0),
+                    },
+                    results: [],
+                  };
+                }
               },
             };
           },
@@ -98,7 +125,7 @@ function initLocalDevD1(): any {
           async all<T = unknown>(): Promise<{ results: T[]; success: boolean; meta: any }> {
             return this.bind().all<T>();
           },
-          async run(): Promise<{ success: boolean; meta: { changes: number; last_row_id: number } }> {
+          async run(): Promise<{ success: boolean; meta: { changes: number; last_row_id: number }; results: any[] }> {
             return this.bind().run();
           },
         };
@@ -106,10 +133,10 @@ function initLocalDevD1(): any {
       async batch(stmts: any[]) {
         const results = [];
         for (const s of stmts) {
-          if (s && typeof s.run === "function") {
-            results.push(await s.run());
-          } else if (s && typeof s.all === "function") {
+          if (s && typeof s.all === "function") {
             results.push(await s.all());
+          } else if (s && typeof s.run === "function") {
+            results.push(await s.run());
           }
         }
         return results;
@@ -128,13 +155,13 @@ function initLocalDevD1(): any {
 
 function getActiveDb(): any {
   const glob = globalThis as any;
-  if (glob.__D1_DB__) return glob.__D1_DB__;
   if (glob.__WORKER_ENV__?.DB) return glob.__WORKER_ENV__.DB;
   const localD1 = initLocalDevD1();
   if (localD1) {
     glob.__D1_DB__ = localD1;
     return localD1;
   }
+  if (glob.__D1_DB__) return glob.__D1_DB__;
   return null;
 }
 

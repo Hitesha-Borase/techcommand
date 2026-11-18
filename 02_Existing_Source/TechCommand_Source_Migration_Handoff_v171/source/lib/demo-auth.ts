@@ -323,6 +323,7 @@ export async function seedAllDemoUsers() {
         FROM users u
         JOIN technicians t ON t.user_id = u.id;
       `);
+
       const dbUsers = await env.DB.prepare(`
         SELECT u.id AS userId, u.email, u.display_name AS displayName, r.name AS role, r.id AS roleId,
                t.id AS technicianId, t.technician_code AS technicianCode,

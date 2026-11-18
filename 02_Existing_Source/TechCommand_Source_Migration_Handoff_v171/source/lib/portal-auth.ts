@@ -215,7 +215,8 @@ async function provisionApprovedAdministrator(
 }
 
 async function resolvePortalIdentity(request: Request): Promise<PortalIdentity> {
-  const cookieUser = request.headers.get("cookie")?.match(/tc_demo_user=([^;]+)/)?.[1];
+  const cookieHeader = request.headers.get("cookie");
+  const cookieUser = cookieHeader?.match(/tc_demo_user=([^;]+)/)?.[1];
   if (cookieUser) {
     const email = decodeURIComponent(cookieUser).trim().toLowerCase();
     if (DEMO_ACCOUNTS[email]) {
@@ -229,31 +230,44 @@ async function resolvePortalIdentity(request: Request): Promise<PortalIdentity> 
         technicianId: demo.technicianId,
       };
     }
-    try {
-      const dbUser = await env.DB.prepare(`
-        SELECT u.id AS userId, u.auth_subject AS authSubject, u.email, u.display_name AS displayName,
-               r.name AS role, t.id AS technicianId
-          FROM users u
-          JOIN memberships m ON m.user_id = u.id AND m.status = 'active'
-          JOIN roles r ON r.id = m.role_id
-          LEFT JOIN login_usernames lu ON lu.user_id = u.id
-          LEFT JOIN technicians t ON t.user_id = u.id AND t.status = 'active'
-         WHERE (lower(u.email) = ? OR lower(COALESCE(lu.username, '')) = ? OR lower(COALESCE(lu.username_key, '')) = ? OR lower(u.display_name) = ?)
-           AND u.status = 'active'
-         LIMIT 1
-      `).bind(email, email, email, email).first<{ userId: string; authSubject: string; email: string; displayName: string; role: PortalRole; technicianId: string | null }>();
-      if (dbUser) {
-        return {
-          userId: dbUser.userId,
-          authSubject: dbUser.authSubject || `local:${dbUser.email}`,
-          email: dbUser.email,
-          displayName: dbUser.displayName,
-          role: dbUser.role,
-          technicianId: dbUser.technicianId,
-        };
+    if (env?.DB) {
+      try {
+        const dbUser = await env.DB.prepare(`
+          SELECT u.id AS userId, u.auth_subject AS authSubject, u.email, u.display_name AS displayName,
+                 r.name AS role, t.id AS technicianId
+            FROM users u
+            JOIN memberships m ON m.user_id = u.id AND m.status = 'active'
+            JOIN roles r ON r.id = m.role_id
+            LEFT JOIN login_usernames lu ON lu.user_id = u.id
+            LEFT JOIN technicians t ON t.user_id = u.id AND t.status = 'active'
+           WHERE (lower(u.email) = ? OR lower(COALESCE(lu.username, '')) = ? OR lower(COALESCE(lu.username_key, '')) = ? OR lower(u.display_name) = ?)
+             AND u.status = 'active'
+           LIMIT 1
+        `).bind(email, email, email, email).first<{ userId: string; authSubject: string; email: string; displayName: string; role: PortalRole; technicianId: string | null }>();
+        if (dbUser) {
+          return {
+            userId: dbUser.userId,
+            authSubject: dbUser.authSubject || `local:${dbUser.email}`,
+            email: dbUser.email,
+            displayName: dbUser.displayName,
+            role: dbUser.role,
+            technicianId: dbUser.technicianId,
+          };
+        }
+      } catch (err) {
+        console.error("resolvePortalIdentity error:", err);
       }
-    } catch (err) {
-      console.error("resolvePortalIdentity error:", err);
+    }
+    const demo = getDemoAccountFromCookie(cookieHeader);
+    if (demo) {
+      return {
+        userId: demo.userId,
+        authSubject: `demo:${demo.email}`,
+        email: demo.email,
+        displayName: demo.displayName,
+        role: demo.role,
+        technicianId: demo.technicianId,
+      };
     }
   }
   if (usesPasswordLogin(request)) {
