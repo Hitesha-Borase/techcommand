@@ -948,6 +948,7 @@ export function SpinLifePortal({userId,technician=false,onOtherWork,onCareer,ini
                     dmeFamilyId:"",
                   }
                 });
+                setFiles([]);
                 setNotice("Work order form cleared.");
                 setAiMessage("");
               }}

@@ -6,6 +6,7 @@ import { parseCsv, rowsToObjects } from "@/lib/import-parsing";
 import { blankImportTemplate, companyReferenceCsv, correctionOnlyCsv, importTemplateColumns } from "@/lib/import-templates";
 import { suggestImportMapping, validateImportMapping } from "@/lib/import-mapping";
 import { ImportMappingPanel, type ImportMappingProfile } from "@/components/import-mapping-panel";
+import { parseScreenshotOcr, type SpinLifeDraft } from "@/lib/imports-sync-parser";
 
 import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -21,7 +22,6 @@ type ImportType = "accounts" | "locations" | "assets" | "work_orders" | "technic
 type ImportRecord = { id: string; importType: string; source: string; fileName: string | null; status: string; rowCount: number; successCount: number; errorCount: number; createdCount: number; updatedCount: number; skippedCount: number; startedAt: string; errors?: {row:number;message:string}[] };
 type Named = { id: string; externalId?: string | null; accountId?: string; accountName?: string; name?: string; assetTag?: string; manufacturer?: string; model?: string };
 type WorkOrder = { id: string; externalId: string; accountName: string; summary: string };
-type SpinLifeDraft = { workOrder: string; customerName: string; serviceAddress: string; email: string; phone: string; jobType: string; authorization: string; createdOn: string; product: string; manufacturer: string; model: string; specifications: string; jobNotes: string; assignedTo: string };
 type AssetPreviewField = { field: string; label: string; current: string | number | null; incoming: string | number | null; blockedReason: string | null };
 type AssetPreviewRow = { row: number; status: "new" | "changed" | "unchanged" | "conflict" | "error"; defaultAction: "create" | "skip"; assetTag: string; assetId: string | null; expectedRecordVersion: number | null; fields: AssetPreviewField[]; issue?: string | null };
 type AssetDecision = { row: number; action: "create" | "update" | "skip"; assetId: string | null; expectedRecordVersion: number | null; fields: string[] };
@@ -73,32 +73,7 @@ async function json<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 function spinLifeDraft(text: string): SpinLifeDraft {
-  const clean = text.replace(/\r/g, "").replace(/[ \t]+/g, " ");
-  const lines = clean.split("\n").map((line) => line.trim()).filter(Boolean);
-  const match = (pattern: RegExp) => clean.match(pattern)?.[1]?.trim() || "";
-  const email = match(/\b([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})\b/i);
-  const phone = match(/(\(?\d{3}\)?[\s.-]*\d{3}[\s.-]*\d{4})/);
-  const workOrder = match(/Work\s*Order\s*#?\s*([A-Z0-9-]+)/i);
-  const model = match(/Model\s*(?:No\.?|Number|#)?\s*[:.]?\s*([A-Z0-9-]+)/i);
-  const authorization = match(/Job\s*Pays\s*\$?\s*([\d,]+(?:\.\d{2})?)/i);
-  const createdOn = match(/Job\s*Created\s*On[\s\S]{0,60}?(\d{1,2}\/\d{1,2}\/\d{2,4})/i);
-  const customerBlock = match(/Customer\s*Information\s*([\s\S]*?)(?:Primary\s*Product|Job\s*Details|Assigned\s*To)/i);
-  const customerLines = customerBlock.split("\n").map((line) => line.trim()).filter(Boolean).filter((line) => !line.includes("@") && !/\d{3}.?\d{3}.?\d{4}/.test(line));
-  const customerName = customerLines.find((line) => /^[A-Za-z][A-Za-z .'-]{2,}$/.test(line)) || match(/Customer\s*Information[^\n]*\n([A-Za-z][A-Za-z .'-]+?)(?:\s+Assigned\s*To)?\s*$/im);
-  const addressLine = customerLines.find((line) => /^\d+\s+/.test(line)) || match(/\n(\d+\s+[A-Za-z0-9 .'-]+?)(?=\s+\d+\s+|\n)/);
-  const cityLine = customerLines.find((line) => /,\s*[A-Z]{2}\s+\d{5}/.test(line)) || match(/\n([A-Za-z .'-]+,\s*[A-Z]{2}\s+\d{5})\b/);
-  const productBlock = match(/Primary\s*Product\s*([\s\S]*?)(?:Job\s*Details|Product\s*Specifications)/i);
-  const productLines = productBlock.split("\n").map((line) => line.trim()).filter(Boolean);
-  const product = productLines.find((line) => !/^By\s+/i.test(line) && !/Model/i.test(line)) || lines.find((line) => /(?:VivaLift|lift chair|power chair|scooter)/i.test(line))?.split(/\s{2,}|\s+Install\b/i)[0] || "";
-  const manufacturer = match(/\bBy\s+([^\n]+?)(?:\s+issues?\.|$)/im) || (["Pride", "Golden", "Invacare", "Drive", "Joerns", "Permobil"].find((name) => clean.toLowerCase().includes(name.toLowerCase())) || "");
-  return {
-    workOrder, customerName, serviceAddress: [addressLine, cityLine].filter(Boolean).join(", "), email, phone,
-    jobType: match(/Job\s*Type\s*([A-Za-z ]+)/i).split("\n")[0] || "Repair", authorization, createdOn,
-    product, manufacturer, model,
-    specifications: match(/Product\s*Specifications\s*([\s\S]*?)(?:Job\s*Details|Assigned\s*To|Job\s*Type)/i).slice(0, 1000),
-    jobNotes: match(/Job\s*Notes\s*([\s\S]*?)(?:Repair\s*Parts|Work\s*Order)/i).slice(0, 3000),
-    assignedTo: match(/Assigned\s*To\s*([^\n]+(?:\n[^\n]+)?)/i).slice(0, 500),
-  };
+  return parseScreenshotOcr(text);
 }
 
 export function ImportCenter({ role, userId, initialType = "accounts", onOpenAssets }: { role: string; userId: string; initialType?: ImportType; onOpenAssets?: () => void }) {
