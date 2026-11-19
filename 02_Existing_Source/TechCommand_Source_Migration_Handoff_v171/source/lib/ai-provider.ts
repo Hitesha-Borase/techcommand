@@ -8,6 +8,7 @@
 
 import { z } from "zod";
 import { env } from "cloudflare:workers";
+import { parseWorkOrderAttachment, normalizeIntakeFields } from "@/lib/spinlife-intake";
 
 export type AiProviderName = "gemini" | "openai" | "fallback";
 
@@ -24,6 +25,47 @@ export interface AiCompletionOptions<T> {
 }
 
 /**
+ * Reads an environment variable key from Worker env, Node process.env, globalThis,
+ * or safely from .dev.vars / .env.local on disk during local development.
+ */
+export function getStoredEnvKey(keyName: string): string {
+  const workerEnv: Record<string, string | undefined> = typeof env !== "undefined" && env ? (env as unknown as Record<string, string | undefined>) : {};
+  const envObj: Record<string, string | undefined> = typeof process !== "undefined" && process.env ? (process.env as Record<string, string | undefined>) : {};
+  const globalObj: Record<string, unknown> = typeof globalThis !== "undefined" ? (globalThis as Record<string, unknown>) : {};
+
+  if (workerEnv[keyName]) return workerEnv[keyName]!;
+  if (envObj[keyName]) return envObj[keyName]!;
+  if (typeof globalObj[keyName] === "string" && globalObj[keyName]) return globalObj[keyName] as string;
+  try {
+    const fs = require("node:fs");
+    const path = require("node:path");
+    const candidates = [
+      process.cwd(),
+      path.resolve(process.cwd(), ".."),
+      typeof __dirname !== "undefined" ? path.resolve(__dirname, "..") : "",
+      typeof __dirname !== "undefined" ? path.resolve(__dirname, "../..") : "",
+    ].filter(Boolean);
+    for (const dir of candidates) {
+      for (const file of [".dev.vars", ".env.local", ".env"]) {
+        const p = path.resolve(dir, file);
+        if (fs.existsSync(p)) {
+          const text = fs.readFileSync(p, "utf-8");
+          const match = text.match(new RegExp(`^\\s*${keyName}\\s*=\\s*["']?([^"'\\r\\n]+)["']?`, "m"));
+          if (match && match[1]) {
+            const val = match[1].trim();
+            if (typeof process !== "undefined" && process.env) {
+              process.env[keyName] = val;
+            }
+            return val;
+          }
+        }
+      }
+    }
+  } catch {}
+  return "";
+}
+
+/**
  * Detects the active AI provider based on environment variables or explicit config
  */
 export function getActiveAiProvider(explicitKey?: string): {
@@ -37,10 +79,10 @@ export function getActiveAiProvider(explicitKey?: string): {
 
   const geminiKey = explicitKey && !explicitKey.startsWith("sk-")
     ? explicitKey
-    : (workerEnv.GEMINI_API_KEY || envObj.GEMINI_API_KEY || (typeof globalObj.GEMINI_API_KEY === "string" ? globalObj.GEMINI_API_KEY : "") || "");
+    : (workerEnv.GEMINI_API_KEY || envObj.GEMINI_API_KEY || (typeof globalObj.GEMINI_API_KEY === "string" ? globalObj.GEMINI_API_KEY : "") || getStoredEnvKey("GEMINI_API_KEY") || "");
   const openAiKey = explicitKey?.startsWith("sk-")
     ? explicitKey
-    : (workerEnv.OPENAI_API_KEY || envObj.OPENAI_API_KEY || (typeof globalObj.OPENAI_API_KEY === "string" ? globalObj.OPENAI_API_KEY : "") || "");
+    : (workerEnv.OPENAI_API_KEY || envObj.OPENAI_API_KEY || (typeof globalObj.OPENAI_API_KEY === "string" ? globalObj.OPENAI_API_KEY : "") || getStoredEnvKey("OPENAI_API_KEY") || "");
 
   const configuredProvider = (workerEnv.AI_PROVIDER || envObj.AI_PROVIDER || "").toLowerCase();
 
@@ -94,7 +136,10 @@ async function callGeminiStructured<T>(
     }
   }
 
-  const fullInstruction = options.instruction + (options.schema ? `\n\nYou MUST respond with ONLY a valid JSON object strictly adhering to this JSON schema structure:\n${JSON.stringify(options.schema)}\nEnsure every property defined in the schema is present in your response (use null for missing/unknown values, empty array [] for missing lists, and 0 for missing numbers).` : "");
+  const extractionNotes = options.name === "techcommand_bid_fields"
+    ? "\n\nCRITICAL EXTRACTION RULES:\n- Preserve externalId and any suffixes (e.g. '00071118002N-4', '-B', '-2') verbatim.\n- Extract customerName, customerPhone, serviceAddress, manufacturer, model, serialNumber accurately from labeled fields.\n- Extract equipmentType strictly from the document (e.g. 'Lift Chair', 'Mobility Scooter', 'Hospital Bed'). If unknown or not stated, set equipmentType to null. NEVER default to 'Power Wheelchair'."
+    : "";
+  const fullInstruction = options.instruction + extractionNotes + (options.schema ? `\n\nYou MUST respond with ONLY a valid JSON object strictly adhering to this JSON schema structure:\n${JSON.stringify(options.schema)}\nEnsure every property defined in the schema is present in your response (use null for missing/unknown values, empty array [] for missing lists, and 0 for missing numbers).` : "");
 
   let lastError: Error | null = null;
   let rawText = "";
@@ -168,6 +213,10 @@ async function callGeminiStructured<T>(
         );
       }
     }
+  }
+
+  if (options.name === "techcommand_bid_fields" && parsedObj && typeof parsedObj === "object") {
+    parsedObj = normalizeIntakeFields(parsedObj);
   }
 
   const firstAttempt = options.validate.safeParse(parsedObj);
@@ -263,139 +312,23 @@ async function callOpenAiStructured<T>(
  * Fallback heuristic extractor for work orders when AI is offline or key is unconfigured.
  */
 function fallbackBidFields(content: Array<Record<string, unknown>>) {
-  let text = "";
-  for (const c of content) {
-    if (typeof c.text === "string") {
-      let t = c.text;
-      const marker = "Pasted source:\n";
-      const idx = t.indexOf(marker);
-      if (idx !== -1) {
-        t = t.slice(idx + marker.length);
-      }
-      text += t + "\n";
-    }
-    if (typeof (c as any).filename === "string") text += (c as any).filename + "\n";
-  }
-
-  // 1. Work order reference / ID (Preserve full external reference and suffix, never truncate to partial words like 'rk')
-  let externalId: string | null = null;
-  const explicitWoMatch = text.match(
-    /(?:Work\s*Order(?:\s*(?:Number|No\.?|ID|#))?|\bWO\b(?:\s*(?:Number|No\.?|ID|#))?|\bOrder\s*(?:Number|No\.?|ID|#|Ref(?:erence)?)?|\bJob\s*(?:Number|No\.?|ID|#)?|\bSpinLife\s*(?:WO|Order)?|\bIntake\s*(?:Number|ID)?)\s*[:#=\-]?\s*([A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)*)/i
-  );
-  if (explicitWoMatch && explicitWoMatch[1]) {
-    const candidate = explicitWoMatch[1].trim();
-    if (!/^(work|order|number|none|null|undefined|na|n\/a)$/i.test(candidate)) {
-      externalId = candidate;
-    }
-  }
-  if (!externalId) {
-    const auditMatch = text.match(/\b(AUDIT-[A-Za-z0-9\-]+|WO[- ]?[0-9A-Za-z\-]+)\b/i);
-    if (auditMatch) externalId = auditMatch[1].trim();
-  }
-  if (!externalId) {
-    const numMatch = text.match(/\b(173\d{5,8})\b/);
-    if (numMatch) externalId = numMatch[1];
-  }
-
-  // 2. Customer Phone (ONLY read from an explicitly labeled phone/contact field; leave unresolved/null otherwise)
-  let customerPhone: string | null = null;
-  const phoneLineMatch = text.match(
-    /(?:Phone|Tel(?:ephone)?|Cell(?:ular)?|Mobile|Contact(?:\s*(?:Phone|Number|#))?)\s*[:#=\-]?\s*([+]?1?[\s.\-]?(?:\(\d{3}\)|\d{3})[\s.\-]?\d{3}[\s.\-]?\d{4})/i
-  );
-  if (phoneLineMatch && phoneLineMatch[1]) {
-    customerPhone = phoneLineMatch[1].trim();
-  }
-
-  // 3. Customer Complaint / Requested Work
-  let customerComplaint: string | null = null;
-  const compMatch = text.match(
-    /(?:Description\s*of\s*(?:issue|problem|repair(?:\s*needed)?)|Requested\s*work(?:\s*[\/\-]\s*problem)?|Customer\s*Complaint|Reason(?:\s*for\s*(?:call|service|repair))?|Complaint|Problem|Issue|Notes|Service\s*Request)\s*[:#=\-]?\s*([^\r\n]+)/i
-  );
-  if (compMatch && compMatch[1]) {
-    const c = compMatch[1].trim();
-    if (c && !/^(none|null|undefined|na|n\/a)$/i.test(c)) {
-      customerComplaint = c;
-    }
-  }
-
-  // 4. Customer Name
-  let customerName: string | null = null;
-  const nameMatch = text.match(
-    /(?:Customer(?:\s*Name)?|Client(?:\s*Name)?|Patient(?:\s*Name)?|Service\s*Recipient)\s*[:#=\-]?\s*([^\r\n]+)/i
-  );
-  if (nameMatch && nameMatch[1]) {
-    const n = nameMatch[1].trim();
-    if (n.length > 2 && !/^(address|phone|email|golden|pride|invacare|make|model)/i.test(n)) {
-      customerName = n.slice(0, 100);
-    }
-  }
-
-  // 5. Email
-  const emailMatch = text.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
-  const customerEmail = emailMatch ? emailMatch[1] : null;
-
-  // 6. Service Address
-  let serviceAddress: string | null = null;
-  const addrMatch = text.match(
-    /(?:Service\s*Address|Customer\s*Address|Address|Location|Ship\s*To)\s*[:#=\-]?\s*([^\r\n]+)/i
-  );
-  if (addrMatch && addrMatch[1]) {
-    serviceAddress = addrMatch[1].trim().slice(0, 200);
-  }
-
-  // 7. Equipment & Manufacturer
-  let manufacturer: string | null = null;
-  const mfgMatch = text.match(/(?:Make|Manufacturer|Brand)\s*[:#=\-]?\s*([^\r\n]+)/i);
-  if (mfgMatch && mfgMatch[1]) {
-    manufacturer = mfgMatch[1].trim().slice(0, 100);
-  } else if (/golden/i.test(text)) manufacturer = "Golden Technologies";
-  else if (/pride/i.test(text)) manufacturer = "Pride Mobility";
-  else if (/invacare/i.test(text)) manufacturer = "Invacare";
-  else if (/permobil/i.test(text)) manufacturer = "Permobil";
-  else if (/drive/i.test(text)) manufacturer = "Drive DeVilbiss";
-
-  // 8. Model
-  let model: string | null = null;
-  const modelMatch = text.match(/(?:Model(?:\s*(?:Number|No\.?|#))?|Type\s*[\/\-]\s*model)\s*[:#=\-]?\s*([^\r\n]+)/i);
-  if (modelMatch && modelMatch[1]) {
-    model = modelMatch[1].trim().slice(0, 100);
-  } else if (/PR[- ]?535/i.test(text)) model = "PR535";
-  else if (/PR[- ]?447/i.test(text)) model = "PR-447";
-  else if (/Jazzy\s*Air\s*2/i.test(text)) model = "Jazzy Air 2";
-  else if (/Buzzaround/i.test(text)) model = "Buzzaround EX";
-  else if (/LiteRider/i.test(text)) model = "LiteRider";
-
-  // 9. Serial Number
-  let serialNumber: string | null = null;
-  const snMatch = text.match(/(?:Serial(?:\s*(?:Number|No\.?|#))?|SN|S\/N)\s*[:#=\-]?\s*([A-Za-z0-9\-]+)/i);
-  if (snMatch && snMatch[1]) {
-    serialNumber = snMatch[1].trim().slice(0, 100);
-  }
-
-  // 10. Service Type
-  let serviceType: any = "repair_single";
-  if (/\b(?:pm|preventive|maintenance)\b/i.test(text)) serviceType = "biomed_pm_a";
-  else if (/\b(?:delivery|setup|drop\s*off)\b/i.test(text)) serviceType = "bed_delivery";
-  else if (/\b(?:install|installation)\b/i.test(text)) serviceType = "consumer_install";
-  else if (/\b(?:eval|evaluation)\b/i.test(text)) serviceType = "evaluation";
-
-  const summary = customerComplaint || (externalId ? `Work order ${externalId}` : "Work order details extracted");
+  const parsed = parseWorkOrderAttachment(content);
 
   return {
     externalSource: "spinlife",
     clientAccountName: "SpinLife",
-    externalId,
-    customerName,
-    customerPhone,
-    customerEmail,
-    serviceAddress,
-    serviceType,
-    summary,
-    customerComplaint,
-    equipmentType: /chair|recliner/i.test(text) ? "Lift Chair" : /scooter/i.test(text) ? "Mobility Scooter" : "Power Wheelchair",
-    manufacturer,
-    model,
-    serialNumber,
+    externalId: parsed.externalId,
+    customerName: parsed.customerName,
+    customerPhone: parsed.customerPhone,
+    customerEmail: null,
+    serviceAddress: parsed.serviceAddress,
+    serviceType: (parsed.serviceType as any) || "repair_single",
+    summary: parsed.summary || (parsed.externalId ? `Work order ${parsed.externalId}` : "Work order details extracted"),
+    customerComplaint: parsed.customerComplaint,
+    equipmentType: parsed.equipmentType, // Strictly dynamic: null if unknown, NEVER forces Power Wheelchair!
+    manufacturer: parsed.manufacturer,
+    model: parsed.model,
+    serialNumber: parsed.serialNumber,
     sourceAssignedTechnician: null,
     sourceDispatchAddress: null,
     authorization: null,
@@ -579,7 +512,7 @@ export async function executeStructuredAi<T>(options: AiCompletionOptions<T>): P
     try {
       return await callGeminiStructured(options, active.key, active.model);
     } catch (e) {
-      console.warn("[Gemini call failed, falling back to deterministic processing]:", (e as Error).message);
+      console.warn("[Gemini call failed, falling back to deterministic processing]:", (e as Error).message, (e as Error).stack);
     }
   }
 

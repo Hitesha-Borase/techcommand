@@ -317,6 +317,14 @@ export function SpinLifePortal({userId,technician=false,onOtherWork,onCareer,ini
           Object.assign(updated,{[key]:value.trim()});
         }
       }
+      if (!updated.dmeFamilyId && updated.equipmentType) {
+        const eq = updated.equipmentType.toLowerCase();
+        if (eq.includes("lift") || eq.includes("chair") || eq.includes("recliner")) updated.dmeFamilyId = "dme:lift_chair";
+        else if (eq.includes("power") && eq.includes("wheelchair")) updated.dmeFamilyId = "dme:power_wheelchair";
+        else if (eq.includes("scooter")) updated.dmeFamilyId = "dme:scooter";
+        else if (eq.includes("bed")) updated.dmeFamilyId = "dme:bed";
+        else if (eq.includes("manual") && eq.includes("wheelchair")) updated.dmeFamilyId = "dme:manual_wheelchair";
+      }
       if(!updated.extraChecks && Array.isArray(result.fields.checklistItems)){const checks=result.fields.checklistItems.filter((x):x is string=>typeof x==="string").join("\n");if(checks.length>5000)throw new Error("The original is saved, but its additional checks exceed this form’s capacity. Existing answers are preserved; review the original requirements before completion.");updated.extraChecks=checks;}
       edit({...current,data:updated});setAiMessage("Available details filled in. Please check them against the original before assigning. Technician pay is entered by the administrator.");if(technician)setTechStage("essentials");
     }catch(e){if(token===aiRequest.current)setAiMessage((e as Error).message);}finally{if(token===aiRequest.current)setAiBusy(false);}

@@ -126,7 +126,7 @@ function outputText(result: Record<string, unknown>) {
   throw new Error("The AI response did not contain structured bid fields.");
 }
 
-import { executeStructuredAi } from "@/lib/ai-provider";
+import { executeStructuredAi, getStoredEnvKey } from "@/lib/ai-provider";
 
 async function openAiResponse(content: Array<Record<string, unknown>>) {
   const instruction =
@@ -139,7 +139,13 @@ async function openAiResponse(content: Array<Record<string, unknown>>) {
     content,
     schema: jsonSchema,
     validate: bidFields,
-    key: envAny.GEMINI_API_KEY || envAny.OPENAI_API_KEY || process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY,
+    key:
+      envAny.GEMINI_API_KEY ||
+      envAny.OPENAI_API_KEY ||
+      process.env.GEMINI_API_KEY ||
+      process.env.OPENAI_API_KEY ||
+      getStoredEnvKey("GEMINI_API_KEY") ||
+      getStoredEnvKey("OPENAI_API_KEY"),
   });
 
   return Response.json({ fields });
@@ -167,7 +173,9 @@ export async function GET(request: Request) {
       aiReady: Boolean(
         runtime.OPENAI_API_KEY ||
           (env as unknown as { GEMINI_API_KEY?: string }).GEMINI_API_KEY ||
-          process.env.GEMINI_API_KEY,
+          process.env.GEMINI_API_KEY ||
+          getStoredEnvKey("GEMINI_API_KEY") ||
+          getStoredEnvKey("OPENAI_API_KEY"),
       ),
       mapsReady: Boolean(runtime.GOOGLE_MAPS_API_KEY),
     });

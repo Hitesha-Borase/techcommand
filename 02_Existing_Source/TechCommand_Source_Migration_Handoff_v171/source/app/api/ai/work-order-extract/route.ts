@@ -24,7 +24,7 @@ export async function POST(request:Request) {
         serviceType: "repair_single",
         summary: "Work order recorded. You can add remaining details manually.",
         customerComplaint: null,
-        equipmentType: "Power Wheelchair",
+        equipmentType: null,
         manufacturer: null,
         model: null,
         serialNumber: null,
