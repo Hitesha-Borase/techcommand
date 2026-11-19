@@ -349,6 +349,7 @@ export async function generateServiceReportPdf(input: {
     procedureSnapshotJson?: string | null;
     procedureAnswersJson?: string | null;
   }>;
+  chairLabel?: string;
   signature?: { bytes: ArrayBuffer; contentType: string } | null;
 }) {
   const ctx = await context();
@@ -364,7 +365,16 @@ export async function generateServiceReportPdf(input: {
   reportHeader(ctx, reportTitle, `${input.accountName} Work Order #${input.workOrderNumber}`);
 
   if (isLiftChair) {
-    ctx.page.drawText('Onsite evaluation and temporary restoration of Golden Technologies chair(s)', {
+    const isOutOfService = /out.of.service|inoperable|safety hazard|do not operate|pending.*part|unserviceable/i.test(
+      `${input.documentStatus || ''} ${input.assetDisposition} ${input.summary} ${input.findings} ${input.workPerformed} ${input.fieldNotes || ''}`
+    );
+    const subtitle = input.summary?.trim()
+      ? input.summary.trim()
+      : isOutOfService
+      ? `Onsite evaluation of ${input.manufacturer || 'Golden Technologies'} chair(s)`
+      : `Onsite service and evaluation of ${input.manufacturer || 'Golden Technologies'} chair(s)`;
+
+    ctx.page.drawText(subtitle, {
       x: margin,
       y: ctx.y,
       size: 8,
@@ -373,13 +383,15 @@ export async function generateServiceReportPdf(input: {
     });
     ctx.y -= 14;
 
-    const isTemporaryRestore = /temporary|oem parts|parts needed|parts required/i.test(
-      `${input.documentStatus || ''} ${input.assetDisposition} ${input.recommendation}`
+    const isTempRestored = /temporar.*restor|loaner installed|temporarily operational/i.test(
+      `${input.documentStatus || ''} ${input.workPerformed}`
     );
-    const statusBadge = isTemporaryRestore
-      ? 'TEMPORARY FUNCTION RESTORED | OEM PARTS REQUIRED'
-      : input.documentStatus
+    const statusBadge = input.documentStatus
       ? input.documentStatus.toUpperCase()
+      : isOutOfService
+      ? 'OUT OF SERVICE | OEM PARTS / AUTHORIZATION REQUIRED'
+      : isTempRestored
+      ? 'TEMPORARY FUNCTION RESTORED | OEM PARTS REQUIRED'
       : `${packetStatus(input.assetDisposition).toUpperCase()} | DME FIELD SERVICE COMPLETED`;
 
     ensureSpace(ctx, 24);
@@ -464,13 +476,23 @@ export async function generateServiceReportPdf(input: {
     const hasCompanion = /companion|second chair|pr535|husband/i.test(
       `${input.customerComplaint} ${input.findings} ${input.summary}`
     );
-    const isTemp = /temporary|parts/i.test(`${input.assetDisposition} ${input.recommendation}`);
+    const isOutOfService = /out.of.service|inoperable|do not operate/i.test(
+      `${input.findings} ${input.workPerformed} ${input.fieldNotes || ''} ${input.assetDisposition}`
+    );
+    const isTempRestored = /temporar.*restor|loaner|spliced/i.test(`${input.workPerformed}`);
+    const hasParts = /parts/i.test(`${input.assetDisposition} ${input.recommendation}`);
+    const primaryStatus = isOutOfService
+      ? (hasParts ? 'Out of service; OEM parts needed' : 'Out of service; pending authorization')
+      : isTempRestored
+      ? (hasParts ? 'Temporary function restored; OEM parts needed' : 'Temporary function restored')
+      : packetStatus(input.assetDisposition);
+
     const rows = [
       [
-        hasCompanion ? "Spouse's chair (primary repair)" : "Primary lift chair",
+        hasCompanion ? (input.chairLabel || "Spouse's chair (primary repair)") : "Primary lift chair",
         `${input.manufacturer} ${input.model}`.trim(),
         input.serialNumber,
-        isTemp ? 'Temporary function restored; scissor mechanism wire caught; OEM parts needed' : packetStatus(input.assetDisposition),
+        primaryStatus,
       ],
     ];
     if (hasCompanion) {
@@ -538,17 +560,6 @@ export async function generateServiceReportPdf(input: {
         String(p.quantity || 1),
         p.purpose || 'OEM replacement',
       ]),
-      [230, 40, 250],
-      ['Part required', 'Qty', 'Chair and purpose']
-    );
-  } else if (isLiftChair && input.partsUsed.length === 0 && /parts|hand control|remote|motor/i.test(input.recommendation || '')) {
-    band(ctx, 'Required Golden Technologies OEM parts');
-    table(
-      ctx,
-      [
-        ['Two-button hand control / remote assembly', '1', "Spouse's PR531 - replace damaged spliced remote"],
-        ['Power transformer and cable harness', '1', "Husband's PR535 - replace worn remote / cable assembly"],
-      ],
       [230, 40, 250],
       ['Part required', 'Qty', 'Chair and purpose']
     );
@@ -771,8 +782,8 @@ async function appendPhotoGallery(target: PDFDocument, files: PacketFile[], refe
     });
 
     const recText =
-      followUpRecommendation ||
-      'Do not operate unit under load until OEM replacement parts are installed. Scissor mechanism clearance temporarily restored, but internal wiring harness requires full replacement.';
+      followUpRecommendation?.trim() ||
+      'Unit status and recommendations recorded as above. Do not operate equipment if marked out of service. Follow manufacturer guidelines for repair authorization.';
     const recLines = wrap(regular, recText, 7.5, 504);
     recLines.slice(0, 3).forEach((line, k) => {
       page.drawText(line, {

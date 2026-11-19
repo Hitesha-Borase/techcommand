@@ -140,7 +140,7 @@ async function generateSampleFullPdf() {
   // Equipment serviced (4 columns)
   band('Equipment serviced');
   table([
-    ["Spouse's chair (primary repair)", 'Golden Technologies PR531 Extra Wide', 'GT-PR531-EW-89214', 'Temporary function restored; scissor mechanism wire caught; OEM parts needed'],
+    ["Spouse's chair (primary repair)", 'Golden Technologies PR531 Extra Wide', 'GT-PR531-EW-89214', 'Temporary function restored; OEM parts needed'],
     ["Husband's companion chair", 'Golden Technologies PR535 MaxiComfort', 'GT-PR535-MC-66230', 'Operational; loaner remote installed; OEM parts needed'],
   ], [130, 150, 100, 140], ['Chair / Unit', 'Manufacturer and model', 'Serial number', 'Service status']);
 
@@ -282,7 +282,7 @@ async function generateSampleFullPdf() {
     font: bold,
     color: navy,
   });
-  const recNotice = 'Do not operate Spouse PR531 until replacement hand control is installed. Scissor mechanism clearance has been temporarily freed, but cable insulation is compromised. Companion PR535 loaner hand control must be swapped when new OEM control arrives.';
+  const recNotice = 'Do not operate Spouse PR531 until replacement hand control is installed. Companion PR535 loaner hand control must be swapped when new OEM control arrives.';
   const recLines = wrap(regular, recNotice, 7.5, 504);
   recLines.slice(0, 3).forEach((l, k) => {
     page3.drawText(l, {
