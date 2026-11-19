@@ -669,7 +669,17 @@ export async function GET(request: Request) {
         ))
       )
         return Response.json({ error: "File not found." }, { status: 404 });
-      const object = await SupabaseBucket.get(item.storageKey);
+      let object = await SupabaseBucket.get(item.storageKey);
+      if (!object) {
+        const alt = await env.DB.prepare(
+          "SELECT storage_key FROM storage_blobs WHERE storage_key LIKE ? ORDER BY created_at DESC LIMIT 1",
+        )
+          .bind(`%${item.fileName}%`)
+          .first<{ storage_key: string }>();
+        if (alt?.storage_key) {
+          object = await SupabaseBucket.get(alt.storage_key);
+        }
+      }
       if (!object)
         return Response.json(
           { error: "Stored file not found." },

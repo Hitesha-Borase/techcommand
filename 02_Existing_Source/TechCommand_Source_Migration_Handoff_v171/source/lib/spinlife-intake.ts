@@ -10,6 +10,7 @@
  */
 
 import zlib from "node:zlib";
+import { parseScreenshotOcr } from "./imports-sync-parser.ts";
 
 export interface ParsedWorkOrderFields {
   externalId: string | null;
@@ -90,10 +91,15 @@ export function extractTextFromPdfBuffer(buf: Buffer | Uint8Array): string {
 
   // 1. Literal text objects: (Text) Tj or [(Text)] TJ
   const rawStr = buffer.toString("latin1");
-  const tjRegex = /\(([^)]+)\)\s*Tj/g;
+  const tjRegex = /\(([^)]+)\)\s*(?:Tj|'|")/g;
   let match: RegExpExecArray | null;
   while ((match = tjRegex.exec(rawStr)) !== null) {
     extracted += match[1] + " ";
+  }
+  const arrayTjRegex = /\[(.*?)\]\s*TJ/g;
+  while ((match = arrayTjRegex.exec(rawStr)) !== null) {
+    const inner = match[1].match(/\(([^)]+)\)/g);
+    if (inner) extracted += inner.map(s => s.slice(1, -1)).join(" ") + " ";
   }
 
   // 2. FlateDecode compressed content streams
@@ -322,5 +328,27 @@ export function parseWorkOrderAttachment(content: Array<Record<string, unknown>>
     }
   }
 
-  return parseSpinLifeDocument(combinedText);
+  const primary = parseSpinLifeDocument(combinedText);
+  const screenshot = parseScreenshotOcr(combinedText);
+
+  return {
+    externalId: primary.externalId || screenshot.workOrder || null,
+    customerName: primary.customerName || screenshot.customerName || null,
+    customerPhone: primary.customerPhone || screenshot.phone || null,
+    serviceAddress: primary.serviceAddress || screenshot.serviceAddress || null,
+    equipmentType: primary.equipmentType || (screenshot.product ? (
+      /lift\s*chair|recliner/i.test(screenshot.product) ? "Lift Chair" :
+      /power\s*wheelchair|powerchair/i.test(screenshot.product) ? "Power Wheelchair" :
+      /scooter/i.test(screenshot.product) ? "Mobility Scooter" :
+      /bed/i.test(screenshot.product) ? "Hospital Bed" :
+      screenshot.product
+    ) : null),
+    manufacturer: primary.manufacturer || screenshot.manufacturer || null,
+    model: primary.model || screenshot.model || null,
+    serialNumber: primary.serialNumber || null,
+    serviceType: primary.serviceType || "repair_single",
+    customerComplaint: primary.customerComplaint || screenshot.jobNotes || null,
+    summary: primary.summary || (primary.externalId ? `Work order ${primary.externalId}` : screenshot.workOrder ? `Work order ${screenshot.workOrder}` : null),
+    dmeFamilyId: primary.dmeFamilyId || null,
+  };
 }

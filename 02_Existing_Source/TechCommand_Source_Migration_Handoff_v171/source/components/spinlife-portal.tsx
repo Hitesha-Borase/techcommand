@@ -304,7 +304,27 @@ export function SpinLifePortal({userId,technician=false,onOtherWork,onCareer,ini
     aiController.current?.abort();const controller=new AbortController();aiController.current=controller;
     const token=++aiRequest.current;setAiBusy(true);setAiMessage("Reading the work order… You can still enter details and save.");
     try {
-      const form=new FormData();incoming.forEach(f=>form.append("files",f));form.set("sourceText",sourceText);
+      let localOcrText = "";
+      if (incoming.length > 0 && typeof window !== "undefined") {
+        const imageFile = incoming.find((f) => /^image\//.test(f.type));
+        if (imageFile) {
+          try {
+            setAiMessage("Reading document text with OCR…");
+            const { createWorker } = await import("tesseract.js");
+            const worker = await createWorker("eng", 1);
+            try {
+              const res = await worker.recognize(imageFile);
+              localOcrText = res.data.text;
+            } finally {
+              await worker.terminate();
+            }
+          } catch (e) {
+            console.warn("[Client OCR skipped]:", e);
+          }
+        }
+      }
+      const combinedSourceText = [sourceText, localOcrText].filter(Boolean).join("\n");
+      const form=new FormData();incoming.forEach(f=>form.append("files",f));form.set("sourceText",combinedSourceText);
       const result=await portalJson<{fields:Record<string,unknown>}>(await portalFetch("/api/ai/work-order-extract",{method:"POST",body:form,signal:controller.signal}),"Automatic extraction is unavailable. You can enter details and save.");
       if(token!==aiRequest.current || draftRef.current?.id!==targetId)return;
       const current=draftRef.current;
@@ -949,6 +969,7 @@ export function SpinLifePortal({userId,technician=false,onOtherWork,onCareer,ini
                   }
                 });
                 setFiles([]);
+                if (sourceInput.current) sourceInput.current.value = "";
                 setNotice("Work order form cleared.");
                 setAiMessage("");
               }}
