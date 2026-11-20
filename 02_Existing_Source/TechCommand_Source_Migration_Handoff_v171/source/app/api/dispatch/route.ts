@@ -222,7 +222,24 @@ async function loadDispatch(date: string, identity: PortalIdentity, allWork = fa
     WHERE r.organization_id = ? AND r.route_date = ? ${technicianOnly ? "AND r.technician_id = ?" : ""}
     ORDER BY COALESCE(u.display_name, t.technician_code)`;
 
-  const [techniciansResult, availableResult, scheduledResult, routesResult] =
+  const spinlifeSql = `SELECT i.id, i.external_id AS externalId, i.status, i.data_json AS dataJson,
+         v.technician_id AS technicianId, v.scheduled_start AS scheduledStart,
+         v.technician_pay_cents AS technicianPayCents,
+         COALESCE(u.display_name, t.technician_code) AS technicianName,
+         t.technician_code AS technicianCode
+    FROM work_order_intakes i
+    LEFT JOIN spinlife_visits v ON v.intake_id = i.id
+    LEFT JOIN technicians t ON t.id = v.technician_id AND t.organization_id = i.organization_id
+    LEFT JOIN users u ON u.id = t.user_id
+   WHERE i.organization_id = ?
+     AND lower(replace(i.source,' ','')) = 'spinlife'
+     AND i.converted_work_order_id IS NULL
+     AND i.status NOT IN ('archived', 'converted')
+     AND (v.technician_id IS NOT NULL OR v.scheduled_start IS NOT NULL)
+     ${technicianOnly ? "AND v.technician_id = ?" : ""}
+   ORDER BY i.updated_at DESC`;
+
+  const [techniciansResult, availableResult, scheduledResult, routesResult, spinlifeResult] =
     await env.DB.batch([
       technicianOnly
         ? env.DB.prepare(technicianSql).bind(TECHFLEX_ORG_ID, technicianId)
@@ -249,6 +266,9 @@ async function loadDispatch(date: string, identity: PortalIdentity, allWork = fa
         : (technicianOnly
             ? env.DB.prepare(routeSql).bind(TECHFLEX_ORG_ID, date, technicianId)
             : env.DB.prepare(routeSql).bind(TECHFLEX_ORG_ID, date)),
+      technicianOnly
+        ? env.DB.prepare(spinlifeSql).bind(TECHFLEX_ORG_ID, technicianId)
+        : env.DB.prepare(spinlifeSql).bind(TECHFLEX_ORG_ID),
     ]);
 
   const technicians = techniciansResult.results as Array<
@@ -319,6 +339,93 @@ async function loadDispatch(date: string, identity: PortalIdentity, allWork = fa
       ).length,
     };
   });
+
+  // Dynamically include eligible SpinLife work orders in available or scheduled
+  if (spinlifeResult?.results) {
+    for (const row of spinlifeResult.results as any[]) {
+      const data = safeJson<Record<string, any>>(row.dataJson, {});
+      const customerName = String(data.customerName || "Customer");
+      const serviceType = String(data.serviceType || "Repair");
+      const serviceAddress = String(data.serviceAddress || "Address pending");
+      const equipment = [data.equipmentType, data.manufacturer, data.model].filter(Boolean).join(" ") || "DME Equipment";
+      const summary = `${customerName} · ${equipment}`;
+      const scheduledStartStr = row.scheduledStart ? String(row.scheduledStart) : "";
+      const hasConfirmedTime = scheduledStartStr.includes("T") || scheduledStartStr.includes(":");
+      const plannedDate = scheduledStartStr.length >= 10 ? scheduledStartStr.slice(0, 10) : "";
+
+      if (hasConfirmedTime && (allWork || plannedDate === date)) {
+        const scheduledEnd = new Date(new Date(scheduledStartStr).getTime() + 60 * 60000).toISOString();
+        scheduled.push({
+          id: String(row.id),
+          externalId: String(row.externalId || "SpinLife Order"),
+          externalSource: "SpinLife",
+          serviceType,
+          summary,
+          priority: "normal",
+          status: "assigned",
+          requiredTechnicianCount: 1,
+          grossMarginBasisPoints: 4000,
+          scheduledStart: scheduledStartStr,
+          scheduledEnd,
+          accountName: "SpinLife",
+          locationId: String(row.id),
+          locationName: customerName,
+          address: serviceAddress,
+          latitude: null,
+          longitude: null,
+          assignmentId: `spinlife-wa-${row.id}`,
+          technicianId: String(row.technicianId || ""),
+          technicianName: String(row.technicianName || "Demo Technician"),
+          technicianCode: String(row.technicianCode || "TECH"),
+          assignmentRole: "primary",
+          assignmentStatus: "assigned",
+          routeId: routes.find(r => r.technicianId === row.technicianId)?.id || null,
+          stopId: null,
+          stopOrder: 1,
+          plannedArrival: scheduledStartStr,
+          plannedDeparture: scheduledEnd,
+          legMiles: null,
+          driveMinutes: null,
+          travelSource: "admin_verified",
+          stopStatus: "planned",
+        } as any);
+      } else {
+        // Available for this service date or selectable in the appointment picker
+        if (allWork || plannedDate === date || !plannedDate || plannedDate === defaultDate()) {
+          const tech = technicians.find(t => String(t.id) === String(row.technicianId));
+          available.push({
+            id: String(row.id),
+            externalId: String(row.externalId || "SpinLife Order"),
+            externalSource: "SpinLife",
+            serviceType,
+            summary,
+            priority: "normal",
+            status: "assigned",
+            requiredTechnicianCount: 1,
+            assignedCount: row.technicianId ? 1 : 0,
+            grossMarginBasisPoints: 4000,
+            scheduledStart: scheduledStartStr || null,
+            scheduledEnd: null,
+            accountName: "SpinLife",
+            locationId: String(row.id),
+            locationName: customerName,
+            address: serviceAddress,
+            latitude: null,
+            longitude: null,
+            nearestTechnician: tech ? {
+              technicianId: String(tech.id),
+              technicianName: String(tech.name),
+              miles: 0,
+            } : null,
+            technicianId: row.technicianId ? String(row.technicianId) : null,
+            technicianName: row.technicianName ? String(row.technicianName) : null,
+            technicianPayCents: row.technicianPayCents ? Number(row.technicianPayCents) : null,
+            isSpinLife: true,
+          } as any);
+        }
+      }
+    }
+  }
 
   return {
     date,
@@ -512,6 +619,31 @@ export async function PATCH(request: Request) {
     }
 
     if (input.action === "unschedule") {
+      const spinlifeIntake = await env.DB.prepare(
+        `SELECT i.id, i.external_id AS externalId, v.technician_id AS technicianId, v.scheduled_start AS scheduledStart
+           FROM work_order_intakes i
+           JOIN spinlife_visits v ON v.intake_id = i.id
+          WHERE i.id = ? AND i.organization_id = ?`,
+      ).bind(input.workOrderId, TECHFLEX_ORG_ID).first<{ id: string; externalId: string | null; technicianId: string | null; scheduledStart: string | null }>();
+
+      if (spinlifeIntake) {
+        const curStart = spinlifeIntake.scheduledStart || "";
+        const plannedDate = curStart.length >= 10 ? curStart.slice(0, 10) : null;
+        await env.DB.batch([
+          env.DB.prepare(
+            `UPDATE spinlife_visits SET scheduled_start = ?, record_version = record_version + 1 WHERE intake_id = ?`,
+          ).bind(plannedDate, input.workOrderId),
+          env.DB.prepare(
+            `INSERT INTO audit_logs (id, organization_id, actor_user_id, action, entity_type, entity_id, after_json)
+             VALUES (?, ?, ?, 'dispatch.spinlife_unscheduled', 'work_order_intake', ?, ?)`,
+          ).bind(crypto.randomUUID(), TECHFLEX_ORG_ID, identity.userId, input.workOrderId, JSON.stringify({ technicianId: input.technicianId })),
+        ]);
+        return Response.json({
+          workOrderId: input.workOrderId,
+          unscheduled: true,
+        });
+      }
+
       const trainingError = await trainingRemovalError(input.technicianId, input.workOrderId);
       if (trainingError) return Response.json({error:trainingError},{status:409});
       const assignment = await env.DB.prepare(
@@ -575,6 +707,118 @@ export async function PATCH(request: Request) {
 
     const trainingError = await trainingAssignmentError(input.technicianId, input.workOrderId, input.assignmentRole);
     if (trainingError) return Response.json({error:trainingError},{status:409});
+
+    const spinlifeIntake = await env.DB.prepare(
+      `SELECT i.id, i.external_id AS externalId, i.status, i.data_json AS dataJson,
+              v.technician_id AS technicianId, v.technician_pay_cents AS technicianPayCents,
+              v.scheduled_start AS scheduledStart
+         FROM work_order_intakes i
+         LEFT JOIN spinlife_visits v ON v.intake_id = i.id
+        WHERE i.id = ? AND i.organization_id = ?`,
+    ).bind(input.workOrderId, TECHFLEX_ORG_ID).first<{
+      id: string; externalId: string | null; status: string; dataJson: string;
+      technicianId: string | null; technicianPayCents: number | null; scheduledStart: string | null;
+    }>();
+
+    if (spinlifeIntake) {
+      const scheduledEnd = new Date(
+        new Date(input.scheduledStart).getTime() + input.durationMinutes * 60000,
+      ).toISOString();
+
+      const technician = await env.DB.prepare(
+        `SELECT t.id, COALESCE(u.display_name, t.technician_code) AS name,
+                t.dispatch_address_1 AS dispatchAddress1, t.dispatch_address_2 AS dispatchAddress2,
+                t.dispatch_city AS dispatchCity, t.dispatch_state AS dispatchState,
+                t.dispatch_postal_code AS dispatchPostalCode, t.home_postal_code AS homePostalCode,
+                t.dispatch_latitude AS dispatchLatitude, t.dispatch_longitude AS dispatchLongitude,
+                t.home_latitude AS homeLatitude, t.home_longitude AS homeLongitude
+           FROM technicians t LEFT JOIN users u ON u.id = t.user_id
+          WHERE t.id = ? AND t.organization_id = ? AND t.status = 'active'`,
+      ).bind(input.technicianId, TECHFLEX_ORG_ID).first<Record<string, any>>();
+
+      if (!technician) {
+        return Response.json({ error: "Select an active technician." }, { status: 400 });
+      }
+
+      // Check conflict with other scheduled appointments
+      const conflict = await env.DB.prepare(
+        `SELECT w.external_id AS externalId FROM work_orders w
+           JOIN work_order_assignments wa ON wa.work_order_id = w.id
+          WHERE wa.technician_id = ? AND wa.status IN ('offered','assigned','accepted','dispatched','arrived')
+            AND w.id != ? AND w.scheduled_start IS NOT NULL
+            AND datetime(w.scheduled_start) < datetime(?)
+            AND datetime(COALESCE(w.scheduled_end, datetime(w.scheduled_start, '+90 minutes'))) > datetime(?)
+          LIMIT 1`,
+      ).bind(input.technicianId, input.workOrderId, scheduledEnd, input.scheduledStart).first<{ externalId: string }>();
+
+      if (conflict) {
+        return Response.json({
+          error: `This time overlaps work order ${conflict.externalId}. Choose another appointment or technician.`,
+        }, { status: 409 });
+      }
+
+      const existingRoute = await env.DB.prepare(
+        "SELECT id FROM routes WHERE technician_id = ? AND route_date = ? AND organization_id = ?",
+      ).bind(input.technicianId, input.routeDate, TECHFLEX_ORG_ID).first<{ id: string }>();
+      const routeId = existingRoute?.id || crypto.randomUUID();
+
+      const statements: D1PreparedStatement[] = [];
+      if (!existingRoute) {
+        statements.push(env.DB.prepare(
+          `INSERT INTO routes
+            (id, organization_id, technician_id, route_date, status, start_location_json)
+           VALUES (?, ?, ?, ?, 'draft', ?)`,
+        ).bind(
+          routeId,
+          TECHFLEX_ORG_ID,
+          input.technicianId,
+          input.routeDate,
+          JSON.stringify({
+            address: [technician.dispatchAddress1, technician.dispatchAddress2, technician.dispatchCity, technician.dispatchState, technician.dispatchPostalCode].filter(Boolean).join(", ") || null,
+            postalCode: technician.dispatchPostalCode || technician.homePostalCode || null,
+            latitude: technician.dispatchLatitude || technician.homeLatitude || null,
+            longitude: technician.dispatchLongitude || technician.homeLongitude || null,
+          }),
+        ));
+      }
+
+      statements.push(
+        env.DB.prepare(
+          `UPDATE spinlife_visits
+              SET scheduled_start = ?,
+                  technician_id = ?,
+                  record_version = record_version + 1
+            WHERE intake_id = ?`,
+        ).bind(input.scheduledStart, input.technicianId, input.workOrderId),
+        env.DB.prepare(
+          `UPDATE work_order_intakes
+              SET status = 'spinlife_assigned',
+                  record_version = record_version + 1,
+                  updated_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND organization_id = ?`,
+        ).bind(input.workOrderId, TECHFLEX_ORG_ID),
+        env.DB.prepare(
+          `INSERT INTO audit_logs (id, organization_id, actor_user_id, action, entity_type, entity_id, after_json)
+           VALUES (?, ?, ?, 'dispatch.spinlife_scheduled', 'work_order_intake', ?, ?)`,
+        ).bind(crypto.randomUUID(), TECHFLEX_ORG_ID, identity.userId, input.workOrderId, JSON.stringify({
+          scheduledStart: input.scheduledStart,
+          scheduledEnd,
+          technicianId: input.technicianId,
+          routeDate: input.routeDate,
+        })),
+      );
+
+      await env.DB.batch(statements);
+      return Response.json({
+        workOrderId: input.workOrderId,
+        technicianId: input.technicianId,
+        scheduledStart: input.scheduledStart,
+        scheduledEnd,
+        routeId,
+        status: "assigned",
+      });
+    }
+
     const workOrder = await env.DB.prepare(
       `SELECT w.id, w.service_type AS serviceType, w.external_id AS externalId, w.status,w.account_id AS accountId,
           w.required_technician_count AS requiredTechnicianCount,

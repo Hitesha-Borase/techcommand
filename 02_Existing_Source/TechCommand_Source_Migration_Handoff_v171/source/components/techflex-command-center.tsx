@@ -450,6 +450,8 @@ export function TechFlexCommandCenter({
   const [intakeImportType, setIntakeImportType] = useState<"accounts" | "assets">("accounts");
   const [financeStartTab, setFinanceStartTab] = useState("closeout");
   const [serviceAssetId, setServiceAssetId] = useState("");
+  const [scheduleDate, setScheduleDate] = useState("");
+  const [scheduleWorkOrderId, setScheduleWorkOrderId] = useState("");
   const [recordTarget, setRecordTarget] = useState<OrderTarget | null>(null);
   const [spinlifeRecordId, setSpinlifeRecordId] = useState("");
   const [search, setSearch] = useState("");
@@ -595,9 +597,13 @@ export function TechFlexCommandCenter({
         {session.data?.role === "owner_administrator" || session.data?.role === "operations_administrator" ? <ProblemReportCenter /> : null}
       </div>
     );
-  else if (active === "spinlife") content = <SpinLifePortal key={`${session.data?.userId}:${spinlifeRecordId}`} userId={session.data?.userId || ""} initialJobId={spinlifeRecordId} />;
+  else if (active === "spinlife") content = <SpinLifePortal key={`${session.data?.userId}:${spinlifeRecordId}`} userId={session.data?.userId || ""} initialJobId={spinlifeRecordId} onSchedule={(date, workOrderId) => {
+    setScheduleDate(date || "");
+    setScheduleWorkOrderId(workOrderId || "");
+    selectModule("schedule");
+  }} />;
   else if (active === "work-orders") content = <WorkOrderCenter initialTarget={recordTarget} onOpenSpinLife={id=>{setSpinlifeRecordId(id);setRecordTarget(null);setActive("spinlife");}} initialAssetId={serviceAssetId} onAssetLoaded={() => setServiceAssetId("")} />;
-  else if (active === "schedule") content = <DispatchCenter mode="schedule" />;
+  else if (active === "schedule") content = <DispatchCenter mode="schedule" initialDate={scheduleDate} initialWorkOrderId={scheduleWorkOrderId} />;
   else if (active === "dispatch") content = <DispatchCenter mode="routes" />;
   else if (active === "accounts") content = <AccountCrm mode="accounts" />;
   else if (active === "customers") content = <CustomerCenter />;

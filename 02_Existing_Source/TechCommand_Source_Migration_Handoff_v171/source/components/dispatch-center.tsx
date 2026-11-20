@@ -3,8 +3,9 @@ import {AcademyJobCheck} from "@/components/academy-job-check";
 import { parseDisciplines, disciplineLabels } from "@/lib/service-disciplines";
 
 import { canEditDispatchPlan } from "@/lib/dispatch-policy";
+import { filterEligibleWorkOrders } from "@/lib/schedule-data";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowDown,
@@ -275,9 +276,25 @@ function DateNavigator({
   );
 }
 
-export function DispatchCenter({ mode }: { mode: "schedule" | "routes" }) {
+export function DispatchCenter({
+  mode,
+  initialWorkOrderId,
+  initialDate,
+}: {
+  mode: "schedule" | "routes";
+  initialWorkOrderId?: string;
+  initialDate?: string;
+}) {
   const queryClient = useQueryClient();
-  const [date, setDate] = useState(localDate);
+  const [date, setDate] = useState(() => {
+    if (initialDate && /^\d{4}-\d{2}-\d{2}$/.test(initialDate)) return initialDate;
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const urlDate = params.get("date");
+      if (urlDate && /^\d{4}-\d{2}-\d{2}$/.test(urlDate)) return urlDate;
+    }
+    return localDate();
+  });
   const [sheetOpen, setSheetOpen] = useState(false);
   const [selectedTechnician, setSelectedTechnician] = useState("");
   const [routeViewMode, setRouteViewMode] = useState<"list" | "map" | "split">("split");
@@ -315,11 +332,27 @@ export function DispatchCenter({ mode }: { mode: "schedule" | "routes" }) {
     0,
   );
   const schedulingChoices = useMemo(() => {
-    const choices = new Map<string, DispatchJob>();
-    data?.available.forEach((job) => choices.set(job.id, job));
-    data?.scheduled.forEach((job) => choices.set(job.id, job));
-    return [...choices.values()];
-  }, [data]);
+    return filterEligibleWorkOrders(
+      (data?.available ?? []) as any,
+      (data?.scheduled ?? []) as any,
+      date,
+    );
+  }, [data, date]);
+
+  useEffect(() => {
+    const targetId =
+      initialWorkOrderId ||
+      (typeof window !== "undefined"
+        ? new URLSearchParams(window.location.search).get("workOrderId")
+        : null);
+    if (!targetId || !data) return;
+    const targetJob = schedulingChoices.find(
+      (j) => j.id === targetId || j.externalId === targetId,
+    );
+    if (targetJob) {
+      openScheduler(targetJob as any);
+    }
+  }, [data, initialWorkOrderId]);
 
   const refresh = () =>
     Promise.all([
@@ -404,13 +437,21 @@ export function DispatchCenter({ mode }: { mode: "schedule" | "routes" }) {
     const firstTechnician =
       scheduled?.technicianId ||
       job?.nearestTechnician?.technicianId ||
+      (job as any)?.technicianId ||
       data?.technicians[0]?.id ||
       "";
+    const initialStart =
+      scheduled?.scheduledStart ||
+      (job?.scheduledStart
+        ? job.scheduledStart.includes("T")
+          ? job.scheduledStart
+          : `${job.scheduledStart}T09:00:00`
+        : null);
     setForm({
       workOrderId: job?.id || scheduled?.id || schedulingChoices[0]?.id || "",
       technicianId: firstTechnician,
       assignmentRole: scheduled?.assignmentRole || "primary",
-      scheduledStart: localInput(scheduled?.scheduledStart, date),
+      scheduledStart: localInput(initialStart, date),
       durationMinutes:
         scheduled?.scheduledStart && scheduled.scheduledEnd
           ? Math.max(
@@ -1002,9 +1043,16 @@ export function DispatchCenter({ mode }: { mode: "schedule" | "routes" }) {
             <Field label="Work order">
               <Select
                 value={form.workOrderId}
-                onValueChange={(value) =>
-                  setForm({ ...form, workOrderId: value })
-                }
+                onValueChange={(value) => {
+                  const chosenJob = schedulingChoices.find((j) => j.id === value);
+                  const techId =
+                    chosenJob?.nearestTechnician?.technicianId ||
+                    (chosenJob as any)?.technicianId ||
+                    form.technicianId ||
+                    data?.technicians[0]?.id ||
+                    "";
+                  setForm({ ...form, workOrderId: value, technicianId: techId });
+                }}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select priced work order" />

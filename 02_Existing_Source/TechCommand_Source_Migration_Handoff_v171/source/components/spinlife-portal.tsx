@@ -2,7 +2,7 @@
 
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Download, Plus, Upload, Play, CheckCircle2, FileText, ChevronRight, Sparkles, AlertTriangle, Receipt } from "lucide-react";
+import { ArrowLeft, CalendarDays, Download, Plus, Upload, Play, CheckCircle2, FileText, ChevronRight, Sparkles, AlertTriangle, Receipt } from "lucide-react";
 import { checkModelMismatch } from "@/lib/model-mismatch";
 import {procedureText} from "@/lib/asset-ai-procedure";
 import {DmeGuidedChecks} from "@/components/dme-guided-checks";
@@ -72,7 +72,7 @@ function Signature({onSave,disabled}:{onSave:(file:File)=>Promise<void>;disabled
   </div>;
 }
 
-export function SpinLifePortal({userId,technician=false,onOtherWork,onCareer,initialJobId}:{userId:string;technician?:boolean;onOtherWork?:()=>void;onCareer?:()=>void;initialJobId?:string}) {
+export function SpinLifePortal({userId,technician=false,onOtherWork,onCareer,initialJobId,onSchedule}:{userId:string;technician?:boolean;onOtherWork?:()=>void;onCareer?:()=>void;initialJobId?:string;onSchedule?:(date?:string,workOrderId?:string)=>void}) {
   const [job,setJob]=useState<SpinLifeJob|null>(null),[dirty,setDirty]=useState(false),[busy,setBusy]=useState(false);
   const [completedJob,setCompletedJob]=useState<SpinLifeJob|null>(null);
   const [generatingPacket,setGeneratingPacket]=useState(false);
@@ -283,6 +283,21 @@ export function SpinLifePortal({userId,technician=false,onOtherWork,onCareer,ini
       else if(action==="packet") {const result=await api<{attachmentId:string}>("/api/spinlife/packet",{id:saved.id,expectedVersion:saved.version});setJob(current=>{if(!current||current.id!==saved.id)return current;const next={...current,packetAttachmentId:result.attachmentId,packetSourceVersion:saved.version};draftRef.current=next;return next;});setNotice("PDF ready from your saved notes. Administrator review is optional.");await loadFiles(saved.id);void query.refetch();}
       else if(action==="back"){if(draftRef.current!==saved){setNotice("Earlier entries saved. Newer changes remain here; save again before leaving.");}else{setJob(null);setFiles([]);}} else {if(action==="start")setTechStage("steps");setNotice(action==="start"?"Work started. You can save any time.":draftRef.current!==saved?"Earlier entries saved. Your newer changes are protected on this device; save again when ready.":"Saved. You can add the rest later.");}
     }catch(e){showError(e);}finally{setBusy(false);setSavingNotes(false);}
+  }
+  async function handleScheduleAndRoute() {
+    if (!job) return;
+    if (dirty) {
+      await perform("save");
+    }
+    const serviceDate = job.scheduledStart
+      ? (job.scheduledStart.length >= 10 ? job.scheduledStart.slice(0, 10) : job.scheduledStart)
+      : new Date().toISOString().slice(0, 10);
+
+    if (onSchedule) {
+      onSchedule(serviceDate, job.id);
+    } else if (typeof window !== "undefined") {
+      window.location.href = `/admin/schedule?date=${serviceDate}&workOrderId=${job.id}`;
+    }
   }
   async function startCard(selected:SpinLifeJobSummary) {
     setBusy(true);
@@ -981,7 +996,33 @@ export function SpinLifePortal({userId,technician=false,onOtherWork,onCareer,ini
         </div>}
         {files.some(f=>f.category==="client_work_order")?<div className="rounded-xl border bg-white p-4"><h2 className="font-semibold">Original work order</h2>{files.filter(f=>f.category==="client_work_order").map(f=><a key={f.id} className="mt-2 block text-blue-700 underline" href={`/api/attachments?attachmentId=${encodeURIComponent(f.id)}`} target="_blank" rel="noreferrer">{f.fileName}</a>)}</div>:null}
         {!canAssign&&job.data.rawText?<details className="rounded-xl border bg-white p-4"><summary className="cursor-pointer font-semibold">Read pasted work order</summary><pre className="mt-3 whitespace-pre-wrap font-sans text-sm">{job.data.rawText}</pre></details>:null}
-        <div className="rounded-xl border bg-white p-5"><label className="font-semibold">{technician?"My planned date (optional)":"Planned date (optional)"}<input type="date" className={control} value={job.scheduledStart || ""} onChange={e=>edit({...job,scheduledStart:e.target.value || null})}/></label><p className="mt-2 text-sm text-slate-600">Choose or change the day you plan to work. Save for later keeps this date with your order; it does not send a customer appointment notice.</p></div>
+        <div className="rounded-xl border bg-white p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <label className="font-semibold">
+              {technician ? "My planned date (optional)" : "Planned date (optional)"}
+              <input
+                type="date"
+                className={control}
+                value={job.scheduledStart || ""}
+                onChange={e => edit({ ...job, scheduledStart: e.target.value || null })}
+              />
+            </label>
+            {canAssign && (job.technicianId || job.version > 0) ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="mt-6 border-blue-200 bg-blue-50/50 text-blue-700 hover:bg-blue-100"
+                onClick={handleScheduleAndRoute}
+              >
+                <CalendarDays className="mr-1.5 size-4" />
+                Schedule & Route
+              </Button>
+            ) : null}
+          </div>
+          <p className="mt-2 text-sm text-slate-600">
+            Choose or change the day you plan to work. Save for later keeps this date with your order; it does not send a customer appointment notice.
+          </p>
+        </div>
         <details open={canAssign||job.version===0} className="rounded-xl border bg-white p-5"><summary className="cursor-pointer text-lg font-bold">Work order details — all editable</summary><div className="mt-4 grid gap-4 sm:grid-cols-2">
           <label>Job type<select className={control} value={job.data.serviceType} onChange={e=>data("serviceType",e.target.value)}>{Object.entries(spinlifeServiceLabels).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label>
           {sourceFields.map(([key,label])=><label key={key}>{label}<input className={control} value={job.data[key]} onChange={e=>data(key,e.target.value)} placeholder="Add now or later"/></label>)}
@@ -1019,7 +1060,7 @@ export function SpinLifePortal({userId,technician=false,onOtherWork,onCareer,ini
       </fieldset>
       )}
       {canAssign&&job.version>0?<Suspense fallback={<p role="status">Opening closeout controls…</p>}><SpinlifeCloseout id={job.id} sourceVersion={job.version} unsaved={dirty||busy} onPrepared={id=>{try{clearSpinLifeDraft(localStorage,userId,job.id);}catch{/* The immutable saved source remains. */}setJob(null);setFiles([]);setCloseoutWorkOrderId(id);void query.refetch();}}/></Suspense>:null}
-      <footer className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-white p-4 shadow-lg"><p className="text-sm text-slate-600" role="status">{busy?"Saving…":dirty&&draftPending?"Protecting latest changes…":dirty&&draftStored?"Unsaved changes protected on this device":dirty?"Unsaved changes":job.version?"Saved":"Draft — save whenever you are ready"}</p><div className="flex flex-wrap gap-2"><Button variant="outline" disabled={busy} onClick={()=>void perform("save")}>{canAssign&&job.technicianId?"Save & assign":"Save for later"}</Button><Button disabled={busy} onClick={()=>void perform("packet")}>Generate service PDF</Button>{technician?<Button disabled={busy} onClick={()=>void perform("review")}>Submit & finish</Button>:null}{job.packetAttachmentId?<Button variant="outline" asChild><a href={`/api/attachments?attachmentId=${encodeURIComponent(job.packetAttachmentId)}`} target="_blank" rel="noreferrer"><Download/>Open PDF{dirty||job.packetSourceVersion!==job.version?` (previous version v${job.packetSourceVersion})`:""}</a></Button>:null}</div></footer>
+      <footer className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-white p-4 shadow-lg"><p className="text-sm text-slate-600" role="status">{busy?"Saving…":dirty&&draftPending?"Protecting latest changes…":dirty&&draftStored?"Unsaved changes protected on this device":dirty?"Unsaved changes":job.version?"Saved":"Draft — save whenever you are ready"}</p><div className="flex flex-wrap gap-2"><Button variant="outline" disabled={busy} onClick={()=>void perform("save")}>{canAssign&&job.technicianId?"Save & assign":"Save for later"}</Button>{canAssign&&(job.technicianId||job.version>0)?<Button type="button" variant="outline" className="border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100" disabled={busy} onClick={handleScheduleAndRoute}><CalendarDays className="mr-1.5 size-4" />Schedule & Route</Button>:null}<Button disabled={busy} onClick={()=>void perform("packet")}>Generate service PDF</Button>{technician?<Button disabled={busy} onClick={()=>void perform("review")}>Submit & finish</Button>:null}{job.packetAttachmentId?<Button variant="outline" asChild><a href={`/api/attachments?attachmentId=${encodeURIComponent(job.packetAttachmentId)}`} target="_blank" rel="noreferrer"><Download/>Open PDF{dirty||job.packetSourceVersion!==job.version?` (previous version v${job.packetSourceVersion})`:""}</a></Button>:null}</div></footer>
       <p className="text-xs text-slate-500">The PDF includes the digital SpinLife form, TechFlex report and uploaded photos. Blank, N/A and unperformed items remain visible. Original documents remain available above. Billing and partner submission are separate.</p>
     </>}
   </section>;
