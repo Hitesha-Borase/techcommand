@@ -225,7 +225,7 @@ async function loadDispatch(date: string, identity: PortalIdentity, allWork = fa
 
   const spinlifeSql = `SELECT i.id, i.external_id AS externalId, i.status, i.data_json AS dataJson,
          v.technician_id AS technicianId, v.scheduled_start AS scheduledStart,
-         v.technician_pay_cents AS technicianPayCents,
+         v.technician_pay_cents AS technicianPayCents, v.visit_json AS visitJson,
          COALESCE(u.display_name, t.technician_code) AS technicianName,
          t.technician_code AS technicianCode
     FROM work_order_intakes i
