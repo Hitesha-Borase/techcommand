@@ -343,7 +343,11 @@ export function SpinLifePortal({userId,technician=false,onOtherWork,onCareer,ini
       const result=await portalJson<{fields:Record<string,unknown>}>(await portalFetch("/api/ai/work-order-extract",{method:"POST",body:form,signal:controller.signal}),"Automatic extraction is unavailable. You can enter details and save.");
       if(token!==aiRequest.current || draftRef.current?.id!==targetId)return;
       const current=draftRef.current;
-      const updated={...current.data};
+      // Ticket F04 fix: clear prior classifications before merging a fresh read, so a
+      // second extraction that finds LESS (or different) information can never leave a
+      // stale, possibly-wrong equipment/job-type/family classification from an earlier
+      // read sitting underneath it unnoticed.
+      const updated={...current.data, equipmentType:"", serviceType:"" as SpinLifeData["serviceType"], dmeFamilyId:""};
       for(const key of Object.keys(spinlifeDataSchema.shape) as Array<keyof SpinLifeData>){
         if(key === "rawText") continue;
         const value=result.fields[key];
@@ -352,13 +356,15 @@ export function SpinLifePortal({userId,technician=false,onOtherWork,onCareer,ini
           Object.assign(updated,{[key]:value.trim()});
         }
       }
+      // Ticket F04 fix: match the exact normalized equipmentType value, not loose substring
+      // checks - "Power Wheelchair" contains the substring "chair" (wheel-chair), so the old
+      // lift-chair check (listed first) matched it before the power-wheelchair check ran.
       if (!updated.dmeFamilyId && updated.equipmentType) {
-        const eq = updated.equipmentType.toLowerCase();
-        if (eq.includes("lift") || eq.includes("chair") || eq.includes("recliner")) updated.dmeFamilyId = "dme:lift_chair";
-        else if (eq.includes("power") && eq.includes("wheelchair")) updated.dmeFamilyId = "dme:power_wheelchair";
-        else if (eq.includes("scooter")) updated.dmeFamilyId = "dme:scooter";
-        else if (eq.includes("bed")) updated.dmeFamilyId = "dme:bed";
-        else if (eq.includes("manual") && eq.includes("wheelchair")) updated.dmeFamilyId = "dme:manual_wheelchair";
+        if (updated.equipmentType === "Lift Chair") updated.dmeFamilyId = "dme:lift_chair";
+        else if (updated.equipmentType === "Power Wheelchair") updated.dmeFamilyId = "dme:power_wheelchair";
+        else if (updated.equipmentType === "Mobility Scooter") updated.dmeFamilyId = "dme:scooter";
+        else if (updated.equipmentType === "Hospital Bed") updated.dmeFamilyId = "dme:bed";
+        else if (updated.equipmentType === "Manual Wheelchair") updated.dmeFamilyId = "dme:manual_wheelchair";
       }
       if(!updated.extraChecks && Array.isArray(result.fields.checklistItems)){const checks=result.fields.checklistItems.filter((x):x is string=>typeof x==="string").join("\n");if(checks.length>5000)throw new Error("The original is saved, but its additional checks exceed this form’s capacity. Existing answers are preserved; review the original requirements before completion.");updated.extraChecks=checks;}
       edit({...current,data:updated});setAiMessage("Available details filled in. Please check them against the original before assigning. Technician pay is entered by the administrator.");if(technician)setTechStage("essentials");

@@ -56,9 +56,23 @@ export function normalizeIntakeFields(obj: Record<string, any>): Record<string, 
   if (!normalized.manufacturer && (normalized.make || normalized.brand)) {
     normalized.manufacturer = normalized.make || normalized.brand;
   }
+  // Ticket F04 fix: never force "repair_single" when the job type text doesn't match a known
+  // category - that silently relabeled uncatalogued/unspecified work as "Repair". Leave it
+  // unset so the caller's own null-handling applies, same as equipmentType above.
   if (!normalized.serviceType && (normalized.job_type || normalized.jobType)) {
     const jt = String(normalized.job_type || normalized.jobType).toLowerCase();
-    normalized.serviceType = jt.includes("repair") ? "repair_single" : jt.includes("eval") ? "evaluation" : jt.includes("bed") ? "bed_delivery" : "repair_single";
+    const inferred = jt.includes("repair")
+      ? "repair_single"
+      : jt.includes("preventive") || /\bpm\b/.test(jt)
+      ? "preventive_maintenance"
+      : jt.includes("eval")
+      ? "evaluation"
+      : jt.includes("bed")
+      ? "bed_delivery"
+      : jt.includes("delivery") || jt.includes("setup")
+      ? "wgd_basic"
+      : null;
+    if (inferred) normalized.serviceType = inferred;
   }
 
   // Ensure default required fields for bidFields schema
@@ -82,6 +96,40 @@ export function normalizeIntakeFields(obj: Record<string, any>): Record<string, 
   return normalized;
 }
 
+function decodeHexPdfString(hex: string): string {
+  const clean = hex.replace(/\s+/g, "");
+  let out = "";
+  for (let i = 0; i + 1 < clean.length; i += 2) out += String.fromCharCode(parseInt(clean.slice(i, i + 2), 16));
+  return out;
+}
+
+/**
+ * Extracts the operands of (text)Tj, <hex>Tj and [(text)/<hex> ...]TJ text-showing operators.
+ * Each Tj/TJ call is joined with a newline (not a space) because each one is normally a
+ * separate visual line (positioned via its own Td/Tm) - joining with spaces instead merges
+ * adjacent label/value lines (e.g. "Customer: Morgan Audit Fictional" + "Phone: (614)...")
+ * into one run, which broke the line-based field regexes below.
+ */
+function extractShowTextOperands(content: string): string {
+  let text = "";
+  const parenTj = /\(((?:[^()\\]|\\.)*)\)\s*(?:Tj|'|")/g;
+  let match: RegExpExecArray | null;
+  while ((match = parenTj.exec(content)) !== null) text += match[1] + "\n";
+  const hexTj = /<([0-9A-Fa-f\s]+)>\s*(?:Tj|'|")/g;
+  while ((match = hexTj.exec(content)) !== null) text += decodeHexPdfString(match[1]) + "\n";
+  const arrayTJ = /\[([^[\]]*)\]\s*TJ/g;
+  while ((match = arrayTJ.exec(content)) !== null) {
+    const parenParts = match[1].match(/\(((?:[^()\\]|\\.)*)\)/g) || [];
+    const hexParts = match[1].match(/<([0-9A-Fa-f\s]+)>/g) || [];
+    const pieces = [
+      ...parenParts.map((p) => p.slice(1, -1)),
+      ...hexParts.map((h) => decodeHexPdfString(h.slice(1, -1))),
+    ];
+    if (pieces.length) text += pieces.join(" ") + "\n";
+  }
+  return text;
+}
+
 /**
  * Extracts human-readable text from raw PDF bytes (uncompressed strings and FlateDecode streams).
  */
@@ -89,20 +137,10 @@ export function extractTextFromPdfBuffer(buf: Buffer | Uint8Array): string {
   const buffer = Buffer.isBuffer(buf) ? buf : Buffer.from(buf);
   let extracted = "";
 
-  // 1. Literal text objects: (Text) Tj or [(Text)] TJ
-  const rawStr = buffer.toString("latin1");
-  const tjRegex = /\(([^)]+)\)\s*(?:Tj|'|")/g;
-  let match: RegExpExecArray | null;
-  while ((match = tjRegex.exec(rawStr)) !== null) {
-    extracted += match[1] + " ";
-  }
-  const arrayTjRegex = /\[(.*?)\]\s*TJ/g;
-  while ((match = arrayTjRegex.exec(rawStr)) !== null) {
-    const inner = match[1].match(/\(([^)]+)\)/g);
-    if (inner) extracted += inner.map(s => s.slice(1, -1)).join(" ") + " ";
-  }
+  // 1. Text-showing operators sitting directly in the (rare, uncompressed) outer bytes.
+  extracted += extractShowTextOperands(buffer.toString("latin1"));
 
-  // 2. FlateDecode compressed content streams
+  // 2. FlateDecode compressed content streams - the common case for real-world PDFs.
   let pos = 0;
   while (pos < buffer.length - 10) {
     const streamIdx = buffer.indexOf(Buffer.from("stream"), pos);
@@ -113,18 +151,13 @@ export function extractTextFromPdfBuffer(buf: Buffer | Uint8Array): string {
     const end = buffer.indexOf(Buffer.from("endstream"), start);
     if (end > start) {
       try {
-        const decompressed = zlib.inflateSync(buffer.subarray(start, end));
-        const decStr = decompressed.toString("latin1");
-        const decTjRegex = /\(([^)]+)\)\s*Tj/g;
-        let dMatch: RegExpExecArray | null;
-        while ((dMatch = decTjRegex.exec(decStr)) !== null) {
-          extracted += dMatch[1] + " ";
-        }
-        // Extract word groupings
-        const textTokens = decStr.match(/[A-Za-z0-9\s:,\.\(\)\#\-\/]{4,}/g);
-        if (textTokens) {
-          extracted += "\n" + textTokens.join(" ");
-        }
+        const decStr = zlib.inflateSync(buffer.subarray(start, end)).toString("latin1");
+        // Ticket F02 fix: only extract real text-showing operators from the decompressed
+        // stream. The previous loose alphanumeric scan here pulled in PDF operators,
+        // coordinates and font names as if they were document text, which broke the
+        // label/value adjacency that parseSpinLifeDocument's field regexes rely on -
+        // leaving reference/customer/phone/address/equipment all empty.
+        extracted += extractShowTextOperands(decStr);
       } catch {}
       pos = end + 9;
     } else {
@@ -192,24 +225,33 @@ export function parseSpinLifeDocument(rawText: string): ParsedWorkOrderFields {
   }
 
   // 5. Equipment Type (Strictly avoid defaulting to "Power Wheelchair" if unknown)
+  // Ticket F04 fix: classify ONLY from the explicitly labeled "Equipment:" value. This
+  // previously fell back to scanning the ENTIRE pasted text (`eqRaw || text`) whenever no
+  // label was found, so an incidental word anywhere in unrelated notes/boilerplate could
+  // override - or invent - the equipment type instead of honoring the explicit label.
   let equipmentType: string | null = null;
   const eqMatch = text.match(/Equipment(?:\s*Type)?\s*[:#=\-]?\s*([^\r\n]+)/i);
   const eqRaw = eqMatch ? eqMatch[1].trim() : "";
 
-  if (/lift\s*chair|recliner/i.test(eqRaw || text)) {
-    equipmentType = "Lift Chair";
-  } else if (/power\s*wheelchair|powerchair/i.test(eqRaw || text)) {
-    equipmentType = "Power Wheelchair";
-  } else if (/mobility\s*scooter|\bscooter\b/i.test(eqRaw || text)) {
-    equipmentType = "Mobility Scooter";
-  } else if (/hospital\s*bed|\bbed\b/i.test(eqRaw || text)) {
-    equipmentType = "Hospital Bed";
-  } else if (/manual\s*wheelchair/i.test(eqRaw || text)) {
-    equipmentType = "Manual Wheelchair";
-  } else if (eqRaw && !/^(add|now|later|none|null|na|n\/a|unclassified)$/i.test(eqRaw)) {
-    equipmentType = eqRaw;
+  if (eqRaw && !/^(add|now|later|none|null|na|n\/a|unclassified|choose\s*later|unspecified)$/i.test(eqRaw)) {
+    if (/lift\s*chair|recliner/i.test(eqRaw)) {
+      equipmentType = "Lift Chair";
+    } else if (/power\s*wheelchair|powerchair/i.test(eqRaw)) {
+      equipmentType = "Power Wheelchair";
+    } else if (/mobility\s*scooter|\bscooter\b/i.test(eqRaw)) {
+      equipmentType = "Mobility Scooter";
+    } else if (/hospital\s*bed|\bbed\b/i.test(eqRaw)) {
+      equipmentType = "Hospital Bed";
+    } else if (/manual\s*wheelchair/i.test(eqRaw)) {
+      equipmentType = "Manual Wheelchair";
+    } else {
+      // Uncatalogued (e.g. "Training scale") - kept verbatim so a human sees exactly what
+      // was written and can classify it, instead of being silently forced into a wrong
+      // catalog bucket like "Power Wheelchair".
+      equipmentType = eqRaw;
+    }
   }
-  // If unknown, leave equipmentType as null so human review notices it.
+  // If no explicit label was found at all, leave equipmentType as null so human review notices it.
 
   // 6. Manufacturer / Make
   let manufacturer: string | null = null;
@@ -248,16 +290,20 @@ export function parseSpinLifeDocument(rawText: string): ParsedWorkOrderFields {
   }
 
   // 9. Service / Job Type
+  // Ticket F04 fix: the capture class previously excluded "-" and "(" "/" ")", so labels like
+  // "White-glove delivery" or "Preventive maintenance (PM)" simply failed to match at all.
   let serviceType: string | null = null;
   const typeMatch = text.match(
-    /(?:Job\s*Type|Service\s*Type)\s*[:#=\-]?\s*([A-Za-z\s]+)(?=\r?\n|$)/i,
+    /(?:Job\s*Type|Service\s*Type)\s*[:#=\-]?\s*([A-Za-z0-9\s./()\-]+)(?=\r?\n|$)/i,
   );
   if (typeMatch && typeMatch[1]) {
     const rawType = typeMatch[1].trim().toLowerCase();
     if (rawType.includes("repair")) serviceType = "repair_single";
+    else if (rawType.includes("preventive") || /\bpm\b/.test(rawType)) serviceType = "preventive_maintenance";
     else if (rawType.includes("eval")) serviceType = "evaluation";
     else if (rawType.includes("bed")) serviceType = "bed_delivery";
     else if (rawType.includes("delivery") || rawType.includes("setup")) serviceType = "wgd_basic";
+    // Anything else (e.g. "Unspecified") stays null/unclassified rather than guessing.
   }
 
   // 10. Complaint / Requested Work
@@ -270,15 +316,15 @@ export function parseSpinLifeDocument(rawText: string): ParsedWorkOrderFields {
   }
 
   // DME Family ID mapping
+  // Ticket F04 fix: match the exact normalized equipmentType value, not loose substring
+  // checks. "Power Wheelchair" contains the substring "chair" (wheel-chair), so the old
+  // lift-chair check - listed first - matched it before the power-wheelchair check ever ran.
   let dmeFamilyId: string | null = null;
-  if (equipmentType) {
-    const eq = equipmentType.toLowerCase();
-    if (eq.includes("lift") || eq.includes("chair") || eq.includes("recliner")) dmeFamilyId = "dme:lift_chair";
-    else if (eq.includes("power") && eq.includes("wheelchair")) dmeFamilyId = "dme:power_wheelchair";
-    else if (eq.includes("scooter")) dmeFamilyId = "dme:scooter";
-    else if (eq.includes("bed")) dmeFamilyId = "dme:bed";
-    else if (eq.includes("manual") && eq.includes("wheelchair")) dmeFamilyId = "dme:manual_wheelchair";
-  }
+  if (equipmentType === "Lift Chair") dmeFamilyId = "dme:lift_chair";
+  else if (equipmentType === "Power Wheelchair") dmeFamilyId = "dme:power_wheelchair";
+  else if (equipmentType === "Mobility Scooter") dmeFamilyId = "dme:scooter";
+  else if (equipmentType === "Hospital Bed") dmeFamilyId = "dme:bed";
+  else if (equipmentType === "Manual Wheelchair") dmeFamilyId = "dme:manual_wheelchair";
 
   return {
     externalId,
@@ -346,7 +392,9 @@ export function parseWorkOrderAttachment(content: Array<Record<string, unknown>>
     manufacturer: primary.manufacturer || screenshot.manufacturer || null,
     model: primary.model || screenshot.model || null,
     serialNumber: primary.serialNumber || null,
-    serviceType: primary.serviceType || "repair_single",
+    // Ticket F04 fix: do not force "repair_single" when nothing was actually specified -
+    // leave it null so an unspecified job type stays unclassified for human review.
+    serviceType: primary.serviceType || null,
     customerComplaint: primary.customerComplaint || screenshot.jobNotes || null,
     summary: primary.summary || (primary.externalId ? `Work order ${primary.externalId}` : screenshot.workOrder ? `Work order ${screenshot.workOrder}` : null),
     dmeFamilyId: primary.dmeFamilyId || null,

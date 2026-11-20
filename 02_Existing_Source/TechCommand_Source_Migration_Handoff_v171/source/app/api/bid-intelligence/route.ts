@@ -38,6 +38,7 @@ const bidFields = z.object({
     "wgd_basic",
     "wgd_complex",
     "bed_delivery",
+    "preventive_maintenance", // SpinLife DME PM job type (ticket F04) - distinct from the biomed_pm_* tiers below
     "biomed_pm_a",
     "biomed_pm_b",
     "biomed_pm_c",
@@ -78,7 +79,7 @@ const jsonSchema = {
       enum: [
         "evaluation", "repair_single", "repair_multi", "frame_repair",
         "hourly_service", "biomed_service_call", "biomed_cataloging", "biomed_repair", "consumer_install",
-        "wgd_basic", "wgd_complex", "bed_delivery", "biomed_pm_a",
+        "wgd_basic", "wgd_complex", "bed_delivery", "preventive_maintenance", "biomed_pm_a",
         "biomed_pm_b", "biomed_pm_c", "biomed_pm_d", null,
       ],
     },

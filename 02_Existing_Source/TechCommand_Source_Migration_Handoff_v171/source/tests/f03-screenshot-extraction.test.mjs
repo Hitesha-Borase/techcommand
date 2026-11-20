@@ -78,3 +78,37 @@ Servicing technician: Kyle Ingram
   assert.equal(draft.model, "Comforter PR-531");
   assert.equal(draft.assignedTo, "Kyle Ingram");
 });
+
+test("Ticket F03 - OCR label-row/value-row layout must not leak order digits into Phone", () => {
+  // Real tesseract.js OCR commonly reads a row of labels, then the row of values below it,
+  // instead of keeping each label adjacent to its own value. The original bug reproduced
+  // here: "Phone" ends up immediately before the order reference's digits in the extracted
+  // text, and a loosely-separated phone regex grabbed "0007111800" from "00071118002N-4".
+  const ocrText = `Work Order Number Phone
+00071118002N-4 (614) 555-0123`;
+
+  const draft = parseScreenshotOcr(ocrText);
+
+  assert.notEqual(draft.phone, "0007111800", "Phone must never be digits borrowed from the order reference");
+  assert.equal(draft.phone, "(614) 555-0123", "Phone must capture the real, separator-formatted telephone number");
+  assert.equal(draft.workOrder, "00071118002N-4");
+});
+
+test("Ticket F03 - a bare unformatted digit run must never be accepted as a labeled phone", () => {
+  const ocrText = `Work Order Number: 00071118002N-4
+Phone: 0007111800`;
+
+  const draft = parseScreenshotOcr(ocrText);
+
+  assert.equal(draft.phone, "", "An unformatted 10-digit run is not a plausible phone number and must be left empty");
+});
+
+test("Ticket F03 - an image with no phone present leaves Phone empty", () => {
+  const ocrText = `Work Order Number: 00071118002N-4
+Customer: Morgan Audit Fictional
+Equipment: Lift Chair`;
+
+  const draft = parseScreenshotOcr(ocrText);
+
+  assert.equal(draft.phone, "", "Phone must stay empty rather than guessing a value when none is present");
+});

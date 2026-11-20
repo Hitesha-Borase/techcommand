@@ -357,6 +357,10 @@ export async function generateServiceReportPdf(input: {
     `${input.serviceType} ${input.equipmentType} ${input.model} ${input.summary} ${input.customerComplaint}`
   );
   const isBiomed = input.serviceType.startsWith('biomed');
+  // F01 fix: status must come only from the technician's recorded disposition/documentStatus
+  // fields, never from scanning free-text notes for keywords - that produced fabricated
+  // repair claims (e.g. "temporarily restored") with no supporting saved field.
+  const dispositionStatus = packetStatus(input.assetDisposition);
   const reportTitle = isLiftChair
     ? 'Lift Chair Service Report'
     : isBiomed
@@ -365,9 +369,7 @@ export async function generateServiceReportPdf(input: {
   reportHeader(ctx, reportTitle, `${input.accountName} Work Order #${input.workOrderNumber}`);
 
   if (isLiftChair) {
-    const isOutOfService = /out.of.service|inoperable|safety hazard|do not operate|pending.*part|unserviceable/i.test(
-      `${input.documentStatus || ''} ${input.assetDisposition} ${input.summary} ${input.findings} ${input.workPerformed} ${input.fieldNotes || ''}`
-    );
+    const isOutOfService = dispositionStatus !== 'COMPLETED';
     const subtitle = input.summary?.trim()
       ? input.summary.trim()
       : isOutOfService
@@ -383,16 +385,15 @@ export async function generateServiceReportPdf(input: {
     });
     ctx.y -= 14;
 
-    const isTempRestored = /temporar.*restor|loaner installed|temporarily operational/i.test(
-      `${input.documentStatus || ''} ${input.workPerformed}`
-    );
     const statusBadge = input.documentStatus
       ? input.documentStatus.toUpperCase()
-      : isOutOfService
-      ? 'OUT OF SERVICE | OEM PARTS / AUTHORIZATION REQUIRED'
-      : isTempRestored
-      ? 'TEMPORARY FUNCTION RESTORED | OEM PARTS REQUIRED'
-      : `${packetStatus(input.assetDisposition).toUpperCase()} | DME FIELD SERVICE COMPLETED`;
+      : dispositionStatus === 'NEEDS PART'
+      ? `${dispositionStatus} | OEM PARTS / AUTHORIZATION REQUIRED`
+      : dispositionStatus === 'NEEDS RESOLUTION'
+      ? `${dispositionStatus} | FOLLOW-UP REQUIRED`
+      : dispositionStatus === 'NEEDS REVIEW'
+      ? `${dispositionStatus} | ADMINISTRATOR REVIEW REQUIRED`
+      : `${dispositionStatus} | DME FIELD SERVICE COMPLETED`;
 
     ensureSpace(ctx, 24);
     ctx.page.drawRectangle({
@@ -473,36 +474,20 @@ export async function generateServiceReportPdf(input: {
     );
   } else if (isLiftChair) {
     band(ctx, 'Equipment serviced');
-    const hasCompanion = /companion|second chair|pr535|husband/i.test(
-      `${input.customerComplaint} ${input.findings} ${input.summary}`
-    );
-    const isOutOfService = /out.of.service|inoperable|do not operate/i.test(
-      `${input.findings} ${input.workPerformed} ${input.fieldNotes || ''} ${input.assetDisposition}`
-    );
-    const isTempRestored = /temporar.*restor|loaner|spliced/i.test(`${input.workPerformed}`);
-    const hasParts = /parts/i.test(`${input.assetDisposition} ${input.recommendation}`);
-    const primaryStatus = isOutOfService
-      ? (hasParts ? 'Out of service; OEM parts needed' : 'Out of service; pending authorization')
-      : isTempRestored
-      ? (hasParts ? 'Temporary function restored; OEM parts needed' : 'Temporary function restored')
-      : packetStatus(input.assetDisposition);
+    // F01 fix: status comes only from the recorded disposition field (see dispositionStatus
+    // above). A second "companion chair" row is no longer fabricated from keyword matches in
+    // free-text notes - an additional unit is only ever shown here if it was actually recorded,
+    // via the servicedUnits/equipmentProgress branches handled earlier in this function.
+    const primaryStatus = input.documentStatus || `${dispositionStatus} - ${input.assetDisposition.replaceAll('_', ' ')}`;
 
     const rows = [
       [
-        hasCompanion ? (input.chairLabel || "Spouse's chair (primary repair)") : "Primary lift chair",
+        input.chairLabel || 'Primary lift chair',
         `${input.manufacturer} ${input.model}`.trim(),
         input.serialNumber,
         primaryStatus,
       ],
     ];
-    if (hasCompanion) {
-      rows.push([
-        "Husband's companion chair",
-        'Golden Technologies PR535 MaxiComfort',
-        'GT-PR535-MC-66230',
-        'Operational; loaner remote installed; OEM parts needed',
-      ]);
-    }
     table(
       ctx,
       rows,
@@ -781,9 +766,9 @@ async function appendPhotoGallery(target: PDFDocument, files: PacketFile[], refe
       color: navy,
     });
 
-    const recText =
-      followUpRecommendation?.trim() ||
-      'Unit status and recommendations recorded as above. Do not operate equipment if marked out of service. Follow manufacturer guidelines for repair authorization.';
+    // F01 fix: do not substitute generic analysis-sounding boilerplate when no
+    // recommendation was recorded - state plainly that nothing was recorded.
+    const recText = followUpRecommendation?.trim() || 'Not recorded by the technician for this visit.';
     const recLines = wrap(regular, recText, 7.5, 504);
     recLines.slice(0, 3).forEach((line, k) => {
       page.drawText(line, {

@@ -216,7 +216,19 @@ export function BidIntelligenceWorkspace({ trigger, actorUserId, onImportAssets,
       } else if (next.serviceAddress) {
         setRoundTripMiles(0); setDriveHours(0); setRoutedOrigin(""); setRoutedDestination("");
       }
-      toast.success(readiness.data?.aiReady ? `${files.length} evidence file${files.length === 1 ? "" : "s"} reconciled` : `${files.length} image${files.length === 1 ? "" : "s"} scanned`, { description: route ? "Fields and road mileage were updated. Confirm the result before saving." : "Fields were updated. Confirm the destination and mileage before saving." });
+      // Ticket F02 fix: do not claim a successful reconciliation when extraction returned
+      // none of the core identifying fields - that reads as "extraction succeeded" to the
+      // admin while the form is actually still empty and needs manual entry.
+      const coreFieldsFound = ["externalId", "customerName", "customerPhone", "serviceAddress", "equipmentType", "manufacturer", "model", "serialNumber"]
+        .filter((key) => {
+          const value = (next as Record<string, unknown>)[key];
+          return value !== null && value !== undefined && value !== "";
+        }).length;
+      if (coreFieldsFound === 0) {
+        toast.warning("No usable fields were found in this document", { description: "Review the attached file and enter the work order details manually." });
+      } else {
+        toast.success(readiness.data?.aiReady ? `${files.length} evidence file${files.length === 1 ? "" : "s"} reconciled` : `${files.length} image${files.length === 1 ? "" : "s"} scanned`, { description: route ? "Fields and road mileage were updated. Confirm the result before saving." : "Fields were updated. Confirm the destination and mileage before saving." });
+      }
       captureOperationalEvent("bid_extraction_completed", {
         file_count: files.length,
         source: readiness.data?.aiReady ? "openai" : "device_ocr",
