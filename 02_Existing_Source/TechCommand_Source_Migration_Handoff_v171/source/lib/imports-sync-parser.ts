@@ -40,11 +40,11 @@ export function parseScreenshotOcr(text: string): SpinLifeDraft {
   if (woExplicit) {
     let candidate = woExplicit[1].trim();
     // If candidate is a header stop word, look right after it
-    if (/^(Number|No|ID|Order|Date|Type)$/i.test(candidate)) {
+    if (/^(Number|No|ID|Order|Date|Type|Phone|Tel|Email|Customer|Address)$/i.test(candidate)) {
       const after = clean.slice(clean.indexOf(candidate) + candidate.length).match(/^[:.\s-]*([A-Za-z0-9-]+)/);
       if (after) candidate = after[1].trim();
     }
-    if (candidate && !/^(Number|No|ID|Order|Date|Type)$/i.test(candidate) && /\d/.test(candidate)) {
+    if (candidate && !/^(Number|No|ID|Order|Date|Type|Phone|Tel|Email|Customer|Address)$/i.test(candidate) && /\d/.test(candidate)) {
       workOrder = candidate;
     }
   }
@@ -55,8 +55,12 @@ export function parseScreenshotOcr(text: string): SpinLifeDraft {
 
   // 3. Phone Number
   // Priority 1: Labeled phone
+  // Ticket F03 fix: the separators between digit groups are now REQUIRED (`+` not `*`).
+  // A bare, unformatted 10-digit run (e.g. digits borrowed from an order reference like
+  // "00071118002N-4" that happens to follow a "Phone" label in garbled OCR text) can no
+  // longer match - only a plausibly-formatted phone number is accepted as labeled.
   let phone = "";
-  const labeledPhone = clean.match(/(?:Phone|Tel|Telephone|Cell|Mobile|Contact)\s*(?:Number|No\.?|#)?\s*[:.]?\s*(\(?\d{3}\)?[\s.-]*\d{3}[\s.-]*\d{4})/i);
+  const labeledPhone = clean.match(/(?:Phone|Tel|Telephone|Cell|Mobile|Contact)\s*(?:Number|No\.?|#)?\s*[:.]?\s*(\(?\d{3}\)?[\s.-]+\d{3}[\s.-]+\d{4})/i);
   if (labeledPhone) {
     phone = labeledPhone[1].trim();
   } else {

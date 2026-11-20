@@ -322,7 +322,7 @@ function fallbackBidFields(content: Array<Record<string, unknown>>) {
     customerPhone: parsed.customerPhone,
     customerEmail: null,
     serviceAddress: parsed.serviceAddress,
-    serviceType: (parsed.serviceType as any) || "repair_single",
+    serviceType: (parsed.serviceType as any) || null, // Strictly dynamic: null if unspecified, never forces "repair_single" (ticket F04)
     summary: parsed.summary || (parsed.externalId ? `Work order ${parsed.externalId}` : "Work order details extracted"),
     customerComplaint: parsed.customerComplaint,
     equipmentType: parsed.equipmentType, // Strictly dynamic: null if unknown, NEVER forces Power Wheelchair!

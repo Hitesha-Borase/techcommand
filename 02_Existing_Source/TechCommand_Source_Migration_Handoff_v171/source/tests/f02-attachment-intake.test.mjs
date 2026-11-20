@@ -61,3 +61,38 @@ test("Ticket F02 Test 3: Work Order Attachment Content Parser (Offline / Fallbac
   assert.equal(parsed.equipmentType, "Lift Chair");
   assert.equal(parsed.model, "GL-AUD-04");
 });
+
+test("Ticket F02 Test 4: Real uploaded PDF bytes are decoded and parsed (no pasted text fallback)", async () => {
+  // This is the exact audit failure mode: an actual PDF attachment, not pasted text.
+  // The PDF's content stream is FlateDecode-compressed, same as any real-world PDF.
+  const { PDFDocument, StandardFonts } = await import("pdf-lib");
+  const doc = await PDFDocument.create();
+  const page = doc.addPage([400, 400]);
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const lines = [
+    "Work Order Number: 00071118002N-4",
+    "Customer: Morgan Audit Fictional",
+    "Phone: (614) 555-0123",
+    "Service Address: 204 Example Lane, Columbus, OH 43215",
+    "Equipment: Lift chair",
+    "Manufacturer: Golden Technologies",
+    "Model: GL-AUD-04",
+    "Serial Number: 00042QA",
+  ];
+  lines.forEach((line, i) => page.drawText(line, { x: 20, y: 380 - i * 20, size: 10, font }));
+  const bytes = await doc.save();
+  const base64 = Buffer.from(bytes).toString("base64");
+
+  const parsed = parseWorkOrderAttachment([
+    { filename: "Fictional_Order.pdf", file_data: `data:application/pdf;base64,${base64}` },
+  ]);
+
+  assert.equal(parsed.externalId, "00071118002N-4", "Reference must be read from actual PDF bytes, not left empty");
+  assert.equal(parsed.customerName, "Morgan Audit Fictional");
+  assert.equal(parsed.customerPhone, "(614) 555-0123");
+  assert.equal(parsed.serviceAddress, "204 Example Lane, Columbus, OH 43215");
+  assert.equal(parsed.equipmentType, "Lift Chair", "Must read the real equipment type, not default to Power Wheelchair");
+  assert.equal(parsed.manufacturer, "Golden Technologies");
+  assert.equal(parsed.model, "GL-AUD-04");
+  assert.equal(parsed.serialNumber, "00042QA");
+});

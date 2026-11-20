@@ -1,0 +1,10 @@
+name = "techcommand-test-worker"
+main = "tests/test-worker-entry.ts"
+compatibility_date = "2024-11-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "techcommand-db"
+database_id = "f9722e9b-3c84-43d4-9c56-5b3e4d6090f4"
+migrations_dir = "drizzle"

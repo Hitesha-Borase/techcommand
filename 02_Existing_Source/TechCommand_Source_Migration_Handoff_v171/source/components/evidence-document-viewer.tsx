@@ -35,6 +35,25 @@ export function EvidenceDocumentViewer({
 
   const currentFile = files[activeFileIndex];
 
+  // Ticket F02 fix: once a real file is uploaded, a missing field means extraction
+  // genuinely failed for it - show that honestly instead of substituting a fabricated
+  // sample value that looks like a real extracted result (e.g. "Power Wheelchair").
+  // The illustrative sample values are only used before any file has been uploaded.
+  const hasUploadedFile = files.length > 0;
+  const show = (value: string | number | null | undefined, sampleValue: string) =>
+    hasUploadedFile ? (value ?? "Not extracted") : (value ?? sampleValue);
+  const TRACKED_FIELDS = [
+    "clientAccountName", "externalId", "customerName", "customerPhone",
+    "serviceAddress", "equipmentType", "manufacturer", "model", "serialNumber",
+  ] as const;
+  const extractedFieldCount = TRACKED_FIELDS.filter((key) => {
+    const value = (fields as Record<string, unknown>)[key];
+    return value !== null && value !== undefined && value !== "";
+  }).length;
+  const confidenceLabel = hasUploadedFile
+    ? `${Math.round((extractedFieldCount / TRACKED_FIELDS.length) * 100)}% fields extracted`
+    : "Sample data";
+
   useEffect(() => {
     if (!currentFile) {
       setPreviewUrl(null);
@@ -132,17 +151,17 @@ export function EvidenceDocumentViewer({
           <div className="w-full h-full p-4 rounded-lg bg-slate-900/90 border border-slate-800 font-mono text-xs text-slate-300 overflow-y-auto space-y-2">
             <div className="text-cyan-400 font-bold border-b border-slate-800 pb-1 flex items-center justify-between">
               <span>=== OCR RAW EVIDENCE STREAM ===</span>
-              <span className="text-[10px] text-emerald-400 font-sans">99.4% Confidence</span>
+              <span className="text-[10px] text-emerald-400 font-sans">{confidenceLabel}</span>
             </div>
-            <p className="text-slate-400">ORGANIZATION: {fields.clientAccountName || "SpinLife Medical Mobility Inc."}</p>
-            <p className="text-slate-400">DISPATCH REF: {fields.externalId || "WO-2026-8812"}</p>
-            <p className="text-slate-400">CUSTOMER: {fields.customerName || "Eleanor Vance"}</p>
-            <p className="text-slate-400">PHONE: {fields.customerPhone || "(614) 555-0194"}</p>
-            <p className="text-slate-400">ADDRESS: {fields.serviceAddress || "4820 Roberts Rd, Columbus, OH 43228"}</p>
-            <p className="text-slate-400">EQUIPMENT: {fields.equipmentType || "Power Wheelchair"} · {fields.manufacturer || "Permobil"} {fields.model || "M300 Corpus"}</p>
-            <p className="text-slate-400">SERIAL: {fields.serialNumber || "M3-948102-OH"}</p>
-            <p className="text-slate-400">COMPLAINT: {fields.customerComplaint || "Patient reports joystick cut-out and intermittent motor code 34."}</p>
-            <p className="text-slate-400">PRE-AUTH AMOUNT: ${fields.authorization || "450.00"}</p>
+            <p className="text-slate-400">ORGANIZATION: {show(fields.clientAccountName, "SpinLife Medical Mobility Inc.")}</p>
+            <p className="text-slate-400">DISPATCH REF: {show(fields.externalId, "WO-2026-8812")}</p>
+            <p className="text-slate-400">CUSTOMER: {show(fields.customerName, "Eleanor Vance")}</p>
+            <p className="text-slate-400">PHONE: {show(fields.customerPhone, "(614) 555-0194")}</p>
+            <p className="text-slate-400">ADDRESS: {show(fields.serviceAddress, "4820 Roberts Rd, Columbus, OH 43228")}</p>
+            <p className="text-slate-400">EQUIPMENT: {show(fields.equipmentType, "Power Wheelchair")} · {show(fields.manufacturer, "Permobil")} {show(fields.model, "M300 Corpus")}</p>
+            <p className="text-slate-400">SERIAL: {show(fields.serialNumber, "M3-948102-OH")}</p>
+            <p className="text-slate-400">COMPLAINT: {show(fields.customerComplaint, "Patient reports joystick cut-out and intermittent motor code 34.")}</p>
+            <p className="text-slate-400">PRE-AUTH AMOUNT: {hasUploadedFile ? (fields.authorization != null ? `$${fields.authorization}` : "Not extracted") : `$${fields.authorization || "450.00"}`}</p>
           </div>
         ) : previewUrl && currentFile?.type.startsWith("image/") ? (
           <div
@@ -180,12 +199,12 @@ export function EvidenceDocumentViewer({
                   Service Work Order Intake
                 </h3>
                 <p className="text-[10px] text-slate-500 font-medium">
-                  {fields.clientAccountName || "SpinLife DME Mobility Dispatch"}
+                  {show(fields.clientAccountName, "SpinLife DME Mobility Dispatch")}
                 </p>
               </div>
               <div className="text-right">
                 <span className="font-mono text-xs font-black text-blue-700">
-                  {fields.externalId || "WO-2026-8812"}
+                  {show(fields.externalId, "WO-2026-8812")}
                 </span>
                 <span className="block text-[9px] text-emerald-700 font-bold">APPROVED DISPATCH</span>
               </div>
@@ -196,30 +215,32 @@ export function EvidenceDocumentViewer({
               <div className="p-2 rounded bg-cyan-50 border border-cyan-200 flex items-start justify-between">
                 <div>
                   <span className="text-[9px] font-bold text-cyan-800 uppercase block">Customer / Patient</span>
-                  <span className="font-bold text-slate-900">{fields.customerName || "Eleanor Vance"}</span>
-                  <span className="block text-[10px] text-slate-500">{fields.customerPhone || "(614) 555-0194"}</span>
+                  <span className="font-bold text-slate-900">{show(fields.customerName, "Eleanor Vance")}</span>
+                  <span className="block text-[10px] text-slate-500">{show(fields.customerPhone, "(614) 555-0194")}</span>
                 </div>
-                <Badge className="bg-cyan-600 text-white text-[9px] h-4">
-                  <CheckCircle2 className="mr-0.5 size-2.5" /> Extracted
-                </Badge>
+                {(!hasUploadedFile || fields.customerName) && (
+                  <Badge className="bg-cyan-600 text-white text-[9px] h-4">
+                    <CheckCircle2 className="mr-0.5 size-2.5" /> Extracted
+                  </Badge>
+                )}
               </div>
 
               <div className="p-2 rounded bg-slate-50 border border-slate-200">
                 <span className="text-[9px] font-bold text-slate-500 uppercase block">Service Location</span>
                 <span className="font-semibold text-slate-800 block">
-                  {fields.serviceAddress || "4820 Roberts Rd, Columbus, OH 43228"}
+                  {show(fields.serviceAddress, "4820 Roberts Rd, Columbus, OH 43228")}
                 </span>
               </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <div className="p-2 rounded bg-slate-50 border border-slate-200">
                   <span className="text-[9px] font-bold text-slate-500 uppercase block">Equipment Model</span>
-                  <span className="font-bold text-slate-800">{fields.model || "Permobil M300 Corpus"}</span>
-                  <span className="block text-[10px] text-slate-500">{fields.manufacturer || "Permobil USA"}</span>
+                  <span className="font-bold text-slate-800">{show(fields.model, "Permobil M300 Corpus")}</span>
+                  <span className="block text-[10px] text-slate-500">{show(fields.manufacturer, "Permobil USA")}</span>
                 </div>
                 <div className="p-2 rounded bg-slate-50 border border-slate-200">
                   <span className="text-[9px] font-bold text-slate-500 uppercase block">Serial Number</span>
-                  <span className="font-mono font-bold text-blue-700">{fields.serialNumber || "M3-948102-OH"}</span>
+                  <span className="font-mono font-bold text-blue-700">{show(fields.serialNumber, "M3-948102-OH")}</span>
                   <span className="block text-[9px] text-slate-400">Verified Plate</span>
                 </div>
               </div>
@@ -227,7 +248,7 @@ export function EvidenceDocumentViewer({
               <div className="p-2 rounded bg-slate-50 border border-slate-200">
                 <span className="text-[9px] font-bold text-slate-500 uppercase block">Reported Clinical Issue</span>
                 <p className="text-[10px] text-slate-700 italic leading-snug">
-                  &quot;{fields.customerComplaint || "Right drive motor intermittent fault code 34. Joystick flashing 4 bars. Patient requires seat elevation check."}&quot;
+                  &quot;{show(fields.customerComplaint, "Right drive motor intermittent fault code 34. Joystick flashing 4 bars. Patient requires seat elevation check.")}&quot;
                 </p>
               </div>
 
@@ -235,7 +256,9 @@ export function EvidenceDocumentViewer({
                 <div>
                   <span className="text-[9px] font-bold text-emerald-800 uppercase block">Partner Pre-Authorization</span>
                   <span className="font-mono font-extrabold text-sm text-emerald-900">
-                    ${fields.authorization ? fields.authorization.toFixed(2) : "450.00"}
+                    {hasUploadedFile
+                      ? (fields.authorization != null ? `$${fields.authorization.toFixed(2)}` : "Not extracted")
+                      : `$${fields.authorization ? fields.authorization.toFixed(2) : "450.00"}`}
                   </span>
                 </div>
                 <Badge variant="outline" className="border-emerald-300 text-emerald-800 bg-white text-[9px]">
@@ -259,7 +282,7 @@ export function EvidenceDocumentViewer({
           <Sparkles className="size-3 text-cyan-400" />
           <span>Fields highlighted in blue match source document extractions</span>
         </span>
-        <span className="font-mono text-cyan-400">100% Extracted</span>
+        <span className="font-mono text-cyan-400">{hasUploadedFile ? confidenceLabel : "100% Extracted"}</span>
       </div>
     </div>
   );

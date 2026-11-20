@@ -120,7 +120,7 @@ function fullAddress(row: Record<string, unknown>) {
     .join(", ");
 }
 
-async function loadDispatch(date: string, identity: PortalIdentity, allWork = false, requestedTechnicianId?: string | null) {
+export async function loadDispatch(date: string, identity: PortalIdentity, allWork = false, requestedTechnicianId?: string | null) {
   const isTechRole = identity.role === "technician";
   const technicianOnly = isTechRole || (Boolean(requestedTechnicianId) && adminRoles.includes(identity.role as (typeof adminRoles)[number]));
   const technicianId = isTechRole ? identity.technicianId : (requestedTechnicianId || null);
