@@ -345,11 +345,11 @@ async function loadDispatch(date: string, identity: PortalIdentity, allWork = fa
   if (spinlifeResult?.results) {
     for (const row of spinlifeResult.results as any[]) {
       const data = safeJson<Record<string, any>>(row.dataJson, {});
-      const customerName = String(data.customerName || "Customer");
-      const serviceType = String(data.serviceType || "Repair");
-      const serviceAddress = String(data.serviceAddress || "Address pending");
-      const equipment = [data.equipmentType, data.manufacturer, data.model].filter(Boolean).join(" ") || "DME Equipment";
-      const summary = `${customerName} · ${equipment}`;
+      const customerName = data.customerName ? String(data.customerName) : "";
+      const serviceType = data.serviceType ? String(data.serviceType) : "repair_single";
+      const serviceAddress = data.serviceAddress ? String(data.serviceAddress) : "";
+      const equipment = [data.equipmentType, data.manufacturer, data.model].filter(Boolean).join(" ");
+      const summary = data.summary ? String(data.summary) : [customerName, equipment].filter(Boolean).join(" · ");
       const scheduledStartStr = row.scheduledStart ? String(row.scheduledStart) : "";
       const hasConfirmedTime = scheduledStartStr.includes("T") || scheduledStartStr.includes(":");
       const plannedDate = scheduledStartStr.length >= 10 ? scheduledStartStr.slice(0, 10) : "";
@@ -363,17 +363,17 @@ async function loadDispatch(date: string, identity: PortalIdentity, allWork = fa
 
       const spinlifeScheduledItem = {
         id: String(row.id),
-        externalId: String(row.externalId || "SpinLife Order"),
+        externalId: String(row.externalId || ""),
         externalSource: "SpinLife",
         serviceType,
-        summary,
+        summary: summary || (row.externalId ? `Work order ${row.externalId}` : ""),
         priority: "normal",
         status: isCompleted ? "completed" : isInProgress ? "in_progress" : "assigned",
         requiredTechnicianCount: 1,
         grossMarginBasisPoints: 4000,
         scheduledStart: scheduledStartStr || null,
         scheduledEnd,
-        accountName: "SpinLife",
+        accountName: String(data.clientAccountName || "SpinLife"),
         locationId: String(row.id),
         locationName: customerName,
         address: serviceAddress,
@@ -381,8 +381,8 @@ async function loadDispatch(date: string, identity: PortalIdentity, allWork = fa
         longitude: null,
         assignmentId: `spinlife-wa-${row.id}`,
         technicianId: String(row.technicianId || ""),
-        technicianName: String(row.technicianName || "Demo Technician"),
-        technicianCode: String(row.technicianCode || "TECH"),
+        technicianName: String(row.technicianName || ""),
+        technicianCode: String(row.technicianCode || ""),
         assignmentRole: "primary",
         assignmentStatus: isCompleted ? "submitted" : isInProgress ? "service_in_progress" : "assigned",
         routeId: routes.find((r) => r.technicianId === row.technicianId)?.id || null,
@@ -419,10 +419,10 @@ async function loadDispatch(date: string, identity: PortalIdentity, allWork = fa
             const tech = technicians.find((t) => String(t.id) === String(row.technicianId));
             available.push({
               id: String(row.id),
-              externalId: String(row.externalId || "SpinLife Order"),
+              externalId: String(row.externalId || ""),
               externalSource: "SpinLife",
               serviceType,
-              summary,
+              summary: summary || (row.externalId ? `Work order ${row.externalId}` : ""),
               priority: "normal",
               status: "assigned",
               requiredTechnicianCount: 1,
@@ -430,7 +430,7 @@ async function loadDispatch(date: string, identity: PortalIdentity, allWork = fa
               grossMarginBasisPoints: 4000,
               scheduledStart: scheduledStartStr || null,
               scheduledEnd: null,
-              accountName: "SpinLife",
+              accountName: String(data.clientAccountName || "SpinLife"),
               locationId: String(row.id),
               locationName: customerName,
               address: serviceAddress,

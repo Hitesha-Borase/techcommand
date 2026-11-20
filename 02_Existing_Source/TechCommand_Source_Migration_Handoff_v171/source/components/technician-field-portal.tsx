@@ -660,7 +660,7 @@ export function TechnicianFieldPortal({
                             </span>
                           </div>
                           <h2 className="mt-1 font-bold">
-                            {job.serviceType.startsWith("biomed_") ? job.accountName : service(job.serviceType)}
+                            {job.locationName || job.summary || (job.serviceType.startsWith("biomed_") ? job.accountName : service(job.serviceType))}
                           </h2>
                         </div>
                         <Badge variant="outline">
@@ -674,12 +674,16 @@ export function TechnicianFieldPortal({
                         </div>
                       )}
                       <p className="mt-2 text-sm font-semibold text-slate-600">
-                        {job.serviceType.startsWith("biomed_") ? (biomedicalActivities.find(item=>item.serviceType===job.serviceType)?.label||service(job.serviceType)) : job.accountName}
+                        {job.serviceType.startsWith("biomed_")
+                          ? (biomedicalActivities.find(item=>item.serviceType===job.serviceType)?.label||service(job.serviceType))
+                          : (job.locationName && job.summary ? job.summary : job.accountName)}
                       </p>
-                      <p className="mt-1 flex items-start gap-1.5 text-sm text-slate-500">
-                        <MapPin className="mt-0.5 size-3.5 shrink-0" />
-                        {job.address}
-                      </p>
+                      {job.address ? (
+                        <p className="mt-1 flex items-start gap-1.5 text-sm text-slate-500">
+                          <MapPin className="mt-0.5 size-3.5 shrink-0" />
+                          {job.address}
+                        </p>
+                      ) : null}
                       <p className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-slate-500">
                         <Clock3 className="size-3.5" />
                         {travel(job)}
@@ -958,7 +962,7 @@ export function TechnicianFieldPortal({
                               </Badge>
                             </div>
                             <h3 className="mt-1.5 text-base font-bold text-slate-900">
-                              {job.serviceType.startsWith("biomed_") ? job.accountName : service(job.serviceType)}
+                              {job.locationName || job.summary || (isBiomed ? job.accountName : service(job.serviceType))}
                             </h3>
                           </div>
                           <Badge variant="outline" className="text-xs">
@@ -974,14 +978,16 @@ export function TechnicianFieldPortal({
                         )}
 
                         <p className="mt-2 text-sm font-semibold text-slate-700">
-                          {job.serviceType.startsWith("biomed_")
+                          {isBiomed
                             ? (biomedicalActivities.find(item => item.serviceType === job.serviceType)?.label || service(job.serviceType))
-                            : job.accountName}
+                            : (job.locationName && job.summary ? job.summary : job.accountName)}
                         </p>
-                        <p className="mt-1 flex items-start gap-1.5 text-sm text-slate-500">
-                          <MapPin className="mt-0.5 size-3.5 shrink-0" />
-                          {job.address}
-                        </p>
+                        {job.address ? (
+                          <p className="mt-1 flex items-start gap-1.5 text-sm text-slate-500">
+                            <MapPin className="mt-0.5 size-3.5 shrink-0" />
+                            {job.address}
+                          </p>
+                        ) : null}
                         <p className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-slate-500">
                           <Clock3 className="size-3.5" />
                           {travel(job)}
