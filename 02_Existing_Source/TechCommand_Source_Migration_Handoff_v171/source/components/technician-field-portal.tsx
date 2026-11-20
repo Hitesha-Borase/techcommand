@@ -60,6 +60,7 @@ import { PLATFORM_BRAND } from "@/lib/platform-brand";
 import { TechnicianOnboarding } from "@/components/technician-onboarding";
 import { captureOperationalEvent } from "@/lib/analytics-client";
 import { technicianAssignments } from "@/lib/technician-assignments";
+import { unifyTechnicianAssignedJobs } from "@/lib/schedule-data";
 
 
 import {
@@ -289,15 +290,22 @@ export function TechnicianFieldPortal({
   const [allWorkDateFilter, setAllWorkDateFilter] = useState<"all" | "completed" | "active" | "today" | "upcoming" | "past" | "unscheduled">("all");
   const [allWorkDisciplineFilter, setAllWorkDisciplineFilter] = useState("all");
   const [allWorkSearch, setAllWorkSearch] = useState("");
+  const techId = capability.data?.technicianId;
 
   const dispatch = useQuery({
-    queryKey: ["dispatch", serviceDate, "technician"],
-    queryFn: () => api<DispatchPayload>(`/api/dispatch?date=${serviceDate}`),
+    queryKey: ["dispatch", serviceDate, "technician", techId],
+    queryFn: () =>
+      api<DispatchPayload>(
+        `/api/dispatch?date=${serviceDate}${techId ? `&technicianId=${encodeURIComponent(techId)}` : ""}`,
+      ),
   });
 
   const allDispatch = useQuery({
-    queryKey: ["dispatch-all", "technician"],
-    queryFn: () => api<DispatchPayload>("/api/dispatch?all=true"),
+    queryKey: ["dispatch-all", "technician", techId],
+    queryFn: () =>
+      api<DispatchPayload>(
+        `/api/dispatch?all=true${techId ? `&technicianId=${encodeURIComponent(techId)}` : ""}`,
+      ),
   });
   const pay = useQuery({
     queryKey: ["technician-pay"],
@@ -359,13 +367,52 @@ export function TechnicianFieldPortal({
     },
     onError:error=>toast.error(error.message),
   });
+  const targetTechId = techId || dispatch.data?.technicianId;
   const activeRoute =
     dispatch.data?.routes.find(
-      (route) => route.technicianId === dispatch.data?.technicianId,
+      (route) => route.technicianId === targetTechId,
     ) || dispatch.data?.routes[0];
-  const allJobs = technicianAssignments(activeRoute?.stops || [], dispatch.data?.scheduled || []);
-  const jobs = allJobs.filter(job => disciplineFilter === "all" || (job.serviceType.startsWith("biomed_") ? "biomedical" : "dme_mobility") === disciplineFilter);
-  const allAssignedJobs = allDispatch.data?.scheduled || [];
+
+  // Daily assigned jobs: unify daily scheduled jobs with any daily matching assigned jobs from available
+  const dailyScheduled = dispatch.data?.scheduled || [];
+  const dailyFromAvailable = (dispatch.data?.available || [])
+    .filter(
+      (j: any) =>
+        j.technicianId &&
+        (!targetTechId || j.technicianId === targetTechId) &&
+        ((j.scheduledStart && j.scheduledStart.slice(0, 10) === serviceDate) ||
+          (!j.scheduledStart && serviceDate === today())),
+    )
+    .map((j: any) => ({
+      ...j,
+      assignmentId: j.assignmentId || `spinlife-wa-${j.id}`,
+      assignmentRole: j.assignmentRole || "primary",
+      assignmentStatus: j.assignmentStatus || "assigned",
+      stopOrder: j.stopOrder || 1,
+      stopStatus: j.stopStatus || "planned",
+    }));
+
+  const seenDailyIds = new Set(dailyScheduled.map((j) => j.assignmentId || j.id));
+  const unifiedDailyScheduled = [
+    ...dailyScheduled,
+    ...dailyFromAvailable.filter((j: any) => !seenDailyIds.has(j.assignmentId || j.id)),
+  ];
+
+  const allJobs = technicianAssignments(activeRoute?.stops || [], unifiedDailyScheduled);
+  const jobs = allJobs.filter(
+    (job) =>
+      disciplineFilter === "all" ||
+      (job.serviceType.startsWith("biomed_") ? "biomedical" : "dme_mobility") === disciplineFilter,
+  );
+
+  // All Work: unify all scheduled jobs and assigned available jobs using unified helper
+  const unifiedAssigned = unifyTechnicianAssignedJobs(
+    (allDispatch.data?.scheduled || []) as any,
+    (allDispatch.data?.available || []) as any,
+    targetTechId,
+  );
+  const allAssignedJobs = unifiedAssigned as unknown as ScheduledJob[];
+
   const completedJobsCount = allAssignedJobs.filter(j => j.status === "completed" || j.assignmentStatus === "submitted" || j.status === "technician_submitted").length;
   const activeJobsCount = allAssignedJobs.length - completedJobsCount;
   const todayJobsCount = allAssignedJobs.filter(j => getJobDateCategory(j.scheduledStart) === "today").length;
@@ -785,6 +832,7 @@ export function TechnicianFieldPortal({
                     ["completed", `✓ Completed (${completedJobsCount})`],
                     ["active", `To-Do (${activeJobsCount})`],
                     ["today", `Today (${todayJobsCount})`],
+                    ["upcoming", `Upcoming (${upcomingJobsCount})`],
                     ["past", `Prior (${pastJobsCount})`],
                     ["unscheduled", `Unscheduled (${unscheduledJobsCount})`],
                   ].map(([value, label]) => (

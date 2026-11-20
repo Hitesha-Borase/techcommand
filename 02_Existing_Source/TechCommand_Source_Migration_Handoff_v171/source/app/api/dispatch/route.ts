@@ -120,10 +120,11 @@ function fullAddress(row: Record<string, unknown>) {
     .join(", ");
 }
 
-async function loadDispatch(date: string, identity: PortalIdentity, allWork = false) {
-  const technicianOnly = identity.role === "technician";
-  const technicianId = technicianOnly ? identity.technicianId : null;
-  if (technicianOnly && !technicianId)
+async function loadDispatch(date: string, identity: PortalIdentity, allWork = false, requestedTechnicianId?: string | null) {
+  const isTechRole = identity.role === "technician";
+  const technicianOnly = isTechRole || (Boolean(requestedTechnicianId) && adminRoles.includes(identity.role as (typeof adminRoles)[number]));
+  const technicianId = isTechRole ? identity.technicianId : (requestedTechnicianId || null);
+  if (isTechRole && !technicianId)
     throw new Error("This login is not linked to a technician profile.");
 
   const technicianSql = `SELECT t.service_disciplines_json AS serviceDisciplinesJson, t.id, t.technician_code AS technicianCode, t.status, t.phone,
@@ -353,75 +354,101 @@ async function loadDispatch(date: string, identity: PortalIdentity, allWork = fa
       const hasConfirmedTime = scheduledStartStr.includes("T") || scheduledStartStr.includes(":");
       const plannedDate = scheduledStartStr.length >= 10 ? scheduledStartStr.slice(0, 10) : "";
 
-      if (hasConfirmedTime && (allWork || plannedDate === date)) {
-        const scheduledEnd = new Date(new Date(scheduledStartStr).getTime() + 60 * 60000).toISOString();
-        scheduled.push({
-          id: String(row.id),
-          externalId: String(row.externalId || "SpinLife Order"),
-          externalSource: "SpinLife",
-          serviceType,
-          summary,
-          priority: "normal",
-          status: "assigned",
-          requiredTechnicianCount: 1,
-          grossMarginBasisPoints: 4000,
-          scheduledStart: scheduledStartStr,
-          scheduledEnd,
-          accountName: "SpinLife",
-          locationId: String(row.id),
-          locationName: customerName,
-          address: serviceAddress,
-          latitude: null,
-          longitude: null,
-          assignmentId: `spinlife-wa-${row.id}`,
-          technicianId: String(row.technicianId || ""),
-          technicianName: String(row.technicianName || "Demo Technician"),
-          technicianCode: String(row.technicianCode || "TECH"),
-          assignmentRole: "primary",
-          assignmentStatus: "assigned",
-          routeId: routes.find(r => r.technicianId === row.technicianId)?.id || null,
-          stopId: null,
-          stopOrder: 1,
-          plannedArrival: scheduledStartStr,
-          plannedDeparture: scheduledEnd,
-          legMiles: null,
-          driveMinutes: null,
-          travelSource: "admin_verified",
-          stopStatus: "planned",
-        } as any);
+      const scheduledEnd = hasConfirmedTime
+        ? new Date(new Date(scheduledStartStr).getTime() + 60 * 60000).toISOString()
+        : null;
+
+      const isCompleted = row.status === "completed" || row.status === "submitted" || row.status === "technician_submitted";
+      const isInProgress = row.status === "in_progress" || row.status === "service_in_progress";
+
+      const spinlifeScheduledItem = {
+        id: String(row.id),
+        externalId: String(row.externalId || "SpinLife Order"),
+        externalSource: "SpinLife",
+        serviceType,
+        summary,
+        priority: "normal",
+        status: isCompleted ? "completed" : isInProgress ? "in_progress" : "assigned",
+        requiredTechnicianCount: 1,
+        grossMarginBasisPoints: 4000,
+        scheduledStart: scheduledStartStr || null,
+        scheduledEnd,
+        accountName: "SpinLife",
+        locationId: String(row.id),
+        locationName: customerName,
+        address: serviceAddress,
+        latitude: null,
+        longitude: null,
+        assignmentId: `spinlife-wa-${row.id}`,
+        technicianId: String(row.technicianId || ""),
+        technicianName: String(row.technicianName || "Demo Technician"),
+        technicianCode: String(row.technicianCode || "TECH"),
+        assignmentRole: "primary",
+        assignmentStatus: isCompleted ? "submitted" : isInProgress ? "service_in_progress" : "assigned",
+        routeId: routes.find((r) => r.technicianId === row.technicianId)?.id || null,
+        stopId: null,
+        stopOrder: 1,
+        plannedArrival: scheduledStartStr || null,
+        plannedDeparture: scheduledEnd,
+        legMiles: null,
+        driveMinutes: null,
+        travelSource: "admin_verified",
+        stopStatus: isCompleted ? "completed" : isInProgress ? "in_progress" : "planned",
+        technicianPayCents: row.technicianPayCents ? Number(row.technicianPayCents) : null,
+        isSpinLife: true,
+      };
+
+      if (technicianOnly) {
+        // When queried for a specific technician's field portal:
+        // All active work assigned to this technician belongs in scheduled!
+        if (allWork) {
+          scheduled.push(spinlifeScheduledItem as any);
+        } else {
+          // Daily view: include if planned for this date, or if unscheduled and includeUnscheduledAssignments is true
+          if (plannedDate === date || (!plannedDate && includeUnscheduledAssignments)) {
+            scheduled.push(spinlifeScheduledItem as any);
+          }
+        }
       } else {
-        // Available for this service date or selectable in the appointment picker
-        if (allWork || plannedDate === date || !plannedDate || plannedDate === defaultDate()) {
-          const tech = technicians.find(t => String(t.id) === String(row.technicianId));
-          available.push({
-            id: String(row.id),
-            externalId: String(row.externalId || "SpinLife Order"),
-            externalSource: "SpinLife",
-            serviceType,
-            summary,
-            priority: "normal",
-            status: "assigned",
-            requiredTechnicianCount: 1,
-            assignedCount: row.technicianId ? 1 : 0,
-            grossMarginBasisPoints: 4000,
-            scheduledStart: scheduledStartStr || null,
-            scheduledEnd: null,
-            accountName: "SpinLife",
-            locationId: String(row.id),
-            locationName: customerName,
-            address: serviceAddress,
-            latitude: null,
-            longitude: null,
-            nearestTechnician: tech ? {
-              technicianId: String(tech.id),
-              technicianName: String(tech.name),
-              miles: 0,
-            } : null,
-            technicianId: row.technicianId ? String(row.technicianId) : null,
-            technicianName: row.technicianName ? String(row.technicianName) : null,
-            technicianPayCents: row.technicianPayCents ? Number(row.technicianPayCents) : null,
-            isSpinLife: true,
-          } as any);
+        // Admin dispatch view
+        if (hasConfirmedTime && (allWork || plannedDate === date)) {
+          scheduled.push(spinlifeScheduledItem as any);
+        } else {
+          // Available for this service date or selectable in the appointment picker
+          if (allWork || plannedDate === date || !plannedDate || plannedDate === defaultDate()) {
+            const tech = technicians.find((t) => String(t.id) === String(row.technicianId));
+            available.push({
+              id: String(row.id),
+              externalId: String(row.externalId || "SpinLife Order"),
+              externalSource: "SpinLife",
+              serviceType,
+              summary,
+              priority: "normal",
+              status: "assigned",
+              requiredTechnicianCount: 1,
+              assignedCount: row.technicianId ? 1 : 0,
+              grossMarginBasisPoints: 4000,
+              scheduledStart: scheduledStartStr || null,
+              scheduledEnd: null,
+              accountName: "SpinLife",
+              locationId: String(row.id),
+              locationName: customerName,
+              address: serviceAddress,
+              latitude: null,
+              longitude: null,
+              nearestTechnician: tech
+                ? {
+                    technicianId: String(tech.id),
+                    technicianName: String(tech.name),
+                    miles: 0,
+                  }
+                : null,
+              technicianId: row.technicianId ? String(row.technicianId) : null,
+              technicianName: row.technicianName ? String(row.technicianName) : null,
+              technicianPayCents: row.technicianPayCents ? Number(row.technicianPayCents) : null,
+              isSpinLife: true,
+            } as any);
+          }
         }
       }
     }
@@ -467,7 +494,8 @@ export async function GET(request: Request) {
         { error: "Use a valid service date." },
         { status: 400 },
       );
-    return Response.json(await loadDispatch(date, identity, allWork));
+    const requestedTechnicianId = url.searchParams.get("technicianId");
+    return Response.json(await loadDispatch(date, identity, allWork, requestedTechnicianId));
   } catch (error) {
     return apiError(error);
   }
@@ -492,7 +520,7 @@ export async function PATCH(request: Request) {
           { error: "This login is not linked to a technician profile." },
           { status: 403 },
         );
-      const assignment = await env.DB.prepare(
+      let assignment = await env.DB.prepare(
         `SELECT wa.id, wa.technician_id AS technicianId, wa.status AS assignmentStatus,
                 w.status AS workStatus
            FROM work_order_assignments wa JOIN work_orders w ON w.id = wa.work_order_id
@@ -508,11 +536,40 @@ export async function PATCH(request: Request) {
           scopedTechnicianId,
         )
         .first<{ id: string; technicianId: string; assignmentStatus: string; workStatus: string }>();
-      if (!assignment)
+
+      if (!assignment) {
+        const spinlife = await env.DB.prepare(
+          `SELECT i.id, i.status AS workStatus, v.technician_id AS technicianId
+             FROM work_order_intakes i
+             JOIN spinlife_visits v ON v.intake_id = i.id
+            WHERE i.id = ? AND i.organization_id = ?
+              AND (? IS NULL OR v.technician_id = ?)
+            LIMIT 1`,
+        ).bind(input.workOrderId, TECHFLEX_ORG_ID, scopedTechnicianId, scopedTechnicianId)
+         .first<{ id: string; workStatus: string; technicianId: string }>();
+
+        if (spinlife) {
+          await env.DB.batch([
+            env.DB.prepare(
+              `UPDATE work_order_intakes SET status = CASE WHEN ? = 'service_in_progress' THEN 'in_progress' ELSE status END,
+                 updated_at = CURRENT_TIMESTAMP WHERE id = ? AND organization_id = ?`,
+            ).bind(input.state, input.workOrderId, TECHFLEX_ORG_ID),
+            env.DB.prepare(
+              `INSERT INTO audit_logs (id, organization_id, actor_user_id, action, entity_type, entity_id, after_json)
+               VALUES (?, ?, ?, 'dispatch.spinlife_progress', 'work_order_intake', ?, ?)`,
+            ).bind(crypto.randomUUID(), TECHFLEX_ORG_ID, identity.userId, input.workOrderId, JSON.stringify({ state: input.state, technicianId: spinlife.technicianId })),
+          ]);
+          return Response.json({
+            workOrderId: input.workOrderId,
+            state: input.state,
+          });
+        }
+
         return Response.json(
           { error: "This work order is not assigned to this technician." },
           { status: 403 },
         );
+      }
       if (!canRecordDispatchProgress(assignment.workStatus))
         return Response.json({ error: dispatchProgressLockedMessage }, { status: 409 });
       const assignmentStatus =
