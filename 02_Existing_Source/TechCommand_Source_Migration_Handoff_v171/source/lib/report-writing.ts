@@ -45,3 +45,68 @@ export function validateWritingSources(review: WritingReview, facts: RecordedFac
     }
   }
 }
+
+/**
+ * Ticket F10 (P1): Reconciles draft report wording to ensure strict separation between
+ * customer request (intake complaint) and on-site technician work / observations.
+ *
+ * Acceptance Rules:
+ * 1. Generated findings cite ONLY the visit (field-notes or completed diagnostic answers), never the intake complaint.
+ * 2. An untouched work-performed field stays empty (sources: []) when no parts or repair actions were recorded.
+ * 3. Complaint is reported history, never proof of work performed or on-site finding.
+ */
+export function reconcileWritingReview(
+  review: WritingReview,
+  report: WritingReport,
+  evidence: RecordedFact[]
+): WritingReview {
+  const available = new Set(evidence.map((f) => f.id));
+  const visitFacts = evidence.filter((f) => f.id === "field-notes" || f.id.startsWith("answer-"));
+  const hasPerformedEvidence = evidence.some(
+    (f) =>
+      f.id.startsWith("part-") ||
+      (f.id.startsWith("answer-") &&
+        /repair|replace|install|adjust|clean|align|calibrat/i.test(f.text)) ||
+      (f.id === "workPerformed" && f.text.trim().length > 0),
+  );
+
+  // Rule 1: suggestedWorkPerformed must stay empty if no actual work/parts/actions were recorded on site.
+  // It must NEVER fall back to customer complaint or intake instructions.
+  if (!hasPerformedEvidence) {
+    review.suggestedWorkPerformed = "";
+    review.sources.suggestedWorkPerformed = [];
+  } else {
+    // Strip any accidental complaint citation from work performed
+    review.sources.suggestedWorkPerformed = review.sources.suggestedWorkPerformed.filter(
+      (id) => id !== "complaint" && available.has(id),
+    );
+    if (review.sources.suggestedWorkPerformed.length === 0) {
+      review.suggestedWorkPerformed = "";
+    }
+  }
+
+  // Rule 2: suggestedFindings must cite ONLY the visit (field-notes, answers), NEVER the intake complaint.
+  if (visitFacts.length > 0) {
+    review.sources.suggestedFindings = review.sources.suggestedFindings.filter(
+      (id) => id !== "complaint" && available.has(id),
+    );
+    if (review.sources.suggestedFindings.length === 0) {
+      review.sources.suggestedFindings = [visitFacts[0].id];
+    }
+    // If findings text is empty OR repeated the complaint verbatim instead of visit observations, populate with visit notes
+    const complaintClean = (report.customerComplaint || "").trim().toLowerCase();
+    const isComplaintRepeat = complaintClean && review.suggestedFindings.trim().toLowerCase() === complaintClean;
+    if (!review.suggestedFindings.trim() || isComplaintRepeat) {
+      review.suggestedFindings = visitFacts.map((f) => f.text).join(". ");
+    }
+  } else {
+    // No visit observations recorded
+    review.suggestedFindings = "";
+    review.sources.suggestedFindings = [];
+  }
+
+  validateWritingSources(review, evidence);
+
+  return review;
+}
+
