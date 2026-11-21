@@ -25,10 +25,17 @@ export type WritingReview = z.infer<typeof writingReviewSchema>;
 export type RecordedFact = { id: string; label: string; text: string };
 
 export function recordedReportFacts(report: WritingReport): RecordedFact[] {
+  const complaintClean = (report.customerComplaint || "").trim().toLowerCase();
   return [
     {id: "field-notes", label: "Original technician notes (only recorded observations are evidence)", text: report.fieldNotes || ""},
     {id: "complaint", label: "Reported complaint (not a confirmed finding)", text: report.customerComplaint},
-    ...wordingFields.map(([, field, label]) => ({id: field, label, text: report[field]})),
+    ...wordingFields.map(([, field, label]) => {
+      const val = (report[field] || "").trim();
+      if (field === "workPerformed" && complaintClean && val.toLowerCase() === complaintClean) {
+        return {id: field, label, text: ""};
+      }
+      return {id: field, label, text: val};
+    }),
     ...report.diagnosticSteps.flatMap((step, i) => step.complete && step.result.trim() ? [{id: `answer-${i + 1}`, label: `Answer ${i + 1}: ${step.label}`, text: step.result}] : []),
     ...report.partsUsed.map((part, i) => ({id: `part-${i + 1}`, label: `Recorded part ${i + 1}`, text: `${part.description} | Part number: ${part.partNumber || "not recorded"} | Quantity: ${part.quantity}`})),
   ].filter(item => item.text.trim());
@@ -62,12 +69,15 @@ export function reconcileWritingReview(
 ): WritingReview {
   const available = new Set(evidence.map((f) => f.id));
   const visitFacts = evidence.filter((f) => f.id === "field-notes" || f.id.startsWith("answer-"));
+  const complaintClean = (report.customerComplaint || "").trim().toLowerCase();
   const hasPerformedEvidence = evidence.some(
     (f) =>
       f.id.startsWith("part-") ||
       (f.id.startsWith("answer-") &&
         /repair|replace|install|adjust|clean|align|calibrat/i.test(f.text)) ||
-      (f.id === "workPerformed" && f.text.trim().length > 0),
+      (f.id === "workPerformed" &&
+        f.text.trim().length > 0 &&
+        (!complaintClean || f.text.trim().toLowerCase() !== complaintClean)),
   );
 
   // Rule 1: suggestedWorkPerformed must stay empty if no actual work/parts/actions were recorded on site.
@@ -80,8 +90,12 @@ export function reconcileWritingReview(
     review.sources.suggestedWorkPerformed = review.sources.suggestedWorkPerformed.filter(
       (id) => id !== "complaint" && available.has(id),
     );
-    if (review.sources.suggestedWorkPerformed.length === 0) {
+    if (
+      review.sources.suggestedWorkPerformed.length === 0 ||
+      (complaintClean && review.suggestedWorkPerformed.trim().toLowerCase() === complaintClean)
+    ) {
       review.suggestedWorkPerformed = "";
+      review.sources.suggestedWorkPerformed = [];
     }
   }
 

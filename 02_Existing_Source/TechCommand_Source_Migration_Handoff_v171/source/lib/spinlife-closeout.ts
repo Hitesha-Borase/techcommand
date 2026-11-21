@@ -1,9 +1,9 @@
 import {z} from "zod";
-import {simpleChecks,spinlifePartNotes,type SpinLifeJob} from "./spinlife-simple";
-import {partnerCheckProblems,resolvedCheck} from "./spinlife-document-policy";
-import {procedureProblems,procedureText} from "./asset-ai-procedure";
-import {spinlifeReviewedWording} from "./spinlife-writing";
-import {evidenceRequirements,evidenceCounts,missingEvidence} from "./completion-policy";
+import {simpleChecks,spinlifePartNotes,type SpinLifeJob} from "./spinlife-simple.ts";
+import {partnerCheckProblems,resolvedCheck} from "./spinlife-document-policy.ts";
+import {procedureProblems,procedureText} from "./asset-ai-procedure.ts";
+import {spinlifeReviewedWording} from "./spinlife-writing.ts";
+import {evidenceRequirements,evidenceCounts,missingEvidence} from "./completion-policy.ts";
 
 export const closeoutDataSchema=z.object({
  accountId:z.string().max(180).default(""),locationId:z.string().max(180).default(""),
@@ -30,7 +30,7 @@ export function spinlifeCloseoutReport(job:SpinLifeJob){
  const v=job.visit,d=job.data,wording=spinlifeReviewedWording(job),checks=simpleChecks(d,v);
  const diagnosticSteps=checks.filter(c=>c.complete&&c.key!=="sl_attestation").map(c=>({label:c.label,complete:true,result:c.result?.trim()||"Recorded by the technician as performed; no additional result entered."}));
  return {customerComplaint:d.customerComplaint||d.summary,equipmentType:d.equipmentType,manufacturer:d.manufacturer,model:d.model,serialNumber:d.serialNumber,
-  findings:wording?.findings??v.findings,workPerformed:wording?.workPerformed??v.narrative,testResults:wording?.testResults??v.testResults,
+  fieldNotes:v.narrative,findings:wording?.findings??(v.findings||v.narrative),workPerformed:wording?.workPerformed??"",testResults:wording?.testResults??v.testResults,
   recommendation:[wording?.recommendation??v.recommendation,spinlifePartNotes(v),v.previousGuidance,procedureText(v.manufacturerGuide,v.manufacturerAnswers)].filter(Boolean).join("\n\n"),
   assetDisposition:v.disposition==="out_of_service"?"quarantined":v.disposition==="incomplete"?"needs_review":v.disposition,
   checklist:checks.map(c=>({key:c.key!,label:c.label,complete:c.complete,notApplicable:!!c.notApplicable,reason:c.reason,result:c.result})),diagnosticSteps,partsUsed:(v.parts||[]).filter(p=>p.state==="installed").map(p=>({description:p.description,partNumber:p.partNumber,quantity:p.quantity})),

@@ -40,7 +40,7 @@ export async function POST(request:Request) {
     }
     const {data,visit:originalVisit}=job;
     const wording=spinlifeReviewedWording(job);
-    const visit={...originalVisit,findings:wording?.findings??originalVisit.findings,narrative:wording?.workPerformed??originalVisit.narrative,testResults:wording?.testResults??originalVisit.testResults,recommendation:[wording?.recommendation??originalVisit.recommendation,spinlifePartNotes(originalVisit),originalVisit.previousGuidance,originalVisit.manufacturerGuide?procedureText(originalVisit.manufacturerGuide,originalVisit.manufacturerAnswers):""].filter(Boolean).join("\n\n")};
+    const visit={...originalVisit,findings:wording?.findings??(originalVisit.findings||originalVisit.narrative),narrative:wording?.workPerformed??"",testResults:wording?.testResults??originalVisit.testResults,recommendation:[wording?.recommendation??originalVisit.recommendation,spinlifePartNotes(originalVisit),originalVisit.previousGuidance,originalVisit.manufacturerGuide?procedureText(originalVisit.manufacturerGuide,originalVisit.manufacturerAnswers):""].filter(Boolean).join("\n\n")};
     const equipment = [data.equipmentType, data.manufacturer, data.model, data.summary].filter(Boolean).join(" ");
     const checks=simpleChecks(data,visit);
     const missingChecks=partnerCheckProblems(checks,data.serviceType,equipment,data.dmeFamilyId);
@@ -57,7 +57,8 @@ export async function POST(request:Request) {
     const technicianName=job.technicianName || "Technician not assigned";
     const common={workOrderNumber:reference,customerName:missing(data.customerName),serviceType:data.serviceType,
       serviceDate,manufacturer:missing(data.manufacturer),model:missing(data.model),serialNumber:missing(data.serialNumber),
-      customerComplaint:missing(data.customerComplaint || data.summary),findings:missing(visit.findings),workPerformed:missing(visit.narrative),
+      customerComplaint:missing(data.customerComplaint || data.summary),findings:missing(visit.findings),workPerformed:wording?.workPerformed || "",
+      fieldNotes:originalVisit.narrative,
       testResults:missing(visit.testResults),recommendation:missing(visit.recommendation),assetDisposition:visit.disposition,
       checklist:checks,customerSignatureName:missing(visit.customerSignatureName),technicianName,signature:signature || null};
     const partner=await generateSpinLifeWorkOrderPdf({...common,customerPhone:missing(data.customerPhone),address:missing(data.serviceAddress),

@@ -5,6 +5,8 @@ import {
   reconcileWritingReview,
   wordingFields,
 } from "../lib/report-writing.ts";
+import { spinlifeWritingReport } from "../lib/spinlife-writing.ts";
+import { spinlifeCloseoutReport } from "../lib/spinlife-closeout.ts";
 
 /**
  * Ticket F10 (P1): Draft from answers repeats the request as work performed.
@@ -258,4 +260,73 @@ test("Ticket F10 Test 4: Declining a suggestion preserves existing report fields
     originalReport,
     "Declining suggestions must leave every saved field unchanged",
   );
+});
+
+test("Ticket F10 Test 5: SpinLife order 00181126001N-3 separates intake request, field notes, and untouched work performed", () => {
+  const job = {
+    id: "spinlife-intake-00181126001N-3",
+    version: 1,
+    status: "spinlife_in_progress",
+    data: {
+      externalId: "00181126001N-3",
+      customerComplaint: "Evaluate intermittent lift. Keep unit out of service pending replacement hand control.",
+      summary: "Evaluate intermittent lift. Keep unit out of service pending replacement hand control.",
+      equipmentType: "Lift Chair",
+      manufacturer: "Golden Technologies",
+      model: "PR-TEST-42",
+      serialNumber: "000719QA",
+      serviceType: "evaluation",
+      serviceAddress: "101 Example Way, Columbus, OH 43215",
+      customerName: "Riley Audit Fictional",
+      customerPhone: "(614) 555-0146",
+      dmeFamilyId: "lift_chair",
+      workOrderDate: "2026-11-18",
+      rawText: "",
+      extraChecks: "",
+    },
+    visit: {
+      parts: [],
+      reportWording: null,
+      previousGuidance: "",
+      manufacturerGuide: null,
+      manufacturerAnswers: [],
+      narrative: "SIMULATED EVALUATION QA18-A. Intermittent lift reported. Unit remains out of service pending a replacement hand control. No parts were fitted and no electrical measurement was taken. QA18-B revision: replacement on hold. No harness damage observed or claimed.",
+      findings: "",
+      testResults: "",
+      recommendation: "",
+      disposition: "out_of_service",
+      customerSignatureName: "",
+      signatureAttachmentId: "",
+      customerSignedAt: "",
+      technicianAttestedAt: "",
+      photoCaptions: {},
+      checks: {
+        sl_installed: {
+          state: "not_done",
+          note: "QA-18 EXCEPTION: No part installed. Hand control unavailable. Unit remains out of service.",
+        },
+      },
+    },
+  };
+
+  const report = spinlifeWritingReport(job);
+
+  // 1. Check separation of fields in writing report
+  assert.equal(report.customerComplaint, "Evaluate intermittent lift. Keep unit out of service pending replacement hand control.");
+  assert.equal(report.fieldNotes, "SIMULATED EVALUATION QA18-A. Intermittent lift reported. Unit remains out of service pending a replacement hand control. No parts were fitted and no electrical measurement was taken. QA18-B revision: replacement on hold. No harness damage observed or claimed.");
+  assert.equal(report.workPerformed, "", "Untouched workPerformed must start empty");
+
+  // 2. Evidence extraction must put notes in field-notes, not in workPerformed
+  const evidence = recordedReportFacts(report);
+  const workFact = evidence.find(f => f.id === "workPerformed");
+  assert.equal(workFact, undefined, "There must be no workPerformed fact when no work was done");
+  const fieldNotesFact = evidence.find(f => f.id === "field-notes");
+  assert.ok(fieldNotesFact, "Technician field notes must be captured as field-notes fact");
+  assert.equal(fieldNotesFact.text.includes("No parts were fitted"), true);
+
+  // 3. Closeout report must keep workPerformed empty, not fall back to narrative or complaint
+  const closeout = spinlifeCloseoutReport(job);
+  assert.equal(closeout.customerComplaint, report.customerComplaint);
+  assert.equal(closeout.workPerformed, "", "Untouched closeout workPerformed must stay empty");
+  assert.equal(closeout.fieldNotes, report.fieldNotes);
 });
