@@ -41,8 +41,9 @@ export async function POST(request:Request) {
     const {data,visit:originalVisit}=job;
     const wording=spinlifeReviewedWording(job);
     const visit={...originalVisit,findings:wording?.findings??originalVisit.findings,narrative:wording?.workPerformed??originalVisit.narrative,testResults:wording?.testResults??originalVisit.testResults,recommendation:[wording?.recommendation??originalVisit.recommendation,spinlifePartNotes(originalVisit),originalVisit.previousGuidance,originalVisit.manufacturerGuide?procedureText(originalVisit.manufacturerGuide,originalVisit.manufacturerAnswers):""].filter(Boolean).join("\n\n")};
+    const equipment = [data.equipmentType, data.manufacturer, data.model, data.summary].filter(Boolean).join(" ");
     const checks=simpleChecks(data,visit);
-    const missingChecks=partnerCheckProblems(checks,data.serviceType);
+    const missingChecks=partnerCheckProblems(checks,data.serviceType,equipment,data.dmeFamilyId);
     const missingProcedure=procedureProblems(visit.manufacturerGuide,visit.manufacturerAnswers);
     const needsReview=!data.serviceType||!data.externalId||!data.customerName||!data.serialNumber||!visit.technicianAttestedAt||missingChecks.length>0||missingProcedure.length>0||visit.parts.some(p=>p.state==="installed"&&!p.description.trim());
     const signature=loaded.find(f=>f.id===visit.signatureAttachmentId);

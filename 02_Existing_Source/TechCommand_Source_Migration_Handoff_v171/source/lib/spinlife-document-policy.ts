@@ -4,6 +4,8 @@ export type FieldCheck = { key?: string; label: string; complete: boolean; notAp
 export const isSpinLife = (account: string) => /spin\s*life/i.test(account);
 export const isDelivery = (service: string) => service.startsWith('wgd') || service === 'bed_delivery';
 export const isPm = (service: string) => service === 'preventive_maintenance' || service === 'pm_service';
+export const isLiftChair = (equipment: string, dmeFamilyId?: string) =>
+  dmeFamilyId === "dme:lift_chair" || /lift\s*(chair|recliner)|power\s*recliner|reclining\s*chair/i.test(equipment);
 export function packetStatus(disposition: string) {
   if (['passed','returned_to_service','delivery_completed'].includes(disposition)) return 'COMPLETED';
   if (disposition === 'parts_required') return 'NEEDS PART';
@@ -38,6 +40,20 @@ export const spinlifeDeliveryChecks = [
   ['sl_manual','Owner’s manual provided'], ['sl_packaging','Packaging removed'],
   ['sl_accessories','Accessories delivered and installed listed in work performed'], ['sl_serial','Serial number verified'],
 ] as const;
+export const spinlifeLiftChairChecks = [
+  ['sl_motor', 'Lift motor & actuator operation'],
+  ['sl_pendant', 'Check hand control / pendant'],
+  ['sl_scissor_mechanism', 'Check scissor mechanism & linkage'],
+  ['sl_power_supply', 'Power supply, transformer & AC cord'],
+  ['sl_battery_backup', 'Emergency battery backup verified'],
+  ['sl_frame', 'Check frame, base & welds'],
+  ['sl_hardware', 'Check loose hardware & mounting pins'],
+  ['sl_connections', 'Check wiring harness & pin connectors'],
+  ['sl_upholstery_worn', 'Upholstery & fabric condition (record yes/no)'],
+  ['sl_installed', 'Installed parts and tested (or not applicable)'],
+  ['sl_photo', 'Photos/video documented'],
+] as const;
+
 export const spinlifeRepairChecks = [
   ['sl_installed','Installed parts and tested'], ['sl_battery_rest','Battery reading at rest (record value and unit)'],
   ['sl_battery_load','Battery reading under load (record value and unit)'], ['sl_codes','Error codes'],
@@ -59,9 +75,11 @@ export const spinlifePmChecks = [
   ['sl_pm_wiring', 'Wiring harness, connectors & cable routing secured'],
   ['sl_pm_drive_test', 'Operational safety drive test completed'],
 ] as const;
-export function partnerChecks(service: string): FieldCheck[] {
+export function partnerChecks(service: string, equipment?: string, dmeFamilyId?: string): FieldCheck[] {
   const baseChecks = isDelivery(service)
     ? spinlifeDeliveryChecks
+    : isLiftChair(equipment || '', dmeFamilyId)
+    ? spinlifeLiftChairChecks
     : isPm(service)
     ? spinlifePmChecks
     : spinlifeRepairChecks;
@@ -74,15 +92,15 @@ export function partnerChecks(service: string): FieldCheck[] {
 export function resolvedCheck(item: FieldCheck) {
   return item.notApplicable ? !item.complete && Boolean((item.reason || '').trim().length >= 5) : item.complete;
 }
-export function mergePartnerChecks(saved: FieldCheck[], service: string) {
-  const required = partnerChecks(service);
+export function mergePartnerChecks(saved: FieldCheck[], service: string, equipment?: string, dmeFamilyId?: string) {
+  const required = partnerChecks(service, equipment, dmeFamilyId);
   return [...saved.filter(x => !x.key?.startsWith('sl_')), ...required.map(x => {
     const previous = saved.find(s => s.key === x.key);
     return previous ? {...previous, key:x.key, label:x.label} : x;
   })];
 }
-export function partnerCheckProblems(checks: FieldCheck[], service: string) {
-  return partnerChecks(service).filter(required => {
+export function partnerCheckProblems(checks: FieldCheck[], service: string, equipment?: string, dmeFamilyId?: string) {
+  return partnerChecks(service, equipment, dmeFamilyId).filter(required => {
     const item = checks.find(x => x.key === required.key);
     if (!item || !resolvedCheck(item)) return true;
     if (['sl_attestation','sl_serial','sl_photo'].includes(required.key!)) return item.notApplicable || !item.complete;

@@ -67,7 +67,8 @@ export function spinlifeCloseoutProblems(job:SpinLifeJob,files:CloseoutFile[]){
  if(r.partsUsed.some(p=>!p.description.trim()))problems.push("Description of each installed part");
  if(!r.partsUsed.length&&r.checklist.some(c=>c.key==="sl_installed"&&c.complete&&!c.notApplicable))problems.push("List the installed parts, or record why parts installation was not applicable");
  if(["parts_required","needs_resolution","needs_review","follow_up_required"].includes(r.assetDisposition)&&job.visit.recommendation.trim().length<10)problems.push("Follow-up recommendation and responsible party");
- problems.push(...partnerCheckProblems(r.checklist,job.data.serviceType),...procedureProblems(job.visit.manufacturerGuide,job.visit.manufacturerAnswers));
+ const equipment = [job.data.equipmentType, job.data.manufacturer, job.data.model, job.data.summary].filter(Boolean).join(" ");
+ problems.push(...partnerCheckProblems(r.checklist,job.data.serviceType,equipment,job.data.dmeFamilyId),...procedureProblems(job.visit.manufacturerGuide,job.visit.manufacturerAnswers));
  problems.push(...missingEvidence(evidenceRequirements(job.data.serviceType),evidenceCounts(files)).map(e=>e.label));
  return [...new Set(problems)];
 }

@@ -728,7 +728,11 @@ function reportView(report: ReportRecord | null, workOrder: WorkOrderRecord) {
     recommendation: report?.recommendation || "",
     assetDisposition: report?.assetDisposition || "needs_review",
     checklist: spinlifeWorkOrder(workOrder)
-      ? mergePartnerChecks(safeJson(report?.checklistJson, completionChecklist(workOrder.serviceType)), workOrder.serviceType)
+      ? mergePartnerChecks(
+          safeJson(report?.checklistJson, completionChecklist(workOrder.serviceType)),
+          workOrder.serviceType,
+          [report?.equipmentType, skills.equipmentType, workOrder.assetModel, workOrder.summary].filter(Boolean).join(" "),
+        )
       : safeJson(report?.checklistJson, completionChecklist(workOrder.serviceType)),
     diagnosticSteps: safeJson(
       report?.diagnosticStepsJson,
@@ -801,7 +805,8 @@ function submissionProblems(
   if (!cataloging && (!report.customerSignatureName || !report.signatureAttachmentId)) problems.push("Customer signature");
   // Guided questions are references. QA reviews the narrative and recorded evidence.
   if (spinlifeWorkOrder(workOrder)) {
-    problems.push(...partnerCheckProblems(report.checklist, workOrder.serviceType));
+    const eqContext = [report.equipmentType, workOrder.assetModel, workOrder.summary].filter(Boolean).join(" ");
+    problems.push(...partnerCheckProblems(report.checklist, workOrder.serviceType, eqContext));
     for (const photo of attachments.filter(x => !['client_work_order','signature','service_report','invoice','pay_stub'].includes(x.category) && x.contentType.startsWith('image/'))) {
       if (!report.documentDetails.photoCaptions[photo.id]?.trim()) problems.push(`Photo caption: ${photo.fileName}`);
     }

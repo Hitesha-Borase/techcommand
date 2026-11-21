@@ -1,7 +1,7 @@
-import {procedureDocument,procedureAnswer} from "./asset-ai-procedure";
+import {procedureDocument,procedureAnswer} from "./asset-ai-procedure.ts";
 import { z } from "zod";
-import { partnerChecks, type FieldCheck } from "./spinlife-document-policy";
-import {dmeFamilies} from "./academy-catalog";
+import { partnerChecks, type FieldCheck } from "./spinlife-document-policy.ts";
+import {dmeFamilies} from "./academy-catalog.ts";
 
 const text = (max = 5000) => z.string().max(max).default("");
 export const spinlifeDataSchema = z.object({
@@ -48,7 +48,8 @@ export function spinlifeData(value: Record<string, unknown>): SpinLifeData {
 }
 export function simpleChecks(data: SpinLifeData, visit: SpinLifeVisit): FieldCheck[] {
   // Unknown job type must not silently select repair instructions.
-  const standard = data.serviceType ? partnerChecks(data.serviceType) : [];
+  const equipment = [data.equipmentType, data.manufacturer, data.model, data.summary].filter(Boolean).join(" ");
+  const standard = data.serviceType ? partnerChecks(data.serviceType, equipment, data.dmeFamilyId) : [];
   const extras = [...new Set(data.extraChecks.split("\n").map(s => s.trim()).filter(Boolean))].slice(0,50);
   const allChecks = [...standard, ...extras.map(label => ({ key: `extra:${label}`, label, complete: false }))];
 
@@ -56,16 +57,18 @@ export function simpleChecks(data: SpinLifeData, visit: SpinLifeVisit): FieldChe
   const complaint = `${data.customerComplaint || ""} ${data.summary || ""}`.toLowerCase();
   if (complaint.trim() && !data.serviceType.startsWith("wgd") && data.serviceType !== "bed_delivery" && data.serviceType !== "preventive_maintenance") {
     const isBatteryIssue = /battery|power|charg|dead|voltage|won'?t turn on/.test(complaint);
-    const isMotorIssue = /motor|drive|stuck|slow|speed|brake|jerky|controller/.test(complaint);
-    const isJoystickIssue = /joystick|pendant|error code|code|flash/.test(complaint);
+    const isMotorIssue = /motor|drive|stuck|slow|speed|brake|jerky|controller|actuator|lift|raise|lower/.test(complaint);
+    const isJoystickIssue = /joystick|pendant|hand\s*control|switch|remote|error code|code|flash/.test(complaint);
+    const isScissorIssue = /scissor|linkage|mechanism|bind|stuck|hinge/.test(complaint);
     const isTireIssue = /tire|caster|wheel|flat|bearing|wobble/.test(complaint);
     const isSeatingIssue = /seat|recline|tilt|arm\s*pad|cushion|upholstery/.test(complaint);
 
     allChecks.sort((a, b) => {
       const score = (check: FieldCheck) => {
         const k = check.key || "";
-        if (isBatteryIssue && (k.includes("battery") || k.includes("charging"))) return -3;
+        if (isScissorIssue && (k.includes("scissor") || k.includes("frame") || k.includes("hardware"))) return -4;
         if (isJoystickIssue && (k.includes("joystick") || k.includes("codes") || k.includes("pendant"))) return -3;
+        if (isBatteryIssue && (k.includes("battery") || k.includes("charging") || k.includes("power"))) return -3;
         if (isMotorIssue && (k.includes("motor") || k.includes("ohms") || k.includes("joystick"))) return -2;
         if (isTireIssue && (k.includes("tires") || k.includes("frame") || k.includes("hardware"))) return -2;
         if (isSeatingIssue && (k.includes("arm") || k.includes("upholstery") || k.includes("comfort"))) return -2;

@@ -1,4 +1,4 @@
-import {simpleChecks,type SpinLifeJob} from "./spinlife-simple";
+import {simpleChecks,type SpinLifeJob} from "./spinlife-simple.ts";
 
 export function dmeFieldProgress(job:SpinLifeJob,allowAttestation=true){
  const checks=simpleChecks(job.data,job.visit).filter(c=>allowAttestation||c.key!=="sl_attestation");
