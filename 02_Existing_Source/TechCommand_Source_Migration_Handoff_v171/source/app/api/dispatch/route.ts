@@ -227,11 +227,18 @@ export async function loadDispatch(date: string, identity: PortalIdentity, allWo
          v.technician_id AS technicianId, v.scheduled_start AS scheduledStart,
          v.technician_pay_cents AS technicianPayCents, v.visit_json AS visitJson,
          COALESCE(u.display_name, t.technician_code) AS technicianName,
-         t.technician_code AS technicianCode
+         t.technician_code AS technicianCode,
+         r.id AS routeId,
+         rs.id AS stopId, rs.stop_order AS stopOrder, rs.planned_arrival AS plannedArrival,
+         rs.planned_departure AS plannedDeparture, rs.leg_miles AS legMiles,
+         rs.drive_minutes AS driveMinutes, rs.travel_source AS travelSource,
+         rs.status AS stopStatus
     FROM work_order_intakes i
     LEFT JOIN spinlife_visits v ON v.intake_id = i.id
     LEFT JOIN technicians t ON t.id = v.technician_id AND t.organization_id = i.organization_id
     LEFT JOIN users u ON u.id = t.user_id
+    LEFT JOIN routes r ON r.technician_id = v.technician_id AND r.route_date = substr(v.scheduled_start, 1, 10)
+    LEFT JOIN route_stops rs ON rs.route_id = r.id AND rs.work_order_id = i.id
    WHERE i.organization_id = ?
      AND lower(replace(i.source,' ','')) = 'spinlife'
      AND i.converted_work_order_id IS NULL
@@ -300,46 +307,6 @@ export async function loadDispatch(date: string, identity: PortalIdentity, allWo
   const scheduled = (
     scheduledResult.results as ScheduledRow[]
   ).map((row) => ({ ...row, address: fullAddress(row) }));
-  const routes = (routesResult.results as RouteRow[]).map((route) => {
-    const stops = scheduled.filter((stop) => stop.routeId === route.id);
-    const start = safeJson<Record<string, number | string | null>>(
-      route.startLocationJson,
-      {},
-    );
-    const planning = safeJson<{ startAddress?: string } | null>(route.planningJson, null);
-    if (planning?.startAddress && planning.startAddress !== start.address) {
-      start.address = planning.startAddress;
-      start.latitude = null;
-      start.longitude = null;
-    }
-    let previousLat =
-      typeof start.latitude === "number" ? start.latitude : null;
-    let previousLon =
-      typeof start.longitude === "number" ? start.longitude : null;
-    const enrichedStops = stops.map((stop) => {
-      const approximateLegMiles =
-        stop.legMiles === null
-          ? haversineMiles(
-              previousLat,
-              previousLon,
-              stop.latitude,
-              stop.longitude,
-            )
-          : null;
-      previousLat = stop.latitude;
-      previousLon = stop.longitude;
-      return { ...stop, approximateLegMiles };
-    });
-    return {
-      ...route,
-      startLocation: start,
-      planning: safeJson(route.planningJson, null),
-      stops: enrichedStops,
-      missingTravelCount: enrichedStops.filter(
-        (stop) => stop.legMiles === null || stop.driveMinutes === null,
-      ).length,
-    };
-  });
 
   // Dynamically include eligible SpinLife work orders in available or scheduled
   if (spinlifeResult?.results) {
@@ -360,6 +327,8 @@ export async function loadDispatch(date: string, identity: PortalIdentity, allWo
 
       const isCompleted = row.status === "completed" || row.status === "submitted" || row.status === "technician_submitted";
       const isInProgress = row.status === "in_progress" || row.status === "service_in_progress";
+
+      const matchedRoute = (routesResult.results as RouteRow[]).find((r) => r.technicianId === row.technicianId);
 
       const spinlifeScheduledItem = {
         id: String(row.id),
@@ -385,15 +354,15 @@ export async function loadDispatch(date: string, identity: PortalIdentity, allWo
         technicianCode: String(row.technicianCode || ""),
         assignmentRole: "primary",
         assignmentStatus: isCompleted ? "submitted" : isInProgress ? "service_in_progress" : "assigned",
-        routeId: routes.find((r) => r.technicianId === row.technicianId)?.id || null,
-        stopId: null,
-        stopOrder: 1,
-        plannedArrival: scheduledStartStr || null,
-        plannedDeparture: scheduledEnd,
-        legMiles: null,
-        driveMinutes: null,
-        travelSource: "admin_verified",
-        stopStatus: isCompleted ? "completed" : isInProgress ? "in_progress" : "planned",
+        routeId: row.routeId || matchedRoute?.id || null,
+        stopId: row.stopId ? String(row.stopId) : null,
+        stopOrder: row.stopOrder ? Number(row.stopOrder) : 1,
+        plannedArrival: row.plannedArrival || scheduledStartStr || null,
+        plannedDeparture: row.plannedDeparture || scheduledEnd,
+        legMiles: row.legMiles !== undefined && row.legMiles !== null ? Number(row.legMiles) : null,
+        driveMinutes: row.driveMinutes !== undefined && row.driveMinutes !== null ? Number(row.driveMinutes) : null,
+        travelSource: row.travelSource || (row.legMiles !== null && row.legMiles !== undefined ? "admin_verified" : "missing"),
+        stopStatus: isCompleted ? "completed" : isInProgress ? "in_progress" : (row.stopStatus || "planned"),
         technicianPayCents: row.technicianPayCents ? Number(row.technicianPayCents) : null,
         isSpinLife: true,
       };
@@ -453,6 +422,55 @@ export async function loadDispatch(date: string, identity: PortalIdentity, allWo
       }
     }
   }
+
+  const routes = (routesResult.results as RouteRow[]).map((route) => {
+    const stops = scheduled.filter((stop) => stop.routeId === route.id);
+    const start = safeJson<Record<string, number | string | null>>(
+      route.startLocationJson,
+      {},
+    );
+    const planning = safeJson<{ startAddress?: string } | null>(route.planningJson, null);
+    if (planning?.startAddress && planning.startAddress !== start.address) {
+      start.address = planning.startAddress;
+      start.latitude = null;
+      start.longitude = null;
+    }
+    let previousLat =
+      typeof start.latitude === "number" ? start.latitude : null;
+    let previousLon =
+      typeof start.longitude === "number" ? start.longitude : null;
+    const enrichedStops = stops.map((stop) => {
+      const approximateLegMiles =
+        stop.legMiles === null
+          ? haversineMiles(
+              previousLat,
+              previousLon,
+              stop.latitude,
+              stop.longitude,
+            )
+          : null;
+      previousLat = stop.latitude;
+      previousLon = stop.longitude;
+      return { ...stop, approximateLegMiles };
+    });
+    const calculatedMiles = stops.length > 0 && stops.every((s) => s.legMiles !== null && s.legMiles !== undefined)
+      ? Math.round(stops.reduce((sum, s) => sum + Number(s.legMiles || 0), 0) * 10) / 10
+      : null;
+    const calculatedMinutes = stops.length > 0 && stops.every((s) => s.driveMinutes !== null && s.driveMinutes !== undefined)
+      ? stops.reduce((sum, s) => sum + Number(s.driveMinutes || 0), 0)
+      : null;
+    return {
+      ...route,
+      startLocation: start,
+      planning: safeJson(route.planningJson, null),
+      stops: enrichedStops,
+      totalMiles: route.totalMiles ?? calculatedMiles,
+      totalDriveMinutes: route.totalDriveMinutes ?? calculatedMinutes,
+      missingTravelCount: enrichedStops.filter(
+        (stop) => stop.legMiles === null || stop.driveMinutes === null,
+      ).length,
+    };
+  });
 
   return {
     date,
@@ -686,14 +704,22 @@ export async function PATCH(request: Request) {
       if (spinlifeIntake) {
         const curStart = spinlifeIntake.scheduledStart || "";
         const plannedDate = curStart.length >= 10 ? curStart.slice(0, 10) : null;
+        const routeRows = await env.DB.prepare(
+          `SELECT DISTINCT route_id AS id FROM route_stops WHERE work_order_id = ?`,
+        ).bind(input.workOrderId).all<{ id: string }>();
+
         await env.DB.batch([
           env.DB.prepare(
             `UPDATE spinlife_visits SET scheduled_start = ?, record_version = record_version + 1 WHERE intake_id = ?`,
           ).bind(plannedDate, input.workOrderId),
           env.DB.prepare(
+            `DELETE FROM route_stops WHERE work_order_id = ?`,
+          ).bind(input.workOrderId),
+          env.DB.prepare(
             `INSERT INTO audit_logs (id, organization_id, actor_user_id, action, entity_type, entity_id, after_json)
              VALUES (?, ?, ?, 'dispatch.spinlife_unscheduled', 'work_order_intake', ?, ?)`,
           ).bind(crypto.randomUUID(), TECHFLEX_ORG_ID, identity.userId, input.workOrderId, JSON.stringify({ technicianId: input.technicianId })),
+          ...routeTotalStatements(routeRows.results.map((r) => r.id)),
         ]);
         return Response.json({
           workOrderId: input.workOrderId,
@@ -839,6 +865,79 @@ export async function PATCH(request: Request) {
         ));
       }
 
+      const intakeData = safeJson<Record<string, any>>(spinlifeIntake.dataJson, {});
+      const stopAddress = {
+        name: intakeData.customerName || "SpinLife Client",
+        address: intakeData.serviceAddress || "",
+        latitude: null,
+        longitude: null,
+      };
+
+      const existingStop = await env.DB.prepare(
+        "SELECT id FROM route_stops WHERE route_id = ? AND work_order_id = ?",
+      )
+        .bind(routeId, input.workOrderId)
+        .first<{ id: string }>();
+
+      const maxOrder = await env.DB.prepare(
+        "SELECT MAX(stop_order) AS maxOrder FROM route_stops WHERE route_id = ?",
+      )
+        .bind(routeId)
+        .first<{ maxOrder: number | null }>();
+
+      const priorRoutes = await env.DB.prepare(
+        "SELECT DISTINCT route_id AS id FROM route_stops WHERE work_order_id = ? AND route_id != ?",
+      )
+        .bind(input.workOrderId, routeId)
+        .all<{ id: string }>();
+
+      statements.push(env.DB.prepare(
+        `DELETE FROM route_stops WHERE work_order_id = ? AND route_id IN
+          (SELECT id FROM routes WHERE technician_id = ? AND organization_id = ? AND id != ?)`,
+      ).bind(input.workOrderId, input.technicianId, TECHFLEX_ORG_ID, routeId));
+
+      if (existingStop) {
+        statements.push(
+          env.DB.prepare(
+            `UPDATE route_stops SET address_json = ?, planned_arrival = ?, planned_departure = ?,
+               leg_miles = ?, drive_minutes = ?, travel_source = ?, status = 'planned', updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?`,
+          ).bind(
+            JSON.stringify(stopAddress),
+            input.scheduledStart,
+            scheduledEnd,
+            input.legMiles ?? null,
+            input.driveMinutes ?? null,
+            input.legMiles !== null && input.legMiles !== undefined
+              ? "admin_verified"
+              : "missing",
+            existingStop.id,
+          ),
+        );
+      } else {
+        statements.push(
+          env.DB.prepare(
+            `INSERT INTO route_stops
+              (id, route_id, work_order_id, stop_order, stop_type, address_json,
+               planned_arrival, planned_departure, leg_miles, drive_minutes, travel_source, status)
+             VALUES (?, ?, ?, ?, 'service', ?, ?, ?, ?, ?, ?, 'planned')`,
+          ).bind(
+            crypto.randomUUID(),
+            routeId,
+            input.workOrderId,
+            Number(maxOrder?.maxOrder || 0) + 1,
+            JSON.stringify(stopAddress),
+            input.scheduledStart,
+            scheduledEnd,
+            input.legMiles ?? null,
+            input.driveMinutes ?? null,
+            input.legMiles !== null && input.legMiles !== undefined
+              ? "admin_verified"
+              : "missing",
+          ),
+        );
+      }
+
       statements.push(
         env.DB.prepare(
           `UPDATE spinlife_visits
@@ -862,7 +961,10 @@ export async function PATCH(request: Request) {
           scheduledEnd,
           technicianId: input.technicianId,
           routeDate: input.routeDate,
+          legMiles: input.legMiles ?? null,
+          driveMinutes: input.driveMinutes ?? null,
         })),
+        ...routeTotalStatements([routeId, ...priorRoutes.results.map((r) => r.id)]),
       );
 
       await env.DB.batch(statements);
@@ -872,6 +974,8 @@ export async function PATCH(request: Request) {
         scheduledStart: input.scheduledStart,
         scheduledEnd,
         routeId,
+        legMiles: input.legMiles ?? null,
+        driveMinutes: input.driveMinutes ?? null,
         status: "assigned",
       });
     }

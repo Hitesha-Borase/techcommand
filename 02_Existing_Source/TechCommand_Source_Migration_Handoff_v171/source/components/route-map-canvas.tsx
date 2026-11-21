@@ -82,6 +82,18 @@ export function RouteMapCanvas({
     }
   }, [isFullMap]);
 
+  const isRouteProvided = route !== undefined;
+  const stops = isRouteProvided ? (route?.stops || []) : dbStops;
+  const activeTechName = isRouteProvided
+    ? (route?.technicianName || "Daily route")
+    : (dbPlan?.technicianName || "Route Trajectory");
+  const activeTotalMiles = isRouteProvided
+    ? (route?.stops?.length ? (route?.totalMiles ?? "0.0") : "0.0")
+    : (dbPlan?.totalMiles ?? "0.0");
+  const activeDriveMinutes = isRouteProvided
+    ? (route?.stops?.length ? (route?.totalDriveMinutes ?? 0) : 0)
+    : (dbPlan?.totalDriveMinutes ?? 0);
+
   const [activeStop, setActiveStop] = useState<ScheduledJob | null>(
     route?.stops?.[0] || null,
   );
@@ -94,8 +106,15 @@ export function RouteMapCanvas({
   const [dbStops, setDbStops] = useState<ScheduledJob[]>([]);
   const [optimizing, setOptimizing] = useState(false);
 
-  // Live database fetch from /api/dispatch/routes fallback
   useEffect(() => {
+    if (isRouteProvided) {
+      setActiveStop(route?.stops?.[0] || null);
+    }
+  }, [isRouteProvided, route]);
+
+  // Live database fetch from /api/dispatch/routes fallback only when no route is provided
+  useEffect(() => {
+    if (isRouteProvided) return;
     let isMounted = true;
     async function loadDbRoutes() {
       try {
@@ -156,15 +175,6 @@ export function RouteMapCanvas({
       isMounted = false;
     };
   }, []);
-
-  const stops =
-    route?.stops && route.stops.length > 0 ? route.stops : dbStops;
-  const activeTechName =
-    route?.technicianName || dbPlan?.technicianName || "Route Trajectory";
-  const activeTotalMiles =
-    route?.totalMiles ?? dbPlan?.totalMiles ?? "0.0";
-  const activeDriveMinutes =
-    route?.totalDriveMinutes ?? dbPlan?.totalDriveMinutes ?? "0";
 
   // Central Hub Coordinates: Westerville / Columbus, OH
   const hubCoords: [number, number] = MAP_CONFIG.defaultCenter;

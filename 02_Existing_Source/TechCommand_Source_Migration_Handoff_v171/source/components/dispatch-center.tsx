@@ -317,9 +317,29 @@ export function DispatchCenter({
     data?.routes[0]?.technicianId ||
     data?.technicians[0]?.id ||
     "";
+  const selectedTechObj = data?.technicians.find(
+    (tech) => tech.id === routeTechnicianId,
+  );
   const activeRoute = data?.routes.find(
     (route) => route.technicianId === routeTechnicianId,
-  );
+  ) || (selectedTechObj ? {
+    id: `virtual-${selectedTechObj.id}`,
+    technicianId: selectedTechObj.id,
+    routeDate: date,
+    status: "draft",
+    startLocationJson: "{}",
+    startLocation: {},
+    totalMiles: null,
+    totalDriveMinutes: null,
+    optimizedAt: null,
+    technicianName: selectedTechObj.name,
+    technicianCode: selectedTechObj.technicianCode,
+    version: 1,
+    planningJson: null,
+    planning: null,
+    stops: [],
+    missingTravelCount: 0,
+  } : undefined);
   const scheduledWorkOrders = new Set(
     data?.scheduled.map((job) => job.id) ?? [],
   ).size;
@@ -792,7 +812,7 @@ export function DispatchCenter({
                   <div className="flex justify-between gap-3">
                     <span className="text-slate-500">Road miles</span>
                     <span className="font-bold">
-                      {activeRoute.totalMiles ?? "Not calculated"}
+                      {activeRoute.stops.length ? (activeRoute.totalMiles ?? "Not calculated") : "0.0"}
                     </span>
                   </div>
                   <div className="flex justify-between gap-3">
@@ -800,9 +820,11 @@ export function DispatchCenter({
                       Drive estimate{activeRoute.planning?.includeReturn ? " · includes return" : ""}
                     </span>
                     <span className="font-bold">
-                      {activeRoute.totalDriveMinutes !== null
-                        ? `${activeRoute.totalDriveMinutes} min`
-                        : "Incomplete"}
+                      {activeRoute.stops.length
+                        ? (activeRoute.totalDriveMinutes !== null
+                            ? `${activeRoute.totalDriveMinutes} min`
+                            : "Incomplete")
+                        : "0 min"}
                     </span>
                   </div>
                   <div className="flex justify-between gap-3">
@@ -863,9 +885,9 @@ export function DispatchCenter({
                     <div className="flex items-center gap-2 text-xs text-slate-600 bg-slate-100 px-2.5 py-1 rounded-md font-semibold">
                       <span>{activeRoute.stops.length} stops</span>
                       <span>·</span>
-                      <span>{activeRoute.totalMiles ?? 0} mi</span>
+                      <span>{activeRoute.stops.length ? (activeRoute.totalMiles ?? 0) : 0} mi</span>
                       <span>·</span>
-                      <span>{activeRoute.totalDriveMinutes ?? 0} min</span>
+                      <span>{activeRoute.stops.length ? (activeRoute.totalDriveMinutes ?? 0) : 0} min</span>
                     </div>
                   ) : null}
                 </div>
